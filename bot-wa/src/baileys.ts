@@ -17,7 +17,7 @@ import pino from 'pino';
 import { forwardToN8n } from './n8n-client';
 import type { BotState, IncomingMessage } from './types';
 
-const logger = pino({ level: process.env.LOG_LEVEL || 'debug' });
+const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 
 const TENANT_PHONE = process.env.TENANT_PHONE || '';
 const AUTH_DIR = process.env.AUTH_DIR || './auth';
@@ -37,7 +37,6 @@ export async function startBaileys(state: BotState): Promise<void> {
     logger: pino({ level: 'silent' }) as any,
     syncFullHistory: false,
     markOnlineOnConnect: true,
-    // Necesario para recibir mensajes correctamente en modo multi-device
     getMessage: async () => ({ conversation: '' }),
   });
 
@@ -76,28 +75,10 @@ export async function startBaileys(state: BotState): Promise<void> {
     }
   });
 
-  // DEBUG: log de TODOS los eventos de mensajes para diagnostico
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    logger.debug({ type, count: messages.length }, 'messages.upsert recibido');
+    if (type !== 'notify' && type !== 'append') return;
 
     for (const msg of messages) {
-      const jid = msg.key.remoteJid || '';
-      const fromMe = msg.key.fromMe;
-      const hasContent = !!msg.message;
-
-      logger.debug({ jid, fromMe, hasContent, type }, 'Evaluando mensaje');
-
-      // Procesar solo mensajes entrantes con contenido
-      if (!hasContent || fromMe) {
-        logger.debug({ fromMe, hasContent }, 'Mensaje ignorado (fromMe o sin contenido)');
-        continue;
-      }
-
-      if (type !== 'notify' && type !== 'append') {
-        logger.debug({ type }, 'Mensaje ignorado (type no es notify/append)');
-        continue;
-      }
-
       try {
         await processMessage(msg);
       } catch (err) {
@@ -108,25 +89,30 @@ export async function startBaileys(state: BotState): Promise<void> {
 }
 
 async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
+  if (!msg.message || msg.key.fromMe) return;
+
   const jid = msg.key.remoteJid || '';
 
-  // Solo mensajes directos (no grupos, no broadcast)
-  if (!jid.endsWith('@s.whatsapp.net') || isJidBroadcast(jid)) {
-    logger.debug({ jid }, 'Mensaje descartado (grupo o broadcast)');
+  if (isJidBroadcast(jid)) return;
+
+  // Aceptar mensajes directos: @s.whatsapp.net (formato clásico)
+  // y @lid (formato multi-device nuevo de WhatsApp)
+  const isDirect =
+    jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid');
+
+  if (!isDirect) {
+    logger.debug({ jid }, 'Ignorado (grupo)');
     return;
   }
 
-  const phone = '+' + jid.replace('@s.whatsapp.net', '');
+  const phone = '+' + jid.replace(/@s\.whatsapp\.net$|@lid$/, '');
 
   const text =
     msg.message?.conversation ??
     msg.message?.extendedTextMessage?.text ??
     '';
 
-  if (!text.trim()) {
-    logger.debug({ jid }, 'Mensaje descartado (sin texto)');
-    return;
-  }
+  if (!text.trim()) return;
 
   const incoming: IncomingMessage = {
     phone,
@@ -154,6 +140,7 @@ export async function sendMessage(phone: string, text: string): Promise<void> {
     return;
   }
 
+  // Intentar con el JID original @lid si el envío falla con @s.whatsapp.net
   const jid = phone.replace('+', '') + '@s.whatsapp.net';
 
   try {
