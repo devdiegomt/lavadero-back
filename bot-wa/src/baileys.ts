@@ -6,6 +6,7 @@ import {
   isJidBroadcast,
   proto,
   WASocket,
+  getContentType,
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import qrcode from 'qrcode-terminal';
@@ -38,33 +39,35 @@ export async function startBaileys(state: BotState): Promise<void> {
 
   sock.ev.on('creds.update', saveCreds);
 
+  // Capturar actualizaciones de contactos para resolver @lid -> phone
+  sock.ev.on('contacts.upsert', (contacts) => {
+    logger.info({ count: contacts.length }, 'contacts.upsert');
+    for (const c of contacts) {
+      logger.info({ id: c.id, name: c.name, notify: c.notify }, 'Contacto');
+    }
+  });
+
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
-
     if (qr) {
       state.qrCode = qr;
       qrcode.generate(qr, { small: true });
-      logger.info('QR generado — escanea con WhatsApp para conectar');
+      logger.info('QR generado');
     }
-
     if (connection === 'open') {
       state.connected = true;
       state.lastConnected = new Date().toISOString();
       state.qrCode = undefined;
-      logger.info('WhatsApp conectado correctamente');
+      logger.info('WhatsApp conectado');
     }
-
     if (connection === 'close') {
       state.connected = false;
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
       logger.warn({ statusCode, shouldReconnect }, 'Conexion cerrada');
-
       if (shouldReconnect) {
         const delay = parseInt(process.env.RECONNECT_INTERVAL_MS || '5000', 10);
         setTimeout(() => startBaileys(state), delay);
-      } else {
-        logger.error('Sesion cerrada (loggedOut). Elimina auth/ y reinicia.');
       }
     }
   });
@@ -73,6 +76,17 @@ export async function startBaileys(state: BotState): Promise<void> {
     if (type !== 'notify' && type !== 'append') return;
     for (const msg of messages) {
       try {
+        // DEBUG: log estructura completa del mensaje
+        logger.info({
+          remoteJid: msg.key.remoteJid,
+          fromMe: msg.key.fromMe,
+          participant: msg.key.participant,
+          pushName: msg.pushName,
+          messageType: msg.message ? getContentType(msg.message) : null,
+          // Campos extra que pueden contener el JID real
+          senderKeyDistributionMessage: (msg.message as any)?.senderKeyDistributionMessage,
+        }, 'DEBUG mensaje completo');
+
         await processMessage(msg);
       } catch (err) {
         logger.error({ err }, 'Error procesando mensaje');
@@ -120,37 +134,24 @@ async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
   }
 }
 
-/**
- * Responde citando el mensaje original.
- * Esto garantiza entrega correcta tanto para @lid como @s.whatsapp.net.
- */
 async function replyToMessage(
   originalMsg: proto.IWebMessageInfo,
   text: string
 ): Promise<void> {
-  if (!sock) {
-    logger.error('Socket no inicializado');
-    return;
-  }
+  if (!sock) return;
 
   const jid = originalMsg.key.remoteJid!;
 
+  logger.info({ jid, textPreview: text.substring(0, 50) }, 'Intentando enviar respuesta');
+
   try {
-    // Intentar primero con quoted (mas confiable para @lid)
-    await sock.sendMessage(jid, { text }, { quoted: originalMsg });
-    logger.info({ to: jid }, 'Respuesta enviada (quoted)');
-  } catch (err) {
-    logger.warn({ err, jid }, 'Error con quoted, intentando sin quoted...');
-    try {
-      await sock.sendMessage(jid, { text });
-      logger.info({ to: jid }, 'Respuesta enviada (sin quoted)');
-    } catch (err2) {
-      logger.error({ err: err2, jid }, 'Error definitivo enviando mensaje');
-    }
+    const result = await sock.sendMessage(jid, { text }, { quoted: originalMsg });
+    logger.info({ to: jid, messageId: result?.key?.id }, 'Respuesta enviada');
+  } catch (err: any) {
+    logger.error({ err: err.message, jid }, 'Error enviando respuesta');
   }
 }
 
-/** Envio directo por JID (uso externo) */
 export async function sendMessage(jid: string, text: string): Promise<void> {
   if (!sock) return;
   try {
