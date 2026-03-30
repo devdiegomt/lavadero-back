@@ -17,33 +17,28 @@ import pino from 'pino';
 import { forwardToN8n } from './n8n-client';
 import type { BotState, IncomingMessage } from './types';
 
-const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
+const logger = pino({ level: process.env.LOG_LEVEL || 'debug' });
 
-/** Número de WhatsApp del lavadero (para incluirlo en el payload de n8n) */
 const TENANT_PHONE = process.env.TENANT_PHONE || '';
-
-/** Carpeta donde se guarda la sesión de WhatsApp */
 const AUTH_DIR = process.env.AUTH_DIR || './auth';
 
 let sock: WASocket | null = null;
 
-/**
- * Inicia la conexión con WhatsApp.
- * Se reconecta automáticamente salvo que el usuario haya cerrado sesión.
- */
 export async function startBaileys(state: BotState): Promise<void> {
   const { state: authState, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
+
+  logger.info({ version }, 'Iniciando Baileys');
 
   sock = makeWASocket({
     version,
     auth: authState,
     printQRInTerminal: false,
-    // Silenciar el logger interno de Baileys
     logger: pino({ level: 'silent' }) as any,
-    // Reducir uso de memoria: no guardar historial
     syncFullHistory: false,
-    markOnlineOnConnect: false,
+    markOnlineOnConnect: true,
+    // Necesario para recibir mensajes correctamente en modo multi-device
+    getMessage: async () => ({ conversation: '' }),
   });
 
   sock.ev.on('creds.update', saveCreds);
@@ -76,16 +71,33 @@ export async function startBaileys(state: BotState): Promise<void> {
         logger.info(`Reconectando en ${delay}ms...`);
         setTimeout(() => startBaileys(state), delay);
       } else {
-        logger.error(
-          'Sesion cerrada (loggedOut). Elimina auth/ y reinicia para re-escanear QR.'
-        );
+        logger.error('Sesion cerrada (loggedOut). Elimina auth/ y reinicia.');
       }
     }
   });
 
+  // DEBUG: log de TODOS los eventos de mensajes para diagnostico
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return;
+    logger.debug({ type, count: messages.length }, 'messages.upsert recibido');
+
     for (const msg of messages) {
+      const jid = msg.key.remoteJid || '';
+      const fromMe = msg.key.fromMe;
+      const hasContent = !!msg.message;
+
+      logger.debug({ jid, fromMe, hasContent, type }, 'Evaluando mensaje');
+
+      // Procesar solo mensajes entrantes con contenido
+      if (!hasContent || fromMe) {
+        logger.debug({ fromMe, hasContent }, 'Mensaje ignorado (fromMe o sin contenido)');
+        continue;
+      }
+
+      if (type !== 'notify' && type !== 'append') {
+        logger.debug({ type }, 'Mensaje ignorado (type no es notify/append)');
+        continue;
+      }
+
       try {
         await processMessage(msg);
       } catch (err) {
@@ -95,25 +107,26 @@ export async function startBaileys(state: BotState): Promise<void> {
   });
 }
 
-/** Procesa un mensaje entrante y lo reenvía a n8n. */
 async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
-  // Ignorar mensajes propios, sin contenido, o de broadcast
-  if (!msg.message || msg.key.fromMe) return;
-
   const jid = msg.key.remoteJid || '';
 
-  // Solo mensajes directos (no grupos)
-  if (!jid.endsWith('@s.whatsapp.net') || isJidBroadcast(jid)) return;
+  // Solo mensajes directos (no grupos, no broadcast)
+  if (!jid.endsWith('@s.whatsapp.net') || isJidBroadcast(jid)) {
+    logger.debug({ jid }, 'Mensaje descartado (grupo o broadcast)');
+    return;
+  }
 
   const phone = '+' + jid.replace('@s.whatsapp.net', '');
 
-  // Extraer texto del mensaje (texto plano o extendido)
   const text =
-    msg.message.conversation ??
-    msg.message.extendedTextMessage?.text ??
+    msg.message?.conversation ??
+    msg.message?.extendedTextMessage?.text ??
     '';
 
-  if (!text.trim()) return;
+  if (!text.trim()) {
+    logger.debug({ jid }, 'Mensaje descartado (sin texto)');
+    return;
+  }
 
   const incoming: IncomingMessage = {
     phone,
@@ -124,19 +137,17 @@ async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
     pushName: msg.pushName ?? undefined,
   };
 
-  logger.info(
-    { from: phone, preview: text.substring(0, 80) },
-    'Mensaje recibido'
-  );
+  logger.info({ from: phone, preview: text.substring(0, 80) }, 'Mensaje recibido');
 
   const response = await forwardToN8n(incoming);
 
   if (response?.reply) {
     await sendMessage(phone, response.reply);
+  } else {
+    logger.warn({ from: phone }, 'n8n no retorno respuesta');
   }
 }
 
-/** Envía un mensaje de texto al número indicado. */
 export async function sendMessage(phone: string, text: string): Promise<void> {
   if (!sock) {
     logger.error('sendMessage llamado sin socket inicializado');
