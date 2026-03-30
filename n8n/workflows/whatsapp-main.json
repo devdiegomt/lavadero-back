@@ -22,33 +22,17 @@
       "typeVersion": 2,
       "position": [320, 300],
       "parameters": {
-        "jsCode": "const msg = $input.item.json;\n\nconst systemPrompt = [\n  'Eres un asistente virtual de un lavadero de autos.',\n  'Analiza el mensaje del cliente y responde UNICAMENTE con un JSON valido.',\n  'Formato exacto: {\"intent\": \"<intent>\", \"entities\": {\"plate\": \"<placa o null>\", \"customerName\": \"<nombre o null>\", \"serviceKeyword\": \"<keyword o null>\"}}',\n  '',\n  'Intents validos:',\n  '- greeting: saludos, hola, buenos dias, buenas tardes',\n  '- check_status: estado del vehiculo, como va mi carro, cuando esta listo',\n  '- list_services: servicios, precios, que ofrecen, cuanto cuesta',\n  '- customer_history: historial, mis visitas, visitas anteriores, mis turnos',\n  '- book_appointment: agendar, reservar turno, pedir cita, quiero lavar',\n  '- human_help: hablar con una persona, asesor, operador, ayuda humana',\n  '- unknown: cualquier otra cosa',\n  '',\n  'Si aparece una placa (letras y numeros, ej: ABC123, BCD-456) extraela en entities.plate.',\n  'Responde SOLO el JSON, sin texto adicional, sin markdown, sin explicaciones.'\n].join('\\n');\n\nreturn {\n  systemPrompt,\n  userMessage: msg.message,\n  tenantPhone: msg.tenantPhone,\n  clientPhone: msg.phone,\n  pushName: msg.pushName || null,\n  messageId: msg.messageId,\n  originalMessage: msg.message,\n};"
+        "jsCode": "const body = $('Webhook').item.json.body || $input.item.json;\n\nreturn {\n  userMessage: body.message,\n  tenantPhone: body.tenantPhone,\n  clientPhone: body.phone,\n  pushName: body.pushName || null,\n  messageId: body.messageId,\n  originalMessage: body.message,\n};"
       }
     },
     {
-      "id": "node-003-claude",
+      "id": "node-003-mock-claude",
       "name": "Claude - Detectar Intencion",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [540, 300],
       "parameters": {
-        "method": "POST",
-        "url": "https://api.anthropic.com/v1/messages",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
-            { "name": "anthropic-version", "value": "2023-06-01" },
-            { "name": "content-type", "value": "application/json" }
-          ]
-        },
-        "sendBody": true,
-        "contentType": "raw",
-        "rawContentType": "application/json",
-        "body": "={{ JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 256, system: $('Preparar Solicitud Claude').item.json.systemPrompt, messages: [{ role: 'user', content: $('Preparar Solicitud Claude').item.json.userMessage }] }) }}",
-        "options": {
-          "timeout": 30000
-        }
+        "jsCode": "// Mock Claude: detecta intencion por palabras clave\n// Reemplazar con llamada real a Anthropic cuando haya API key\nconst msg = $('Preparar Solicitud Claude').item.json;\nconst raw = msg.userMessage || '';\nconst message = raw.toLowerCase();\n\nlet intent = 'unknown';\nconst entities = {};\n\nif (/\\b(hola|buenos\\s+d[i\u00ed]as|buenas\\s+(tardes|noches)|saludos|hey|good\\s+morning)\\b/.test(message)) {\n  intent = 'greeting';\n} else if (/\\b(estado|c[o\u00f3]mo\\s+va|cu[a\u00e1]ndo|listo|turno|mi\\s+carro|mi\\s+moto|mi\\s+vehiculo|mi\\s+veh[i\u00ed]culo)\\b/.test(message)) {\n  intent = 'check_status';\n  const plateMatch = raw.match(/\\b([A-Z]{3}[-\\s]?\\d{3})\\b/i);\n  if (plateMatch) entities.plate = plateMatch[1].replace(/[-\\s]/g, '').toUpperCase();\n} else if (/\\b(servicio|precio|cu[a\u00e1]nto|ofrecen|tienen|cat[a\u00e1]logo|tarifas|qu[e\u00e9]\\s+hacen)\\b/.test(message)) {\n  intent = 'list_services';\n} else if (/\\b(historial|mis\\s+visitas|visitas\\s+anteriores|mis\\s+turnos|cu[a\u00e1]ntas\\s+veces)\\b/.test(message)) {\n  intent = 'customer_history';\n} else if (/\\b(agendar|reservar|pedir\\s+cita|quiero\\s+lavar|quiero\\s+turno|nueva\\s+cita|solicitar\\s+turno)\\b/.test(message)) {\n  intent = 'book_appointment';\n} else if (/\\b(persona|asesor|operador|ayuda\\s+humana|hablar\\s+con|agente|humano)\\b/.test(message)) {\n  intent = 'human_help';\n}\n\nreturn {\n  content: [{ text: JSON.stringify({ intent, entities }) }]\n};"
       }
     },
     {
@@ -58,7 +42,7 @@
       "typeVersion": 2,
       "position": [760, 300],
       "parameters": {
-        "jsCode": "const claudeResp = $input.item.json;\nconst prev = $('Preparar Solicitud Claude').item.json;\n\nconst VALID_INTENTS = [\n  'greeting', 'check_status', 'list_services',\n  'customer_history', 'book_appointment', 'human_help', 'unknown'\n];\n\nlet intent = 'unknown';\nlet entities = {};\n\ntry {\n  const rawText = claudeResp.content[0].text.trim();\n  // Limpiar si Claude envuelve en markdown\n  const cleaned = rawText.replace(/^```[a-z]*\\n?/, '').replace(/```$/, '').trim();\n  const parsed = JSON.parse(cleaned);\n  intent = parsed.intent || 'unknown';\n  entities = parsed.entities || {};\n} catch (e) {\n  intent = 'unknown';\n}\n\nif (!VALID_INTENTS.includes(intent)) {\n  intent = 'unknown';\n}\n\n// Normalizar placa: sin guiones, mayusculas\nif (entities.plate) {\n  entities.plate = String(entities.plate).replace(/[^A-Z0-9]/gi, '').toUpperCase();\n}\n\nreturn {\n  intent,\n  entities,\n  clientPhone: prev.clientPhone,\n  tenantPhone: prev.tenantPhone,\n  pushName: prev.pushName,\n  messageId: prev.messageId,\n  originalMessage: prev.originalMessage,\n};"
+        "jsCode": "const claudeResp = $input.item.json;\nconst prev = $('Preparar Solicitud Claude').item.json;\n\nconst VALID_INTENTS = [\n  'greeting', 'check_status', 'list_services',\n  'customer_history', 'book_appointment', 'human_help', 'unknown'\n];\n\nlet intent = 'unknown';\nlet entities = {};\n\ntry {\n  const rawText = claudeResp.content[0].text.trim();\n  const cleaned = rawText.replace(/^```[a-z]*\\n?/, '').replace(/```$/, '').trim();\n  const parsed = JSON.parse(cleaned);\n  intent = parsed.intent || 'unknown';\n  entities = parsed.entities || {};\n} catch (e) {\n  intent = 'unknown';\n}\n\nif (!VALID_INTENTS.includes(intent)) {\n  intent = 'unknown';\n}\n\nif (entities.plate) {\n  entities.plate = String(entities.plate).replace(/[^A-Z0-9]/gi, '').toUpperCase();\n}\n\nreturn {\n  intent,\n  entities,\n  clientPhone: prev.clientPhone,\n  tenantPhone: prev.tenantPhone,\n  pushName: prev.pushName,\n  messageId: prev.messageId,\n  originalMessage: prev.originalMessage,\n};"
       }
     },
     {
@@ -180,18 +164,12 @@
       "position": [1200, 200],
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.BACKEND_URL }}/api/wa-bridge/appointment-status",
+        "url": "={{ $env.BACKEND_URL + '/api/wa-bridge/appointment-status?plate=' + encodeURIComponent($json.entities.plate || '') }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             { "name": "x-api-key", "value": "={{ $env.N8N_API_KEY }}" },
-            { "name": "x-tenant-phone", "value": "={{ $json.tenantPhone }}" }
-          ]
-        },
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            { "name": "plate", "value": "={{ $json.entities.plate }}" }
+            { "name": "x-tenant-phone", "value": "={{ $('Parsear Intencion').item.json.tenantPhone }}" }
           ]
         },
         "options": { "timeout": 10000 }
@@ -220,7 +198,7 @@
         "headerParameters": {
           "parameters": [
             { "name": "x-api-key", "value": "={{ $env.N8N_API_KEY }}" },
-            { "name": "x-tenant-phone", "value": "={{ $json.tenantPhone }}" }
+            { "name": "x-tenant-phone", "value": "={{ $('Parsear Intencion').item.json.tenantPhone }}" }
           ]
         },
         "options": { "timeout": 10000 }
@@ -244,18 +222,12 @@
       "position": [1200, 480],
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.BACKEND_URL }}/api/wa-bridge/customer-history",
+        "url": "={{ $env.BACKEND_URL + '/api/wa-bridge/customer-history?phone=' + encodeURIComponent($json.clientPhone || '') }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             { "name": "x-api-key", "value": "={{ $env.N8N_API_KEY }}" },
-            { "name": "x-tenant-phone", "value": "={{ $json.tenantPhone }}" }
-          ]
-        },
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            { "name": "phone", "value": "={{ $json.clientPhone }}" }
+            { "name": "x-tenant-phone", "value": "={{ $('Parsear Intencion').item.json.tenantPhone }}" }
           ]
         },
         "options": { "timeout": 10000 }
@@ -268,7 +240,7 @@
       "typeVersion": 2,
       "position": [1420, 480],
       "parameters": {
-        "jsCode": "const data = $input.item.json;\n\nif (!data.found) {\n  return { reply: 'No encontr\u00e9 visitas anteriores con tu n\u00famero. \u00bfEs tu primera vez con nosotros? \u00a1Bienvenido! \ud83c\udf89\\n\\n\u00bfDeseas agendar tu primer turno?' };\n}\n\nconst { customer, history } = data;\n\nif (!history || history.length === 0) {\n  return { reply: 'Hola *' + customer.name + '*! A\u00fan no tienes visitas registradas. \u00bfDeseas agendar tu primer turno? \ud83d\ude97' };\n}\n\nconst list = history.map(h => {\n  const fecha = new Date(h.scheduled_at).toLocaleDateString('es-CO', { dateStyle: 'short' });\n  const price = h.price ? ' - $' + Number(h.price).toLocaleString('es-CO') : '';\n  return '\u2022 ' + fecha + ': *' + h.plate + '* \u2014 ' + h.service_name + price;\n}).join('\\n');\n\nreturn {\n  reply: '\ud83d\udccb *Historial de ' + customer.name + '*\\n' +\n    'Visitas totales: ' + customer.visit_count + '\\n\\n' +\n    'Últimas visitas:\\n' + list + '\\n\\n\u00bfDeseas agendar un nuevo turno? \ud83d\ude0a'\n};"
+        "jsCode": "const data = $input.item.json;\n\nif (!data.found) {\n  return { reply: 'No encontr\u00e9 visitas anteriores con tu n\u00famero. \u00bfEs tu primera vez con nosotros? \u00a1Bienvenido! \ud83c\udf89\\n\\n\u00bfDeseas agendar tu primer turno?' };\n}\n\nconst { customer, history } = data;\n\nif (!history || history.length === 0) {\n  return { reply: 'Hola *' + customer.name + '*! A\u00fan no tienes visitas registradas. \u00bfDeseas agendar tu primer turno? \ud83d\ude97' };\n}\n\nconst list = history.map(h => {\n  const fecha = new Date(h.scheduled_at).toLocaleDateString('es-CO', { dateStyle: 'short' });\n  const price = h.price ? ' - $' + Number(h.price).toLocaleString('es-CO') : '';\n  return '\u2022 ' + fecha + ': *' + h.plate + '* \u2014 ' + h.service_name + price;\n}).join('\\n');\n\nreturn {\n  reply: '\ud83d\udccb *Historial de ' + customer.name + '*\\n' +\n    'Visitas totales: ' + customer.visit_count + '\\n\\n' +\n    '\u00daltimas visitas:\\n' + list + '\\n\\n\u00bfDeseas agendar un nuevo turno? \ud83d\ude0a'\n};"
       }
     },
     {
