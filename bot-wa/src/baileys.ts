@@ -1,7 +1,3 @@
-/**
- * Núcleo del bot: conecta con WhatsApp via Baileys,
- * recibe mensajes y los reenvía a n8n.
- */
 import {
   makeWASocket,
   useMultiFileAuthState,
@@ -62,12 +58,10 @@ export async function startBaileys(state: BotState): Promise<void> {
       state.connected = false;
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-
       logger.warn({ statusCode, shouldReconnect }, 'Conexion cerrada');
 
       if (shouldReconnect) {
         const delay = parseInt(process.env.RECONNECT_INTERVAL_MS || '5000', 10);
-        logger.info(`Reconectando en ${delay}ms...`);
         setTimeout(() => startBaileys(state), delay);
       } else {
         logger.error('Sesion cerrada (loggedOut). Elimina auth/ y reinicia.');
@@ -77,7 +71,6 @@ export async function startBaileys(state: BotState): Promise<void> {
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify' && type !== 'append') return;
-
     for (const msg of messages) {
       try {
         await processMessage(msg);
@@ -95,15 +88,9 @@ async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
 
   if (isJidBroadcast(jid)) return;
 
-  // Aceptar mensajes directos: @s.whatsapp.net (formato clásico)
-  // y @lid (formato multi-device nuevo de WhatsApp)
-  const isDirect =
-    jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid');
-
-  if (!isDirect) {
-    logger.debug({ jid }, 'Ignorado (grupo)');
-    return;
-  }
+  // Aceptar @s.whatsapp.net (clásico) y @lid (multi-device nuevo)
+  const isDirect = jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid');
+  if (!isDirect) return;
 
   const phone = '+' + jid.replace(/@s\.whatsapp\.net$|@lid$/, '');
 
@@ -116,6 +103,7 @@ async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
 
   const incoming: IncomingMessage = {
     phone,
+    jid,            // <-- guardamos el JID original para responder correctamente
     message: text.trim().substring(0, 1000),
     tenantPhone: TENANT_PHONE,
     timestamp: new Date(Number(msg.messageTimestamp) * 1000).toISOString(),
@@ -123,30 +111,28 @@ async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
     pushName: msg.pushName ?? undefined,
   };
 
-  logger.info({ from: phone, preview: text.substring(0, 80) }, 'Mensaje recibido');
+  logger.info({ from: phone, jid, preview: text.substring(0, 80) }, 'Mensaje recibido');
 
   const response = await forwardToN8n(incoming);
 
   if (response?.reply) {
-    await sendMessage(phone, response.reply);
+    await sendMessage(jid, response.reply);  // <-- responder al JID original
   } else {
     logger.warn({ from: phone }, 'n8n no retorno respuesta');
   }
 }
 
-export async function sendMessage(phone: string, text: string): Promise<void> {
+/** Envía un mensaje al JID indicado (puede ser @s.whatsapp.net o @lid) */
+export async function sendMessage(jid: string, text: string): Promise<void> {
   if (!sock) {
     logger.error('sendMessage llamado sin socket inicializado');
     return;
   }
 
-  // Intentar con el JID original @lid si el envío falla con @s.whatsapp.net
-  const jid = phone.replace('+', '') + '@s.whatsapp.net';
-
   try {
     await sock.sendMessage(jid, { text });
-    logger.info({ to: phone }, 'Mensaje enviado');
+    logger.info({ to: jid }, 'Mensaje enviado');
   } catch (err) {
-    logger.error({ err, phone }, 'Error enviando mensaje');
+    logger.error({ err, jid }, 'Error enviando mensaje');
   }
 }
