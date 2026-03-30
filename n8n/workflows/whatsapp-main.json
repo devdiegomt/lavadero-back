@@ -32,7 +32,7 @@
       "typeVersion": 2,
       "position": [540, 300],
       "parameters": {
-        "jsCode": "// Mock Claude: detecta intencion por palabras clave\n// Reemplazar con llamada real a Anthropic cuando haya API key\nconst msg = $('Preparar Solicitud Claude').item.json;\nconst raw = msg.userMessage || '';\nconst message = raw.toLowerCase();\n\nlet intent = 'unknown';\nconst entities = {};\n\nif (/\\b(hola|buenos\\s+d[i\u00ed]as|buenas\\s+(tardes|noches)|saludos|hey|good\\s+morning)\\b/.test(message)) {\n  intent = 'greeting';\n} else if (/\\b(estado|c[o\u00f3]mo\\s+va|cu[a\u00e1]ndo|listo|turno|mi\\s+carro|mi\\s+moto|mi\\s+vehiculo|mi\\s+veh[i\u00ed]culo)\\b/.test(message)) {\n  intent = 'check_status';\n  const plateMatch = raw.match(/\\b([A-Z]{3}[-\\s]?\\d{3})\\b/i);\n  if (plateMatch) entities.plate = plateMatch[1].replace(/[-\\s]/g, '').toUpperCase();\n} else if (/\\b(servicio|precio|cu[a\u00e1]nto|ofrecen|tienen|cat[a\u00e1]logo|tarifas|qu[e\u00e9]\\s+hacen)\\b/.test(message)) {\n  intent = 'list_services';\n} else if (/\\b(historial|mis\\s+visitas|visitas\\s+anteriores|mis\\s+turnos|cu[a\u00e1]ntas\\s+veces)\\b/.test(message)) {\n  intent = 'customer_history';\n} else if (/\\b(agendar|reservar|pedir\\s+cita|quiero\\s+lavar|quiero\\s+turno|nueva\\s+cita|solicitar\\s+turno)\\b/.test(message)) {\n  intent = 'book_appointment';\n} else if (/\\b(persona|asesor|operador|ayuda\\s+humana|hablar\\s+con|agente|humano)\\b/.test(message)) {\n  intent = 'human_help';\n}\n\nreturn {\n  content: [{ text: JSON.stringify({ intent, entities }) }]\n};"
+        "jsCode": "// Mock Claude: detecta intencion por palabras clave\nconst msg = $('Preparar Solicitud Claude').item.json;\nconst raw = msg.userMessage || '';\nconst message = raw.toLowerCase();\n\nlet intent = 'unknown';\nconst entities = {};\n\nif (/\\b(hola|buenos\\s+d[i\u00ed]as|buenas\\s+(tardes|noches)|saludos|hey)\\b/.test(message)) {\n  intent = 'greeting';\n} else if (/\\b(estado|c[o\u00f3]mo\\s+va|cu[a\u00e1]ndo|listo|turno|mi\\s+carro|mi\\s+moto|mi\\s+veh[i\u00ed]culo)\\b/.test(message)) {\n  intent = 'check_status';\n  const plateMatch = raw.match(/\\b([A-Z]{3}[-\\s]?\\d{3})\\b/i);\n  if (plateMatch) entities.plate = plateMatch[1].replace(/[-\\s]/g, '').toUpperCase();\n} else if (/\\b(servicio|precio|cu[a\u00e1]nto|ofrecen|tienen|cat[a\u00e1]logo|tarifas)\\b/.test(message)) {\n  intent = 'list_services';\n} else if (/\\b(historial|mis\\s+visitas|visitas\\s+anteriores|mis\\s+turnos)\\b/.test(message)) {\n  intent = 'customer_history';\n} else if (/\\b(agendar|reservar|pedir\\s+cita|quiero\\s+lavar|quiero\\s+turno|nueva\\s+cita)\\b/.test(message)) {\n  intent = 'book_appointment';\n} else if (/\\b(persona|asesor|operador|ayuda\\s+humana|hablar\\s+con|agente|humano)\\b/.test(message)) {\n  intent = 'human_help';\n}\n\nreturn {\n  content: [{ text: JSON.stringify({ intent, entities }) }]\n};"
       }
     },
     {
@@ -59,13 +59,7 @@
               "outputKey": "greeting",
               "conditions": {
                 "options": { "caseSensitive": false },
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.intent }}",
-                    "rightValue": "greeting",
-                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
-                  }
-                ],
+                "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "greeting", "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" } }],
                 "combinator": "and"
               }
             },
@@ -73,13 +67,7 @@
               "outputKey": "check_status",
               "conditions": {
                 "options": { "caseSensitive": false },
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.intent }}",
-                    "rightValue": "check_status",
-                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
-                  }
-                ],
+                "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "check_status", "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" } }],
                 "combinator": "and"
               }
             },
@@ -87,13 +75,7 @@
               "outputKey": "list_services",
               "conditions": {
                 "options": { "caseSensitive": false },
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.intent }}",
-                    "rightValue": "list_services",
-                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
-                  }
-                ],
+                "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "list_services", "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" } }],
                 "combinator": "and"
               }
             },
@@ -101,13 +83,7 @@
               "outputKey": "customer_history",
               "conditions": {
                 "options": { "caseSensitive": false },
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.intent }}",
-                    "rightValue": "customer_history",
-                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
-                  }
-                ],
+                "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "customer_history", "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" } }],
                 "combinator": "and"
               }
             },
@@ -115,13 +91,7 @@
               "outputKey": "book_appointment",
               "conditions": {
                 "options": { "caseSensitive": false },
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.intent }}",
-                    "rightValue": "book_appointment",
-                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
-                  }
-                ],
+                "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "book_appointment", "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" } }],
                 "combinator": "and"
               }
             },
@@ -129,21 +99,13 @@
               "outputKey": "human_help",
               "conditions": {
                 "options": { "caseSensitive": false },
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.intent }}",
-                    "rightValue": "human_help",
-                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
-                  }
-                ],
+                "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "human_help", "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" } }],
                 "combinator": "and"
               }
             }
           ]
         },
-        "options": {
-          "fallbackOutput": "extra"
-        }
+        "options": { "fallbackOutput": "extra" }
       }
     },
     {
@@ -157,14 +119,45 @@
       }
     },
     {
+      "id": "node-007a-if-plate",
+      "name": "Tiene Placa?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1200, 200],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "plate-check",
+              "leftValue": "={{ $json.entities && $json.entities.plate ? $json.entities.plate : '' }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEquals", "name": "filter.operator.notEquals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "node-007b-solicitar-placa",
+      "name": "Solicitar Placa",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1420, 140],
+      "parameters": {
+        "jsCode": "return {\n  reply: '\ud83d\udd0d Para consultar el estado, necesito la *placa del veh\u00edculo*.\\n\\nEj\u00e9mplo: *ABC123*\\n\\n\u00bfCu\u00e1l es la placa?'\n};"
+      }
+    },
+    {
       "id": "node-007-get-status",
       "name": "Consultar Estado Turno",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1200, 200],
+      "position": [1420, 260],
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.BACKEND_URL + '/api/wa-bridge/appointment-status?plate=' + encodeURIComponent($json.entities.plate || '') }}",
+        "url": "={{ $env.BACKEND_URL + '/api/wa-bridge/appointment-status?plate=' + encodeURIComponent($json.entities.plate) }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -180,9 +173,9 @@
       "name": "Formatear Estado",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1420, 200],
+      "position": [1640, 260],
       "parameters": {
-        "jsCode": "const data = $input.item.json;\nconst ctx = $('Parsear Intencion').item.json;\n\nif (!ctx.entities || !ctx.entities.plate) {\n  return { reply: '\ud83d\udd0d Por favor ind\u00edcame la *placa del veh\u00edculo* para consultar el estado.\\n\\nEjemplo: *ABC123*' };\n}\n\nconst plate = ctx.entities.plate;\n\nif (!data.found) {\n  return { reply: 'No encontr\u00e9 un turno activo para la placa *' + plate + '*.\\n\\n\u00bfDeseas agendar un turno? Escr\u00edbeme y te ayudo. \ud83d\ude0a' };\n}\n\nconst a = data.appointment;\nconst statusMap = {\n  pending: '\u23f3 En espera',\n  confirmed: '\u2705 Confirmado',\n  in_progress: '\ud83d\udebf En lavado'\n};\nconst statusText = statusMap[a.status] || a.status;\n\nconst fecha = new Date(a.scheduled_at).toLocaleString('es-CO', {\n  dateStyle: 'short', timeStyle: 'short'\n});\n\nreturn {\n  reply: '\ud83d\ude97 *Estado de tu veh\u00edculo*\\n\\n' +\n    'Placa: *' + a.plate + '*\\n' +\n    'Veh\u00edculo: ' + a.brand + ' ' + a.model + '\\n' +\n    'Servicio: ' + a.service_name + '\\n' +\n    'Estado: ' + statusText + '\\n' +\n    'Fecha: ' + fecha +\n    (a.staff_name ? '\\nResponsable: ' + a.staff_name : '') +\n    '\\n\\n\u00bfNecesitas algo m\u00e1s? \ud83d\ude0a'\n};"
+        "jsCode": "const data = $input.item.json;\nconst plate = $('Parsear Intencion').item.json.entities.plate;\n\nif (!data.found) {\n  return { reply: 'No encontr\u00e9 un turno activo para la placa *' + plate + '*.\\n\\n\u00bfDeseas agendar un turno? Escr\u00edbeme y te ayudo. \ud83d\ude0a' };\n}\n\nconst a = data.appointment;\nconst statusMap = {\n  pending: '\u23f3 En espera',\n  confirmed: '\u2705 Confirmado',\n  in_progress: '\ud83d\udebf En lavado'\n};\nconst statusText = statusMap[a.status] || a.status;\nconst fecha = new Date(a.scheduled_at).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });\n\nreturn {\n  reply: '\ud83d\ude97 *Estado de tu veh\u00edculo*\\n\\n' +\n    'Placa: *' + a.plate + '*\\n' +\n    'Veh\u00edculo: ' + a.brand + ' ' + a.model + '\\n' +\n    'Servicio: ' + a.service_name + '\\n' +\n    'Estado: ' + statusText + '\\n' +\n    'Fecha: ' + fecha +\n    (a.staff_name ? '\\nResponsable: ' + a.staff_name : '') +\n    '\\n\\n\u00bfNecesitas algo m\u00e1s? \ud83d\ude0a'\n};"
       }
     },
     {
@@ -190,7 +183,7 @@
       "name": "Consultar Servicios",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1200, 340],
+      "position": [1200, 400],
       "parameters": {
         "method": "GET",
         "url": "={{ $env.BACKEND_URL }}/api/wa-bridge/services",
@@ -209,7 +202,7 @@
       "name": "Formatear Servicios",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1420, 340],
+      "position": [1420, 400],
       "parameters": {
         "jsCode": "const data = $input.item.json;\n\nif (!data.services || data.services.length === 0) {\n  return { reply: 'Actualmente no tenemos servicios configurados. Por favor cont\u00e1ctanos directamente.' };\n}\n\nconst list = data.services.map(s => {\n  const price = s.price ? '$' + Number(s.price).toLocaleString('es-CO') : 'Consultar';\n  const dur = s.duration_minutes ? ' (~' + s.duration_minutes + ' min)' : '';\n  const desc = s.description ? '\\n  ' + s.description : '';\n  return '\u2022 *' + s.name + '*' + dur + '\\n  \ud83d\udcb0 ' + price + desc;\n}).join('\\n\\n');\n\nreturn { reply: '\ud83d\udebf *Nuestros servicios:*\\n\\n' + list + '\\n\\n\u00bfDeseas agendar alguno? \ud83d\ude0a' };"
       }
@@ -219,7 +212,7 @@
       "name": "Consultar Historial",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1200, 480],
+      "position": [1200, 540],
       "parameters": {
         "method": "GET",
         "url": "={{ $env.BACKEND_URL + '/api/wa-bridge/customer-history?phone=' + encodeURIComponent($json.clientPhone || '') }}",
@@ -238,7 +231,7 @@
       "name": "Formatear Historial",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1420, 480],
+      "position": [1420, 540],
       "parameters": {
         "jsCode": "const data = $input.item.json;\n\nif (!data.found) {\n  return { reply: 'No encontr\u00e9 visitas anteriores con tu n\u00famero. \u00bfEs tu primera vez con nosotros? \u00a1Bienvenido! \ud83c\udf89\\n\\n\u00bfDeseas agendar tu primer turno?' };\n}\n\nconst { customer, history } = data;\n\nif (!history || history.length === 0) {\n  return { reply: 'Hola *' + customer.name + '*! A\u00fan no tienes visitas registradas. \u00bfDeseas agendar tu primer turno? \ud83d\ude97' };\n}\n\nconst list = history.map(h => {\n  const fecha = new Date(h.scheduled_at).toLocaleDateString('es-CO', { dateStyle: 'short' });\n  const price = h.price ? ' - $' + Number(h.price).toLocaleString('es-CO') : '';\n  return '\u2022 ' + fecha + ': *' + h.plate + '* \u2014 ' + h.service_name + price;\n}).join('\\n');\n\nreturn {\n  reply: '\ud83d\udccb *Historial de ' + customer.name + '*\\n' +\n    'Visitas totales: ' + customer.visit_count + '\\n\\n' +\n    '\u00daltimas visitas:\\n' + list + '\\n\\n\u00bfDeseas agendar un nuevo turno? \ud83d\ude0a'\n};"
       }
@@ -248,7 +241,7 @@
       "name": "Formatear Info Agendamiento",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1200, 620],
+      "position": [1200, 680],
       "parameters": {
         "jsCode": "return {\n  reply: '\ud83d\udcc5 *Agendar un turno*\\n\\nCon gusto te ayudo a agendar. Necesito algunos datos:\\n\\n1. *Placa* del veh\u00edculo\\n2. *Servicio* que deseas (escr\u00edbeme \"servicios\" para ver la lista)\\n3. *Fecha y hora* preferida\\n\\nEnv\u00edame esa info y listo. \ud83d\udebf'\n};"
       }
@@ -258,7 +251,7 @@
       "name": "Formatear Asesor Humano",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1200, 760],
+      "position": [1200, 820],
       "parameters": {
         "jsCode": "return {\n  reply: '\ud83d\ude4b *Solicitud de asesor*\\n\\nHemos recibido tu solicitud. Un asesor se comunicar\u00e1 contigo muy pronto.\\n\\nHorario de atenci\u00f3n: Lunes a S\u00e1bado 8am \u2013 6pm\\n\\nGracias por tu paciencia. \ud83d\ude4f'\n};"
       }
@@ -268,7 +261,7 @@
       "name": "Formatear Respuesta Desconocida",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1200, 900],
+      "position": [1200, 960],
       "parameters": {
         "jsCode": "return {\n  reply: '\ud83d\ude0a No entend\u00ed bien tu mensaje. Puedo ayudarte con:\\n\\n1\ufe0f\u20e3 Estado de tu veh\u00edculo\\n2\ufe0f\u20e3 Ver precios y servicios\\n3\ufe0f\u20e3 Tu historial de visitas\\n4\ufe0f\u20e3 Agendar un turno\\n5\ufe0f\u20e3 Hablar con un asesor\\n\\n\u00bfCon cu\u00e1l te ayudo?'\n};"
       }
@@ -278,7 +271,7 @@
       "name": "Responder al Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1680, 480],
+      "position": [1860, 480],
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ { reply: $json.reply } }}",
@@ -288,29 +281,21 @@
   ],
   "connections": {
     "Webhook": {
-      "main": [
-        [{ "node": "Preparar Solicitud Claude", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Preparar Solicitud Claude", "type": "main", "index": 0 }]]
     },
     "Preparar Solicitud Claude": {
-      "main": [
-        [{ "node": "Claude - Detectar Intencion", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Claude - Detectar Intencion", "type": "main", "index": 0 }]]
     },
     "Claude - Detectar Intencion": {
-      "main": [
-        [{ "node": "Parsear Intencion", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Parsear Intencion", "type": "main", "index": 0 }]]
     },
     "Parsear Intencion": {
-      "main": [
-        [{ "node": "Enrutar por Intencion", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Enrutar por Intencion", "type": "main", "index": 0 }]]
     },
     "Enrutar por Intencion": {
       "main": [
         [{ "node": "Formatear Saludo", "type": "main", "index": 0 }],
-        [{ "node": "Consultar Estado Turno", "type": "main", "index": 0 }],
+        [{ "node": "Tiene Placa?", "type": "main", "index": 0 }],
         [{ "node": "Consultar Servicios", "type": "main", "index": 0 }],
         [{ "node": "Consultar Historial", "type": "main", "index": 0 }],
         [{ "node": "Formatear Info Agendamiento", "type": "main", "index": 0 }],
@@ -318,7 +303,16 @@
         [{ "node": "Formatear Respuesta Desconocida", "type": "main", "index": 0 }]
       ]
     },
+    "Tiene Placa?": {
+      "main": [
+        [{ "node": "Consultar Estado Turno", "type": "main", "index": 0 }],
+        [{ "node": "Solicitar Placa", "type": "main", "index": 0 }]
+      ]
+    },
     "Formatear Saludo": {
+      "main": [[{ "node": "Responder al Webhook", "type": "main", "index": 0 }]]
+    },
+    "Solicitar Placa": {
       "main": [[{ "node": "Responder al Webhook", "type": "main", "index": 0 }]]
     },
     "Consultar Estado Turno": {
