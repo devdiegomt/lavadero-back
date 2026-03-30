@@ -85,10 +85,8 @@ async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
   if (!msg.message || msg.key.fromMe) return;
 
   const jid = msg.key.remoteJid || '';
-
   if (isJidBroadcast(jid)) return;
 
-  // Aceptar @s.whatsapp.net (clásico) y @lid (multi-device nuevo)
   const isDirect = jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid');
   if (!isDirect) return;
 
@@ -103,7 +101,7 @@ async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
 
   const incoming: IncomingMessage = {
     phone,
-    jid,            // <-- guardamos el JID original para responder correctamente
+    jid,
     message: text.trim().substring(0, 1000),
     tenantPhone: TENANT_PHONE,
     timestamp: new Date(Number(msg.messageTimestamp) * 1000).toISOString(),
@@ -116,19 +114,45 @@ async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
   const response = await forwardToN8n(incoming);
 
   if (response?.reply) {
-    await sendMessage(jid, response.reply);  // <-- responder al JID original
+    await replyToMessage(msg, response.reply);
   } else {
     logger.warn({ from: phone }, 'n8n no retorno respuesta');
   }
 }
 
-/** Envía un mensaje al JID indicado (puede ser @s.whatsapp.net o @lid) */
-export async function sendMessage(jid: string, text: string): Promise<void> {
+/**
+ * Responde citando el mensaje original.
+ * Esto garantiza entrega correcta tanto para @lid como @s.whatsapp.net.
+ */
+async function replyToMessage(
+  originalMsg: proto.IWebMessageInfo,
+  text: string
+): Promise<void> {
   if (!sock) {
-    logger.error('sendMessage llamado sin socket inicializado');
+    logger.error('Socket no inicializado');
     return;
   }
 
+  const jid = originalMsg.key.remoteJid!;
+
+  try {
+    // Intentar primero con quoted (mas confiable para @lid)
+    await sock.sendMessage(jid, { text }, { quoted: originalMsg });
+    logger.info({ to: jid }, 'Respuesta enviada (quoted)');
+  } catch (err) {
+    logger.warn({ err, jid }, 'Error con quoted, intentando sin quoted...');
+    try {
+      await sock.sendMessage(jid, { text });
+      logger.info({ to: jid }, 'Respuesta enviada (sin quoted)');
+    } catch (err2) {
+      logger.error({ err: err2, jid }, 'Error definitivo enviando mensaje');
+    }
+  }
+}
+
+/** Envio directo por JID (uso externo) */
+export async function sendMessage(jid: string, text: string): Promise<void> {
+  if (!sock) return;
   try {
     await sock.sendMessage(jid, { text });
     logger.info({ to: jid }, 'Mensaje enviado');
