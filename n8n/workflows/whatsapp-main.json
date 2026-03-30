@@ -1,0 +1,392 @@
+{
+  "name": "WhatsApp AI - Carwash",
+  "nodes": [
+    {
+      "id": "node-001-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [100, 300],
+      "webhookId": "carwash-whatsapp-main",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "node-002-prepare",
+      "name": "Preparar Solicitud Claude",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [320, 300],
+      "parameters": {
+        "jsCode": "const msg = $input.item.json;\n\nconst systemPrompt = [\n  'Eres un asistente virtual de un lavadero de autos.',\n  'Analiza el mensaje del cliente y responde UNICAMENTE con un JSON valido.',\n  'Formato exacto: {\"intent\": \"<intent>\", \"entities\": {\"plate\": \"<placa o null>\", \"customerName\": \"<nombre o null>\", \"serviceKeyword\": \"<keyword o null>\"}}',\n  '',\n  'Intents validos:',\n  '- greeting: saludos, hola, buenos dias, buenas tardes',\n  '- check_status: estado del vehiculo, como va mi carro, cuando esta listo',\n  '- list_services: servicios, precios, que ofrecen, cuanto cuesta',\n  '- customer_history: historial, mis visitas, visitas anteriores, mis turnos',\n  '- book_appointment: agendar, reservar turno, pedir cita, quiero lavar',\n  '- human_help: hablar con una persona, asesor, operador, ayuda humana',\n  '- unknown: cualquier otra cosa',\n  '',\n  'Si aparece una placa (letras y numeros, ej: ABC123, BCD-456) extraela en entities.plate.',\n  'Responde SOLO el JSON, sin texto adicional, sin markdown, sin explicaciones.'\n].join('\\n');\n\nreturn {\n  systemPrompt,\n  userMessage: msg.message,\n  tenantPhone: msg.tenantPhone,\n  clientPhone: msg.phone,\n  pushName: msg.pushName || null,\n  messageId: msg.messageId,\n  originalMessage: msg.message,\n};"
+      }
+    },
+    {
+      "id": "node-003-claude",
+      "name": "Claude - Detectar Intencion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [540, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 256, system: $('Preparar Solicitud Claude').item.json.systemPrompt, messages: [{ role: 'user', content: $('Preparar Solicitud Claude').item.json.userMessage }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "node-004-parse",
+      "name": "Parsear Intencion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [760, 300],
+      "parameters": {
+        "jsCode": "const claudeResp = $input.item.json;\nconst prev = $('Preparar Solicitud Claude').item.json;\n\nconst VALID_INTENTS = [\n  'greeting', 'check_status', 'list_services',\n  'customer_history', 'book_appointment', 'human_help', 'unknown'\n];\n\nlet intent = 'unknown';\nlet entities = {};\n\ntry {\n  const rawText = claudeResp.content[0].text.trim();\n  // Limpiar si Claude envuelve en markdown\n  const cleaned = rawText.replace(/^```[a-z]*\\n?/, '').replace(/```$/, '').trim();\n  const parsed = JSON.parse(cleaned);\n  intent = parsed.intent || 'unknown';\n  entities = parsed.entities || {};\n} catch (e) {\n  intent = 'unknown';\n}\n\nif (!VALID_INTENTS.includes(intent)) {\n  intent = 'unknown';\n}\n\n// Normalizar placa: sin guiones, mayusculas\nif (entities.plate) {\n  entities.plate = String(entities.plate).replace(/[^A-Z0-9]/gi, '').toUpperCase();\n}\n\nreturn {\n  intent,\n  entities,\n  clientPhone: prev.clientPhone,\n  tenantPhone: prev.tenantPhone,\n  pushName: prev.pushName,\n  messageId: prev.messageId,\n  originalMessage: prev.originalMessage,\n};"
+      }
+    },
+    {
+      "id": "node-005-switch",
+      "name": "Enrutar por Intencion",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [980, 300],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "outputKey": "greeting",
+              "conditions": {
+                "options": { "caseSensitive": false },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "greeting",
+                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "check_status",
+              "conditions": {
+                "options": { "caseSensitive": false },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "check_status",
+                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "list_services",
+              "conditions": {
+                "options": { "caseSensitive": false },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "list_services",
+                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "customer_history",
+              "conditions": {
+                "options": { "caseSensitive": false },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "customer_history",
+                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "book_appointment",
+              "conditions": {
+                "options": { "caseSensitive": false },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "book_appointment",
+                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "human_help",
+              "conditions": {
+                "options": { "caseSensitive": false },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "human_help",
+                    "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      }
+    },
+    {
+      "id": "node-006-greeting",
+      "name": "Formatear Saludo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 60],
+      "parameters": {
+        "jsCode": "const name = $json.pushName ? ', ' + $json.pushName : '';\nreturn {\n  reply: '\u00a1Hola' + name + '! \ud83d\udc4b Bienvenido al lavadero.\\n\\n\u00bfEn qu\u00e9 te puedo ayudar hoy?\\n\\n1\ufe0f\u20e3 Estado de mi veh\u00edculo\\n2\ufe0f\u20e3 Ver servicios y precios\\n3\ufe0f\u20e3 Mi historial de visitas\\n4\ufe0f\u20e3 Agendar un turno\\n5\ufe0f\u20e3 Hablar con un asesor\\n\\nEscr\u00edbeme lo que necesitas. \ud83d\ude97'\n};"
+      }
+    },
+    {
+      "id": "node-007-get-status",
+      "name": "Consultar Estado Turno",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1200, 200],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.BACKEND_URL }}/api/wa-bridge/appointment-status",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.N8N_API_KEY }}" },
+            { "name": "x-tenant-phone", "value": "={{ $json.tenantPhone }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "plate", "value": "={{ $json.entities.plate }}" }
+          ]
+        },
+        "options": { "timeout": 10000 }
+      }
+    },
+    {
+      "id": "node-008-fmt-status",
+      "name": "Formatear Estado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1420, 200],
+      "parameters": {
+        "jsCode": "const data = $input.item.json;\nconst ctx = $('Parsear Intencion').item.json;\n\nif (!ctx.entities || !ctx.entities.plate) {\n  return { reply: '\ud83d\udd0d Por favor ind\u00edcame la *placa del veh\u00edculo* para consultar el estado.\\n\\nEjemplo: *ABC123*' };\n}\n\nconst plate = ctx.entities.plate;\n\nif (!data.found) {\n  return { reply: 'No encontr\u00e9 un turno activo para la placa *' + plate + '*.\\n\\n\u00bfDeseas agendar un turno? Escr\u00edbeme y te ayudo. \ud83d\ude0a' };\n}\n\nconst a = data.appointment;\nconst statusMap = {\n  pending: '\u23f3 En espera',\n  confirmed: '\u2705 Confirmado',\n  in_progress: '\ud83d\udebf En lavado'\n};\nconst statusText = statusMap[a.status] || a.status;\n\nconst fecha = new Date(a.scheduled_at).toLocaleString('es-CO', {\n  dateStyle: 'short', timeStyle: 'short'\n});\n\nreturn {\n  reply: '\ud83d\ude97 *Estado de tu veh\u00edculo*\\n\\n' +\n    'Placa: *' + a.plate + '*\\n' +\n    'Veh\u00edculo: ' + a.brand + ' ' + a.model + '\\n' +\n    'Servicio: ' + a.service_name + '\\n' +\n    'Estado: ' + statusText + '\\n' +\n    'Fecha: ' + fecha +\n    (a.staff_name ? '\\nResponsable: ' + a.staff_name : '') +\n    '\\n\\n\u00bfNecesitas algo m\u00e1s? \ud83d\ude0a'\n};"
+      }
+    },
+    {
+      "id": "node-009-get-services",
+      "name": "Consultar Servicios",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1200, 340],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.BACKEND_URL }}/api/wa-bridge/services",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.N8N_API_KEY }}" },
+            { "name": "x-tenant-phone", "value": "={{ $json.tenantPhone }}" }
+          ]
+        },
+        "options": { "timeout": 10000 }
+      }
+    },
+    {
+      "id": "node-010-fmt-services",
+      "name": "Formatear Servicios",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1420, 340],
+      "parameters": {
+        "jsCode": "const data = $input.item.json;\n\nif (!data.services || data.services.length === 0) {\n  return { reply: 'Actualmente no tenemos servicios configurados. Por favor cont\u00e1ctanos directamente.' };\n}\n\nconst list = data.services.map(s => {\n  const price = s.price ? '$' + Number(s.price).toLocaleString('es-CO') : 'Consultar';\n  const dur = s.duration_minutes ? ' (~' + s.duration_minutes + ' min)' : '';\n  const desc = s.description ? '\\n  ' + s.description : '';\n  return '\u2022 *' + s.name + '*' + dur + '\\n  \ud83d\udcb0 ' + price + desc;\n}).join('\\n\\n');\n\nreturn { reply: '\ud83d\udebf *Nuestros servicios:*\\n\\n' + list + '\\n\\n\u00bfDeseas agendar alguno? \ud83d\ude0a' };"
+      }
+    },
+    {
+      "id": "node-011-get-history",
+      "name": "Consultar Historial",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1200, 480],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.BACKEND_URL }}/api/wa-bridge/customer-history",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.N8N_API_KEY }}" },
+            { "name": "x-tenant-phone", "value": "={{ $json.tenantPhone }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "phone", "value": "={{ $json.clientPhone }}" }
+          ]
+        },
+        "options": { "timeout": 10000 }
+      }
+    },
+    {
+      "id": "node-012-fmt-history",
+      "name": "Formatear Historial",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1420, 480],
+      "parameters": {
+        "jsCode": "const data = $input.item.json;\n\nif (!data.found) {\n  return { reply: 'No encontr\u00e9 visitas anteriores con tu n\u00famero. \u00bfEs tu primera vez con nosotros? \u00a1Bienvenido! \ud83c\udf89\\n\\n\u00bfDeseas agendar tu primer turno?' };\n}\n\nconst { customer, history } = data;\n\nif (!history || history.length === 0) {\n  return { reply: 'Hola *' + customer.name + '*! A\u00fan no tienes visitas registradas. \u00bfDeseas agendar tu primer turno? \ud83d\ude97' };\n}\n\nconst list = history.map(h => {\n  const fecha = new Date(h.scheduled_at).toLocaleDateString('es-CO', { dateStyle: 'short' });\n  const price = h.price ? ' - $' + Number(h.price).toLocaleString('es-CO') : '';\n  return '\u2022 ' + fecha + ': *' + h.plate + '* \u2014 ' + h.service_name + price;\n}).join('\\n');\n\nreturn {\n  reply: '\ud83d\udccb *Historial de ' + customer.name + '*\\n' +\n    'Visitas totales: ' + customer.visit_count + '\\n\\n' +\n    'Últimas visitas:\\n' + list + '\\n\\n\u00bfDeseas agendar un nuevo turno? \ud83d\ude0a'\n};"
+      }
+    },
+    {
+      "id": "node-013-book-info",
+      "name": "Formatear Info Agendamiento",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 620],
+      "parameters": {
+        "jsCode": "return {\n  reply: '\ud83d\udcc5 *Agendar un turno*\\n\\nCon gusto te ayudo a agendar. Necesito algunos datos:\\n\\n1. *Placa* del veh\u00edculo\\n2. *Servicio* que deseas (escr\u00edbeme \"servicios\" para ver la lista)\\n3. *Fecha y hora* preferida\\n\\nEnv\u00edame esa info y listo. \ud83d\udebf'\n};"
+      }
+    },
+    {
+      "id": "node-014-human",
+      "name": "Formatear Asesor Humano",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 760],
+      "parameters": {
+        "jsCode": "return {\n  reply: '\ud83d\ude4b *Solicitud de asesor*\\n\\nHemos recibido tu solicitud. Un asesor se comunicar\u00e1 contigo muy pronto.\\n\\nHorario de atenci\u00f3n: Lunes a S\u00e1bado 8am \u2013 6pm\\n\\nGracias por tu paciencia. \ud83d\ude4f'\n};"
+      }
+    },
+    {
+      "id": "node-015-unknown",
+      "name": "Formatear Respuesta Desconocida",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 900],
+      "parameters": {
+        "jsCode": "return {\n  reply: '\ud83d\ude0a No entend\u00ed bien tu mensaje. Puedo ayudarte con:\\n\\n1\ufe0f\u20e3 Estado de tu veh\u00edculo\\n2\ufe0f\u20e3 Ver precios y servicios\\n3\ufe0f\u20e3 Tu historial de visitas\\n4\ufe0f\u20e3 Agendar un turno\\n5\ufe0f\u20e3 Hablar con un asesor\\n\\n\u00bfCon cu\u00e1l te ayudo?'\n};"
+      }
+    },
+    {
+      "id": "node-016-respond",
+      "name": "Responder al Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1680, 480],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { reply: $json.reply } }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Preparar Solicitud Claude", "type": "main", "index": 0 }]
+      ]
+    },
+    "Preparar Solicitud Claude": {
+      "main": [
+        [{ "node": "Claude - Detectar Intencion", "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude - Detectar Intencion": {
+      "main": [
+        [{ "node": "Parsear Intencion", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parsear Intencion": {
+      "main": [
+        [{ "node": "Enrutar por Intencion", "type": "main", "index": 0 }]
+      ]
+    },
+    "Enrutar por Intencion": {
+      "main": [
+        [{ "node": "Formatear Saludo", "type": "main", "index": 0 }],
+        [{ "node": "Consultar Estado Turno", "type": "main", "index": 0 }],
+        [{ "node": "Consultar Servicios", "type": "main", "index": 0 }],
+        [{ "node": "Consultar Historial", "type": "main", "index": 0 }],
+        [{ "node": "Formatear Info Agendamiento", "type": "main", "index": 0 }],
+        [{ "node": "Formatear Asesor Humano", "type": "main", "index": 0 }],
+        [{ "node": "Formatear Respuesta Desconocida", "type": "main", "index": 0 }]
+      ]
+    },
+    "Formatear Saludo": {
+      "main": [[{ "node": "Responder al Webhook", "type": "main", "index": 0 }]]
+    },
+    "Consultar Estado Turno": {
+      "main": [[{ "node": "Formatear Estado", "type": "main", "index": 0 }]]
+    },
+    "Formatear Estado": {
+      "main": [[{ "node": "Responder al Webhook", "type": "main", "index": 0 }]]
+    },
+    "Consultar Servicios": {
+      "main": [[{ "node": "Formatear Servicios", "type": "main", "index": 0 }]]
+    },
+    "Formatear Servicios": {
+      "main": [[{ "node": "Responder al Webhook", "type": "main", "index": 0 }]]
+    },
+    "Consultar Historial": {
+      "main": [[{ "node": "Formatear Historial", "type": "main", "index": 0 }]]
+    },
+    "Formatear Historial": {
+      "main": [[{ "node": "Responder al Webhook", "type": "main", "index": 0 }]]
+    },
+    "Formatear Info Agendamiento": {
+      "main": [[{ "node": "Responder al Webhook", "type": "main", "index": 0 }]]
+    },
+    "Formatear Asesor Humano": {
+      "main": [[{ "node": "Responder al Webhook", "type": "main", "index": 0 }]]
+    },
+    "Formatear Respuesta Desconocida": {
+      "main": [[{ "node": "Responder al Webhook", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "tags": [
+    { "name": "whatsapp" },
+    { "name": "ai" },
+    { "name": "carwash" }
+  ]
+}
