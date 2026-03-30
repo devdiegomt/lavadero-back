@@ -1,7 +1,3 @@
-/**
- * Núcleo del bot: conecta con WhatsApp via Baileys,
- * recibe mensajes y los reenvía a n8n.
- */
 import {
   makeWASocket,
   useMultiFileAuthState,
@@ -17,12 +13,20 @@ import pino from 'pino';
 import { forwardToN8n } from './n8n-client';
 import type { BotState, IncomingMessage } from './types';
 
-const logger = pino({ level: process.env.LOG_LEVEL || 'debug' });
+const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 
 const TENANT_PHONE = process.env.TENANT_PHONE || '';
 const AUTH_DIR = process.env.AUTH_DIR || './auth';
 
 let sock: WASocket | null = null;
+
+/**
+ * Mapa de LID (@lid) → JID real (@s.whatsapp.net).
+ * Se puebla con los eventos contacts.upsert de Baileys.
+ * Necesario porque WhatsApp multi-device usa LIDs internos
+ * que no corresponden al numero de telefono real.
+ */
+const lidToJid = new Map<string, string>();
 
 export async function startBaileys(state: BotState): Promise<void> {
   const { state: authState, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
@@ -37,38 +41,55 @@ export async function startBaileys(state: BotState): Promise<void> {
     logger: pino({ level: 'silent' }) as any,
     syncFullHistory: false,
     markOnlineOnConnect: true,
-    // Necesario para recibir mensajes correctamente en modo multi-device
     getMessage: async () => ({ conversation: '' }),
   });
 
   sock.ev.on('creds.update', saveCreds);
 
+  // Construir mapa LID -> JID real cuando llegan contactos
+  sock.ev.on('contacts.upsert', (contacts) => {
+    for (const contact of contacts) {
+      const phoneJid = contact.id;           // ej: 573001234567@s.whatsapp.net
+      const lid = (contact as any).lid;     // ej: 16733343588585@lid
+
+      if (phoneJid && lid) {
+        lidToJid.set(lid, phoneJid);
+        logger.info({ lid, phoneJid }, 'Mapeado LID -> JID');
+      }
+    }
+  });
+
+  sock.ev.on('contacts.update', (updates) => {
+    for (const update of updates) {
+      const phoneJid = update.id;
+      const lid = (update as any).lid;
+      if (phoneJid && lid) {
+        lidToJid.set(lid, phoneJid);
+        logger.info({ lid, phoneJid }, 'Actualizado LID -> JID');
+      }
+    }
+  });
+
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
-
     if (qr) {
       state.qrCode = qr;
       qrcode.generate(qr, { small: true });
       logger.info('QR generado — escanea con WhatsApp para conectar');
     }
-
     if (connection === 'open') {
       state.connected = true;
       state.lastConnected = new Date().toISOString();
       state.qrCode = undefined;
       logger.info('WhatsApp conectado correctamente');
     }
-
     if (connection === 'close') {
       state.connected = false;
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-
       logger.warn({ statusCode, shouldReconnect }, 'Conexion cerrada');
-
       if (shouldReconnect) {
         const delay = parseInt(process.env.RECONNECT_INTERVAL_MS || '5000', 10);
-        logger.info(`Reconectando en ${delay}ms...`);
         setTimeout(() => startBaileys(state), delay);
       } else {
         logger.error('Sesion cerrada (loggedOut). Elimina auth/ y reinicia.');
@@ -76,28 +97,9 @@ export async function startBaileys(state: BotState): Promise<void> {
     }
   });
 
-  // DEBUG: log de TODOS los eventos de mensajes para diagnostico
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    logger.debug({ type, count: messages.length }, 'messages.upsert recibido');
-
+    if (type !== 'notify' && type !== 'append') return;
     for (const msg of messages) {
-      const jid = msg.key.remoteJid || '';
-      const fromMe = msg.key.fromMe;
-      const hasContent = !!msg.message;
-
-      logger.debug({ jid, fromMe, hasContent, type }, 'Evaluando mensaje');
-
-      // Procesar solo mensajes entrantes con contenido
-      if (!hasContent || fromMe) {
-        logger.debug({ fromMe, hasContent }, 'Mensaje ignorado (fromMe o sin contenido)');
-        continue;
-      }
-
-      if (type !== 'notify' && type !== 'append') {
-        logger.debug({ type }, 'Mensaje ignorado (type no es notify/append)');
-        continue;
-      }
-
       try {
         await processMessage(msg);
       } catch (err) {
@@ -107,29 +109,47 @@ export async function startBaileys(state: BotState): Promise<void> {
   });
 }
 
-async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
-  const jid = msg.key.remoteJid || '';
-
-  // Solo mensajes directos (no grupos, no broadcast)
-  if (!jid.endsWith('@s.whatsapp.net') || isJidBroadcast(jid)) {
-    logger.debug({ jid }, 'Mensaje descartado (grupo o broadcast)');
-    return;
+/**
+ * Resuelve el JID correcto para enviar una respuesta.
+ * Si el JID entrante es @lid, busca el numero real en el mapa.
+ * Si no esta en el mapa aun, extrae el numero del @lid como fallback
+ * (funciona cuando el LID coincide con el numero de telefono).
+ */
+function resolveReplyJid(incomingJid: string): string {
+  if (incomingJid.endsWith('@lid')) {
+    const resolved = lidToJid.get(incomingJid);
+    if (resolved) {
+      logger.info({ lid: incomingJid, resolved }, 'JID resuelto desde mapa');
+      return resolved;
+    }
+    logger.warn({ lid: incomingJid }, 'LID no encontrado en mapa, usando @lid directo');
   }
+  return incomingJid;
+}
 
-  const phone = '+' + jid.replace('@s.whatsapp.net', '');
+async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
+  if (!msg.message || msg.key.fromMe) return;
+
+  const jid = msg.key.remoteJid || '';
+  if (isJidBroadcast(jid)) return;
+
+  const isDirect = jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid');
+  if (!isDirect) return;
+
+  // Intentar resolver el JID real lo antes posible
+  const replyJid = resolveReplyJid(jid);
+  const phone = '+' + replyJid.replace(/@s\.whatsapp\.net$|@lid$/, '');
 
   const text =
     msg.message?.conversation ??
     msg.message?.extendedTextMessage?.text ??
     '';
 
-  if (!text.trim()) {
-    logger.debug({ jid }, 'Mensaje descartado (sin texto)');
-    return;
-  }
+  if (!text.trim()) return;
 
   const incoming: IncomingMessage = {
     phone,
+    jid: replyJid,
     message: text.trim().substring(0, 1000),
     tenantPhone: TENANT_PHONE,
     timestamp: new Date(Number(msg.messageTimestamp) * 1000).toISOString(),
@@ -137,29 +157,26 @@ async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
     pushName: msg.pushName ?? undefined,
   };
 
-  logger.info({ from: phone, preview: text.substring(0, 80) }, 'Mensaje recibido');
+  logger.info({ from: phone, replyJid, preview: text.substring(0, 80) }, 'Mensaje recibido');
 
   const response = await forwardToN8n(incoming);
 
   if (response?.reply) {
-    await sendMessage(phone, response.reply);
+    await sendMessage(replyJid, response.reply);
   } else {
     logger.warn({ from: phone }, 'n8n no retorno respuesta');
   }
 }
 
-export async function sendMessage(phone: string, text: string): Promise<void> {
+export async function sendMessage(jid: string, text: string): Promise<void> {
   if (!sock) {
-    logger.error('sendMessage llamado sin socket inicializado');
+    logger.error('Socket no inicializado');
     return;
   }
-
-  const jid = phone.replace('+', '') + '@s.whatsapp.net';
-
   try {
     await sock.sendMessage(jid, { text });
-    logger.info({ to: phone }, 'Mensaje enviado');
+    logger.info({ to: jid }, 'Mensaje enviado');
   } catch (err) {
-    logger.error({ err, phone }, 'Error enviando mensaje');
+    logger.error({ err, jid }, 'Error enviando mensaje');
   }
 }
