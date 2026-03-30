@@ -16,20 +16,14 @@ const historyRoutes = require("./modules/history/history.routes");
 const reportRoutes = require("./modules/reports/reports.routes");
 const onboardingRoutes = require('./modules/onboarding/onboarding.routes');
 const superadminRoutes = require('./modules/superadmin/superadmin.routes');
-/* const whatsappRoutes = require("./modules/whatsapp/whatsapp.routes"); */
 const billingRoutes = require("./modules/billing/billing.routes");
+const waBridgeRoutes = require("./modules/whatsapp/wa-bridge.routes");
 const logger = require('./shared/utils/logger');
 const { httpLogger } = require('./shared/utils/logger');
 const { errorHandler } = require("./shared/middleware/errorHandler");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-/* const Redis = require("ioredis"); */
-/* const { initWhatsApp } = require("./modules/whatsapp/whatsapp.controller");
-const {
-  sendAppointmentReminders,
-} = require("./modules/whatsapp/notifications"); */
 
 // ---------------------------------------------------------------------------
 // Middleware Global
@@ -80,44 +74,29 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/history", historyRoutes);
 app.use("/api/reports", reportRoutes);
-/* app.use("/api/whatsapp", whatsappRoutes); */
 app.use("/api/billing", billingRoutes);
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/superadmin', superadminRoutes);
+
+// WhatsApp AI Bridge (consumido por n8n)
+app.use("/api/wa-bridge", waBridgeRoutes);
 
 // ---------------------------------------------------------------------------
 // Error Handler (siempre al final)
 // ---------------------------------------------------------------------------
 app.use(errorHandler);
 
-// Redis para sesiones de WhatsApp
-/* const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
-redis.on("connect", () => logger.info("🔴 Redis conectado"));
-redis.on("error", (err) => console.error("❌ Redis error:", err.message));
-initWhatsApp(redis); */
-
 // ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
 app.listen(PORT, () => {
-  logger.info(`🚿 Carwash API corriendo en puerto ${PORT}`);
+  logger.info(`\ud83d\udebf Carwash API corriendo en puerto ${PORT}`);
   logger.info(`   Ambiente: ${process.env.NODE_ENV || "development"}`);
   logger.info(`   Health:   http://localhost:${PORT}/api/health`);
+  logger.info(`   WA Bridge: http://localhost:${PORT}/api/wa-bridge`);
 });
 
 const { initCronJobs } = require('./shared/db/cron');
 initCronJobs();
-
-// Cron: recordatorios de citas cada 5 minutos
-/* setInterval(
-  async () => {
-    try {
-      await sendAppointmentReminders();
-    } catch (err) {
-      console.error("[Cron] Error en recordatorios:", err.message);
-    }
-  },
-  5 * 60 * 1000,
-); */
 
 module.exports = app;
