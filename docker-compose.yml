@@ -3,19 +3,18 @@
 # Arquitectura WhatsApp AI: Baileys + n8n + Claude
 #
 # Servicios:
-#   postgres  :5432  — Base de datos principal
+#   postgres  :5433  — Base de datos principal (5433 para evitar conflicto con Postgres local)
 #   redis     :6379  — Cache / sesiones
 #   backend   :3000  — Express API
 #   bot-wa    :3001  — Bot Baileys (WhatsApp)
 #   n8n       :5678  — Orquestador de flujos AI
 # =============================================================================
 
-version: '3.8'
-
 services:
 
   # ---------------------------------------------------------------------------
   # PostgreSQL
+  # Puerto host 5433 para evitar conflicto con instalaciones locales de Postgres
   # ---------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
@@ -27,7 +26,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-carwash_dev}"]
       interval: 10s
@@ -54,6 +53,7 @@ services:
 
   # ---------------------------------------------------------------------------
   # Backend Express API
+  # Dentro de Docker la red interna usa el puerto 5432 (sin conflicto)
   # ---------------------------------------------------------------------------
   backend:
     build:
@@ -109,7 +109,6 @@ services:
     ports:
       - "3001:3001"
     volumes:
-      # Persistir sesión de WhatsApp (evita re-escanear QR en cada restart)
       - bot_auth:/app/auth
     depends_on:
       - n8n
@@ -133,22 +132,18 @@ services:
       N8N_PORT: 5678
       N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
       WEBHOOK_URL: ${N8N_WEBHOOK_URL_PUBLIC:-http://localhost:5678/}
-      # Basic auth para la UI de n8n
       N8N_BASIC_AUTH_ACTIVE: "true"
       N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
       N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-carwash2024!}
-      # Base de datos para n8n (tabla separada en el mismo postgres)
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres
       DB_POSTGRESDB_PORT: 5432
       DB_POSTGRESDB_DATABASE: ${N8N_DB:-n8n}
       DB_POSTGRESDB_USER: ${POSTGRES_USER:-postgres}
       DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      # Variables disponibles en expresiones n8n ({{ $env.VAR }})
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       BACKEND_URL: http://backend:3000
       N8N_API_KEY: ${N8N_API_KEY}
-      # Limpieza automática de ejecuciones (14 días)
       EXECUTIONS_DATA_PRUNE: "true"
       EXECUTIONS_DATA_MAX_AGE: 336
       GENERIC_TIMEZONE: ${TIMEZONE:-America/Bogota}
