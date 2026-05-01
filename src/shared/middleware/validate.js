@@ -107,21 +107,34 @@ const schemas = {
   // Users
   userCreate: z.object({
     email: z.string().email('Email inválido').transform(v => v.toLowerCase().trim()),
-    password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
+    password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres'),
     firstName: str(80), lastName: optStr(80), phone: phone.optional().nullable(),
     role: z.enum(['admin', 'operator']).default('operator'),
   }),
   changePassword: z.object({
     currentPassword: z.string().optional(),
-    newPassword: z.string().min(6, 'Mínimo 6 caracteres'),
+    newPassword: z.string().min(8, 'Mínimo 8 caracteres'),
   }),
 
-  // Onboarding (alineado con onboarding.controller.js de Fase 5)
+  // Onboarding — registro self-service de un lavadero nuevo.
+  // El body tiene dos secciones: datos del lavadero (tenant) y datos del admin user.
   onboardingRegister: z.object({
-    businessName: str(150), ownerName: str(150),
-    email: z.string().email('Email inválido').transform(v => v.toLowerCase().trim()),
-    password: z.string().min(6, 'Mínimo 6 caracteres'),
-    phone: phone.optional().nullable(), city: optStr(100),
+    // Datos del lavadero
+    businessName: str(150),
+    nit: optStr(20),
+    ownerName: optStr(150),
+    phone,
+    email: optEmail,
+    address: optStr(300),
+    city: optStr(100),
+    openingTime: timeStr,
+    closingTime: timeStr,
+    baysCount: z.number().int().min(1).max(20).optional().nullable(),
+    // Datos del usuario admin
+    adminEmail: z.string().email('Email inválido').transform(v => v.toLowerCase().trim()),
+    adminPassword: z.string().min(8, 'Mínimo 8 caracteres'),
+    adminFirstName: str(80),
+    adminLastName: optStr(80),
   }),
 };
 

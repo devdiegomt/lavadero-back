@@ -33,10 +33,12 @@ function errorHandler(err, req, res, _next) {
   }
 
   // Errores de PostgreSQL
+  // NOTA: err.detail contiene info del schema ("Key (tenant_id, email)=...")
+  // que no debe filtrarse al cliente. Solo se expone en desarrollo.
   if (err.code === '23505') {
     return res.status(409).json({
       error: 'El registro ya existe.',
-      details: err.detail,
+      ...(process.env.NODE_ENV !== 'production' && err.detail ? { details: err.detail } : {}),
     });
   }
   if (err.code === '23503') {

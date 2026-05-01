@@ -8,6 +8,8 @@
  * Rate limit: 60 req/min
  */
 
+const { decryptIfNeeded } = require('../../shared/utils/crypto');
+
 const ALEGRA_BASE_URL = 'https://api.alegra.com/api/v1';
 
 class AlegraClient {
@@ -319,8 +321,12 @@ class AlegraClient {
 function createAlegraClientForTenant(tenant) {
   if (tenant.billing_provider !== 'alegra') return null;
 
-  // billing_api_key almacena: "email:token" (separado por :)
-  const [email, token] = (tenant.billing_api_key || '').split(':');
+  // billing_api_key se almacena cifrado en BD (AES-256-GCM).
+  // decryptIfNeeded maneja también valores en plaintext (período de migración).
+  const plaintext = decryptIfNeeded(tenant.billing_api_key);
+
+  // Después de descifrar, el formato esperado es "email:token"
+  const [email, token] = (plaintext || '').split(':');
   if (!email || !token) {
     throw new Error('Credenciales de Alegra no configuradas. Formato esperado en billing_api_key: "email:token"');
   }

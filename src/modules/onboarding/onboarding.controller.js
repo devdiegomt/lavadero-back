@@ -27,30 +27,25 @@ async function register(req, res) {
     adminEmail, adminPassword, adminFirstName, adminLastName,
   } = req.body;
 
-  // Validaciones
-  if (!businessName || !phone || !adminEmail || !adminPassword || !adminFirstName) {
-    throw new AppError('Nombre del negocio, teléfono, email, contraseña y nombre del admin son requeridos', 400);
-  }
-  if (adminPassword.length < 6) {
-    throw new AppError('La contraseña debe tener al menos 6 caracteres', 400);
-  }
+  // El middleware validate() ya verificó tipos y campos requeridos.
 
-  // Generar slug único
+  // Generar slug base
   const baseSlug = businessName
     .toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Remove accents
     .replace(/[^a-z0-9\s-]/g, '')
     .replace(/\s+/g, '-')
-    .substring(0, 60);
+    .substring(0, 50); // margen para sufijo aleatorio si hay colisión
 
-  // Verificar unicidad del slug
-  const { rows: existingSlugs } = await db.query(
-    'SELECT slug FROM tenants WHERE slug LIKE $1',
-    [`${baseSlug}%`]
-  );
+  // BUG-4: si el slug ya existe, usar sufijo aleatorio en vez de contar.
+  // El método anterior (length+1) podía generar un slug que ya existiera.
   let slug = baseSlug;
-  if (existingSlugs.some(r => r.slug === slug)) {
-    slug = `${baseSlug}-${existingSlugs.length + 1}`;
+  const { rows: collisions } = await db.query(
+    'SELECT 1 FROM tenants WHERE slug = $1 LIMIT 1',
+    [slug]
+  );
+  if (collisions.length > 0) {
+    slug = `${baseSlug}-${crypto.randomBytes(3).toString('hex')}`;
   }
 
   // Verificar que el email no esté en uso

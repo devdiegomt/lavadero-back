@@ -15,7 +15,9 @@
     "db:demo": "node src/shared/db/seed.js && node src/shared/db/demo-seed.js",
     "test": "jest --detectOpenHandles --forceExit",
     "test:watch": "jest --watch --detectOpenHandles",
-    "db:migrate-all": "node src/shared/db/migrate.js && node src/shared/db/migrate-billing.js && node src/shared/db/migrate-multitenant.js"
+    "db:migrate-all": "node src/shared/db/migrate.js && node src/shared/db/migrate-billing.js && node src/shared/db/migrate-multitenant.js",
+    "db:encrypt-billing-keys": "node src/shared/db/migrate-encrypt-billing-keys.js",
+    "encrypt": "node src/shared/db/encrypt-value.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
