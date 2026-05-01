@@ -12,10 +12,15 @@ const METHODS = [
 
 export default function PaymentModal({ appointment, onClose, onSaved }) {
   const [method, setMethod] = useState('cash');
-  const [amount, setAmount] = useState(appointment.price);
+  // El input es en pesos (lo natural para el usuario), pero la API trabaja en centavos.
+  const [amountPesos, setAmountPesos] = useState(
+    Math.round((appointment.price || 0) / 100)
+  );
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const amountCentavos = Math.round(parseFloat(amountPesos || 0) * 100);
 
   const handleSave = async () => {
     setError('');
@@ -25,7 +30,7 @@ export default function PaymentModal({ appointment, onClose, onSaved }) {
         method: 'POST',
         body: {
           appointmentId: appointment.id,
-          amount: parseInt(amount),
+          amount: amountCentavos,
           paymentMethod: method,
           notes: notes || undefined,
         },
@@ -59,17 +64,16 @@ export default function PaymentModal({ appointment, onClose, onSaved }) {
 
         {/* Amount */}
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Monto (centavos COP)</label>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Monto en pesos</label>
           <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">$</span>
             <input
               type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+              inputMode="numeric"
+              value={amountPesos}
+              onChange={(e) => setAmountPesos(e.target.value)}
+              className="w-full pl-7 pr-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none"
             />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
-              = {formatCOP(parseInt(amount) || 0)}
-            </span>
           </div>
         </div>
 
@@ -105,10 +109,10 @@ export default function PaymentModal({ appointment, onClose, onSaved }) {
         {/* Submit */}
         <button
           onClick={handleSave}
-          disabled={loading || !amount}
+          disabled={loading || !amountCentavos}
           className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl transition disabled:opacity-50 text-sm"
         >
-          {loading ? 'Registrando...' : `Cobrar ${formatCOP(parseInt(amount) || 0)}`}
+          {loading ? 'Registrando...' : `Cobrar ${formatCOP(amountCentavos)}`}
         </button>
       </div>
     </div>

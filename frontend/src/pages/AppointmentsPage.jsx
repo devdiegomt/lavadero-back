@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 import { formatCOP, formatTime } from '../lib/format';
-import { useToast } from '../components/ui';
+import { useToast, ConfirmDialog } from '../components/ui';
 import QuickTurnModal from '../components/QuickTurnModal';
 
 const STATUS_CONFIG = {
@@ -132,6 +132,7 @@ export default function AppointmentsPage() {
 }
 
 function AppointmentCard({ appointment: a, onStatusChange }) {
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const config = STATUS_CONFIG[a.status] || STATUS_CONFIG.pending;
   const nextStatus = {
     pending: 'in_progress',
@@ -204,9 +205,7 @@ function AppointmentCard({ appointment: a, onStatusChange }) {
           )}
           {a.status !== 'cancelled' && a.status !== 'delivered' && (
             <button
-              onClick={() => {
-                if (confirm('¿Cancelar este turno?')) onStatusChange(a.id, 'cancelled');
-              }}
+              onClick={() => setConfirmCancel(true)}
               className="text-xs text-red-500 hover:text-red-700 transition"
             >
               Cancelar
@@ -214,6 +213,18 @@ function AppointmentCard({ appointment: a, onStatusChange }) {
           )}
         </div>
       </div>
+
+      {confirmCancel && (
+        <ConfirmDialog
+          title="Cancelar turno"
+          message={`¿Seguro que quieres cancelar el turno de la placa ${a.plate}? Esta acción no se puede deshacer.`}
+          confirmLabel="Cancelar turno"
+          cancelLabel="Volver"
+          danger
+          onCancel={() => setConfirmCancel(false)}
+          onConfirm={() => { setConfirmCancel(false); onStatusChange(a.id, 'cancelled'); }}
+        />
+      )}
     </div>
   );
 }

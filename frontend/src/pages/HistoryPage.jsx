@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { formatCOP, formatDate } from '../lib/format';
-import { EmptyState } from '../components/ui';
+import { EmptyState, useToast } from '../components/ui';
 
 const STATUS_LABEL = { pending: 'Esperando', in_progress: 'Lavando', done: 'Listo', delivered: 'Entregado', cancelled: 'Cancelado' };
 const STATUS_COLOR = { pending: 'bg-gray-100 text-gray-600', in_progress: 'bg-yellow-100 text-yellow-700', done: 'bg-green-100 text-green-700', delivered: 'bg-blue-100 text-blue-700', cancelled: 'bg-red-100 text-red-600' };
 
 export default function HistoryPage() {
+  const toast = useToast();
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null);
   const [vehicleData, setVehicleData] = useState(null);
@@ -26,14 +27,14 @@ export default function HistoryPage() {
   const openVehicle = async (plate) => {
     setLoading(true);
     try { setVehicleData(await api(`/history/vehicle/${plate}`)); setView('vehicle'); }
-    catch (err) { alert(err.message); }
+    catch (err) { toast.error(err.message); }
     finally { setLoading(false); }
   };
 
   const openCustomer = async (id) => {
     setLoading(true);
     try { setCustomerData(await api(`/history/customer/${id}`)); setView('customer'); }
-    catch (err) { alert(err.message); }
+    catch (err) { toast.error(err.message); }
     finally { setLoading(false); }
   };
 

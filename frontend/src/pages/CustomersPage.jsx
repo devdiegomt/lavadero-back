@@ -1,13 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
+import { useToast, ConfirmDialog } from '../components/ui';
 
 export default function CustomersPage() {
+  const toast = useToast();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [pagination, setPagination] = useState({ total: 0, page: 1 });
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [deleteId, setDeleteId] = useState(null);
   const [formData, setFormData] = useState({ firstName: '', lastName: '', phone: '', email: '', documentNumber: '', notes: '' });
 
   const fetchCustomers = useCallback(async () => {
@@ -58,16 +61,19 @@ export default function CustomersPage() {
         await api('/customers', { method: 'POST', body: formData });
       }
       setShowForm(false);
+      toast.success(editingId ? 'Cliente actualizado' : 'Cliente creado');
       fetchCustomers();
-    } catch (err) { alert(err.message); }
+    } catch (err) { toast.error(err.message); }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('¿Eliminar este cliente?')) return;
+  const confirmDelete = async () => {
+    const id = deleteId;
+    setDeleteId(null);
     try {
       await api(`/customers/${id}`, { method: 'DELETE' });
+      toast.success('Cliente eliminado');
       fetchCustomers();
-    } catch (err) { alert(err.message); }
+    } catch (err) { toast.error(err.message); }
   };
 
   return (
@@ -122,7 +128,7 @@ export default function CustomersPage() {
                   className="text-xs text-brand-600 hover:text-brand-800 px-2 py-1 rounded transition">
                   Editar
                 </button>
-                <button onClick={() => handleDelete(c.id)}
+                <button onClick={() => setDeleteId(c.id)}
                   className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded transition">
                   Eliminar
                 </button>
@@ -178,6 +184,18 @@ export default function CustomersPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Confirm delete */}
+      {deleteId && (
+        <ConfirmDialog
+          title="Eliminar cliente"
+          message="Esta acción no se puede deshacer. ¿Seguro que quieres eliminar este cliente?"
+          confirmLabel="Eliminar"
+          danger
+          onCancel={() => setDeleteId(null)}
+          onConfirm={confirmDelete}
+        />
       )}
     </div>
   );

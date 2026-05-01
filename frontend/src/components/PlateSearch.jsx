@@ -28,17 +28,13 @@ export default function PlateSearch() {
     setResult(null);
 
     try {
-      const vehicle = await api(`/vehicles/plate/${query.trim()}`);
-
-      // Fetch recent appointments for this vehicle
-      const aptData = await api(`/appointments?limit=5&date=`).catch(() => ({ data: [] }));
-      // Actually filter by vehicle in a simple way — fetch from appointments endpoint
-      const allRecent = await api(`/appointments?limit=100`).catch(() => ({ data: [] }));
-      const vehicleApts = (allRecent.data || [])
-        .filter(a => a.vehicle_id === vehicle.id)
-        .slice(0, 5);
-
-      setResult({ vehicle, appointments: vehicleApts });
+      // Un solo fetch: el endpoint de historial trae vehículo + cliente + últimas citas.
+      const data = await api(`/history/vehicle/${encodeURIComponent(query.trim())}`);
+      setResult({
+        vehicle: data.vehicle,
+        customer: data.customer,
+        appointments: (data.appointments || []).slice(0, 5),
+      });
     } catch (err) {
       if (err.status === 404) {
         setError('No se encontró un vehículo con esa placa');
@@ -118,24 +114,28 @@ export default function PlateSearch() {
               </div>
 
               {/* Customer */}
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Cliente</p>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-sm text-gray-900">
-                      {result.vehicle.customer_first_name} {result.vehicle.customer_last_name}
-                    </p>
-                    <p className="text-xs text-gray-500">{result.vehicle.customer_phone}</p>
-                    {result.vehicle.customer_email && (
-                      <p className="text-xs text-gray-400">{result.vehicle.customer_email}</p>
+              {result.customer && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Cliente</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-sm text-gray-900">
+                        {result.customer.first_name} {result.customer.last_name}
+                      </p>
+                      <p className="text-xs text-gray-500">{result.customer.phone}</p>
+                      {result.customer.email && (
+                        <p className="text-xs text-gray-400">{result.customer.email}</p>
+                      )}
+                    </div>
+                    {result.customer.phone && (
+                      <a href={`tel:${result.customer.phone}`}
+                        className="bg-green-100 text-green-700 px-3 py-2 rounded-lg text-xs font-medium hover:bg-green-200 transition">
+                        📞 Llamar
+                      </a>
                     )}
                   </div>
-                  <a href={`tel:${result.vehicle.customer_phone}`}
-                    className="bg-green-100 text-green-700 px-3 py-2 rounded-lg text-xs font-medium hover:bg-green-200 transition">
-                    📞 Llamar
-                  </a>
                 </div>
-              </div>
+              )}
 
               {/* Recent appointments */}
               {result.appointments.length > 0 && (

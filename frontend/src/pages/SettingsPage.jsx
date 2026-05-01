@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { formatCOP } from '../lib/format';
+import { useToast } from '../components/ui';
 
 const TABS = [
   { key: 'general', label: 'General', icon: '🏪' },
@@ -43,6 +44,7 @@ export default function SettingsPage() {
 // General Tab - Lavadero config
 // ==========================================================================
 function GeneralTab() {
+  const toast = useToast();
   const [tenant, setTenant] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -73,7 +75,7 @@ function GeneralTab() {
       setTenant(updated);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch (err) { alert(err.message); }
+    } catch (err) { toast.error(err.message); }
     finally { setSaving(false); }
   };
 
@@ -116,6 +118,7 @@ function GeneralTab() {
 // Services Tab - Catálogo de servicios
 // ==========================================================================
 function ServicesTab() {
+  const toast = useToast();
   const [services, setServices] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -128,7 +131,7 @@ function ServicesTab() {
   useEffect(() => { fetchServices(); }, [fetchServices]);
 
   function emptyServiceForm() {
-    return { name: '', description: '', priceStedan: '', priceSuv: '', priceCamioneta: '', priceMoto: '', pricePickup: '', estimatedMinutes: 60, sortOrder: 0 };
+    return { name: '', description: '', priceSedan: '', priceSuv: '', priceCamioneta: '', priceMoto: '', pricePickup: '', estimatedMinutes: 60, sortOrder: 0 };
   }
 
   const openNew = () => { setEditing(null); setForm(emptyServiceForm()); setShowForm(true); };
@@ -137,7 +140,7 @@ function ServicesTab() {
     setEditing(s.id);
     setForm({
       name: s.name, description: s.description || '',
-      priceStedan: s.price_sedan / 100, priceSuv: s.price_suv / 100,
+      priceSedan: s.price_sedan / 100, priceSuv: s.price_suv / 100,
       priceCamioneta: s.price_camioneta / 100, priceMoto: s.price_moto / 100,
       pricePickup: s.price_pickup / 100,
       estimatedMinutes: s.estimated_minutes, sortOrder: s.sort_order,
@@ -150,7 +153,7 @@ function ServicesTab() {
       const body = {
         name: form.name,
         description: form.description,
-        priceStedan: Math.round(parseFloat(form.priceStedan || 0) * 100),
+        priceSedan: Math.round(parseFloat(form.priceSedan || 0) * 100),
         priceSuv: Math.round(parseFloat(form.priceSuv || 0) * 100),
         priceCamioneta: Math.round(parseFloat(form.priceCamioneta || 0) * 100),
         priceMoto: Math.round(parseFloat(form.priceMoto || 0) * 100),
@@ -165,7 +168,7 @@ function ServicesTab() {
       }
       setShowForm(false);
       fetchServices();
-    } catch (err) { alert(err.message); }
+    } catch (err) { toast.error(err.message); }
   };
 
   const handleToggle = async (id) => {
@@ -220,7 +223,7 @@ function ServicesTab() {
 
           <SectionTitle>Precios (en pesos COP, sin centavos)</SectionTitle>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <Field label="Sedán" value={form.priceStedan} onChange={v => setForm(f => ({...f, priceStedan: v}))} type="number" placeholder="25000" />
+            <Field label="Sedán" value={form.priceSedan} onChange={v => setForm(f => ({...f, priceSedan: v}))} type="number" placeholder="25000" />
             <Field label="SUV" value={form.priceSuv} onChange={v => setForm(f => ({...f, priceSuv: v}))} type="number" placeholder="35000" />
             <Field label="Camioneta" value={form.priceCamioneta} onChange={v => setForm(f => ({...f, priceCamioneta: v}))} type="number" />
             <Field label="Pickup" value={form.pricePickup} onChange={v => setForm(f => ({...f, pricePickup: v}))} type="number" />
@@ -242,6 +245,7 @@ function ServicesTab() {
 // Team Tab - Operator management
 // ==========================================================================
 function TeamTab() {
+  const toast = useToast();
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [showForm, setShowForm] = useState(false);
@@ -276,19 +280,19 @@ function TeamTab() {
           await api(`/users/${editing}/password`, { method: 'PATCH', body: { newPassword: form.password } });
         }
       } else {
-        if (!form.password) { alert('La contraseña es requerida'); return; }
+        if (!form.password) { toast.error('La contraseña es requerida'); return; }
         await api('/users', { method: 'POST', body: form });
       }
       setShowForm(false);
       fetchUsers();
-    } catch (err) { alert(err.message); }
+    } catch (err) { toast.error(err.message); }
   };
 
   const handleToggle = async (id) => {
     try {
       await api(`/users/${id}/toggle`, { method: 'PATCH' });
       fetchUsers();
-    } catch (err) { alert(err.message); }
+    } catch (err) { toast.error(err.message); }
   };
 
   const roleLabel = { admin: 'Administrador', operator: 'Operador', super_admin: 'Super Admin' };

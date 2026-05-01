@@ -1,21 +1,34 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../lib/api';
 import { formatCOP } from '../lib/format';
+import { useToast } from '../components/ui';
+import QuickTurnModal from '../components/QuickTurnModal';
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showQuickTurn, setShowQuickTurn] = useState(false);
+
+  const fetchStats = useCallback(() => {
+    return api('/tenants/me/stats')
+      .then(setStats)
+      .catch(console.error);
+  }, []);
 
   useEffect(() => {
-    api('/tenants/me/stats')
-      .then(setStats)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
+    fetchStats().finally(() => setLoading(false));
+  }, [fetchStats]);
+
+  const handleQuickTurnCreated = () => {
+    setShowQuickTurn(false);
+    toast.success('Turno creado exitosamente');
+    fetchStats();
+  };
 
   const greeting = () => {
     const hour = new Date().getHours();
@@ -77,7 +90,7 @@ export default function DashboardPage() {
         <h2 className="font-semibold text-gray-900 mb-4">Acciones rápidas</h2>
         <div className="grid grid-cols-2 gap-3">
           <QuickAction href="/appointments" icon="📅" label="Ver Agenda" />
-          <QuickAction href="/appointments/new" icon="➕" label="Nuevo Turno" />
+          <QuickAction onClick={() => setShowQuickTurn(true)} icon="➕" label="Nuevo Turno" />
           <QuickAction href="/board" icon="📊" label="Tablero" />
           <QuickAction href="/customers" icon="👥" label="Clientes" />
         </div>
@@ -85,6 +98,14 @@ export default function DashboardPage() {
 
       {/* Live board summary */}
       <LiveBoardSummary />
+
+      {/* Quick turn modal */}
+      {showQuickTurn && (
+        <QuickTurnModal
+          onClose={() => setShowQuickTurn(false)}
+          onCreated={handleQuickTurnCreated}
+        />
+      )}
     </div>
   );
 }
@@ -103,11 +124,12 @@ function StatCard({ label, value, icon, color }) {
   );
 }
 
-function QuickAction({ href, icon, label }) {
+function QuickAction({ href, onClick, icon, label }) {
   const navigate = useNavigate();
+  const handleClick = onClick || (() => navigate(href));
   return (
     <button
-      onClick={() => navigate(href)}
+      onClick={handleClick}
       className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-100 hover:bg-gray-50 transition text-sm font-medium text-gray-700 text-left w-full"
     >
       <span className="text-lg">{icon}</span>

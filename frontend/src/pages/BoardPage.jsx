@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../lib/api';
 import { formatCOP, formatTime } from '../lib/format';
-import { useToast, usePullToRefresh } from '../components/ui';
+import { useToast, usePullToRefresh, ConfirmDialog } from '../components/ui';
 import PaymentModal from '../components/PaymentModal';
 
 const COLUMNS = [
@@ -109,7 +109,7 @@ export default function BoardPage() {
         body: { assignedTo: operatorId || null },
       });
       fetchData();
-    } catch (err) { alert(err.message); }
+    } catch (err) { toast.error(err.message); }
   };
 
   const columnsToShow = showDelivered ? COLUMNS : COLUMNS.filter(c => c.key !== 'delivered');
@@ -343,6 +343,7 @@ function KanbanCard({ appointment: a, operators, onStatusChange, onAssign, onDet
 function DetailModal({ appointmentId, operators, onClose, onStatusChange, onAssign }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   useEffect(() => {
     api(`/appointments/${appointmentId}`)
@@ -457,9 +458,7 @@ function DetailModal({ appointmentId, operators, onClose, onStatusChange, onAssi
             )}
             {data.status !== 'cancelled' && data.status !== 'delivered' && (
               <button
-                onClick={() => {
-                  if (confirm('¿Cancelar este turno?')) onStatusChange(data.id, 'cancelled');
-                }}
+                onClick={() => setConfirmCancel(true)}
                 className="px-6 py-3 border border-red-200 text-red-600 hover:bg-red-50 font-medium rounded-xl transition text-sm"
               >
                 Cancelar
@@ -468,6 +467,18 @@ function DetailModal({ appointmentId, operators, onClose, onStatusChange, onAssi
           </div>
         </div>
       </div>
+
+      {confirmCancel && (
+        <ConfirmDialog
+          title="Cancelar turno"
+          message={`¿Seguro que quieres cancelar el turno de la placa ${data.plate}? Esta acción no se puede deshacer.`}
+          confirmLabel="Cancelar turno"
+          cancelLabel="Volver"
+          danger
+          onCancel={() => setConfirmCancel(false)}
+          onConfirm={() => { setConfirmCancel(false); onStatusChange(data.id, 'cancelled'); }}
+        />
+      )}
     </div>
   );
 }
