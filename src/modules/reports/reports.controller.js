@@ -20,7 +20,7 @@ async function getDateRange(tenantId, period, from, to) {
 
 // GET /api/reports/dashboard
 async function dashboard(req, res) {
-  const { from, to } = getDateRange(req.tenantId, req.query.period, req.query.from, req.query.to);
+  const { from, to } = await getDateRange(req.tenantId, req.query.period, req.query.from, req.query.to);
 
   const { rows } = await db.query(
     `SELECT
@@ -87,7 +87,7 @@ async function dashboard(req, res) {
 
 // GET /api/reports/revenue
 async function revenue(req, res) {
-  const { from, to } = getDateRange(req.tenantId, req.query.period, req.query.from, req.query.to);
+  const { from, to } = await getDateRange(req.tenantId, req.query.period, req.query.from, req.query.to);
 
   // Daily revenue
   const { rows: daily } = await db.query(
@@ -145,7 +145,7 @@ async function revenue(req, res) {
 
 // GET /api/reports/services
 async function topServices(req, res) {
-  const { from, to } = getDateRange(req.tenantId, req.query.period, req.query.from, req.query.to);
+  const { from, to } = await getDateRange(req.tenantId, req.query.period, req.query.from, req.query.to);
 
   const { rows } = await db.query(
     `SELECT s.name, COUNT(*) as count,
@@ -173,7 +173,7 @@ async function topServices(req, res) {
 
 // GET /api/reports/customers
 async function topCustomers(req, res) {
-  const { from, to } = getDateRange(req.tenantId, req.query.period, req.query.from, req.query.to);
+  const { from, to } = await getDateRange(req.tenantId, req.query.period, req.query.from, req.query.to);
 
   const { rows } = await db.query(
     `SELECT c.id, c.first_name, c.last_name, c.phone,
@@ -206,7 +206,7 @@ async function topCustomers(req, res) {
 
 // GET /api/reports/operators
 async function operators(req, res) {
-  const { from, to } = getDateRange(req.tenantId, req.query.period, req.query.from, req.query.to);
+  const { from, to } = await getDateRange(req.tenantId, req.query.period, req.query.from, req.query.to);
 
   const { rows } = await db.query(
     `SELECT u.id, u.first_name, u.last_name,
