@@ -1,0 +1,44 @@
+{
+  "compilerOptions": {
+    // ── Target ──────────────────────────────────────────────────────────────
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+
+    // ── Module (Vite usa bundler resolution) ─────────────────────────────────
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,             // Vite se encarga de compilar, no tsc
+
+    // ── JSX ──────────────────────────────────────────────────────────────────
+    "jsx": "react-jsx",
+
+    // ── Strict ───────────────────────────────────────────────────────────────
+    "strict": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    // Igual que en el backend: se activan al terminar la migración.
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+
+    // ── Interop ───────────────────────────────────────────────────────────────
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // ── Migración gradual ────────────────────────────────────────────────────
+    "allowJs": true,
+    "checkJs": false,
+
+    // ── Path aliases (opcional, agregar si el proyecto crece) ────────────────
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@types/*": ["src/types/*"]
+    }
+  },
+  "include": ["src"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}
