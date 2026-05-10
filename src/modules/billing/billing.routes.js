@@ -29,9 +29,15 @@ router.post('/credit-note/:paymentId', authorize('admin'), asyncHandler(ctrl.cre
 // Lista de facturas emitidas
 router.get('/invoices', asyncHandler(ctrl.listInvoices));
 
+// Pagos sin factura (pendientes de facturar)
+router.get('/pending', asyncHandler(ctrl.getPendingPayments));
+
 // ── Configuración ────────────────────────────────────────────────────
 // Estado de configuración fiscal
 router.get('/config', authorize('admin'), asyncHandler(ctrl.getConfig));
+
+// Guardar configuración fiscal (cifra api key)
+router.patch('/config', authorize('admin'), asyncHandler(ctrl.updateConfig));
 
 // Probar conexión con Alegra
 router.post('/config/test', authorize('admin'), asyncHandler(ctrl.testConnection));

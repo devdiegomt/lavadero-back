@@ -10,7 +10,7 @@ async function getCurrent(req, res) {
   const { rows } = await db.query(
     `SELECT id, name, slug, nit, owner_name, phone, email, address, city,
             timezone, opening_time, closing_time, bays_count, currency, plan,
-            whatsapp_enabled, whatsapp_phone,
+            whatsapp_enabled, whatsapp_phone, whatsapp_provider,
             created_at
      FROM tenants
      WHERE id = $1`,
@@ -28,7 +28,7 @@ async function getCurrent(req, res) {
 // PATCH /api/tenants/me
 // ---------------------------------------------------------------------------
 async function updateCurrent(req, res) {
-  // Solo campos editables (no plan, no id, no slug)
+  // Solo campos editables (no plan, no id, no slug, no billing_*; billing va por su propio endpoint)
   const allowedFields = [
     "name",
     "nit",
@@ -40,6 +40,9 @@ async function updateCurrent(req, res) {
     "opening_time",
     "closing_time",
     "bays_count",
+    "whatsapp_enabled",
+    "whatsapp_phone",
+    "whatsapp_provider",
   ];
 
   const updates = [];
@@ -61,7 +64,10 @@ async function updateCurrent(req, res) {
   values.push(req.tenantId);
 
   const { rows } = await db.query(
-    `UPDATE tenants SET ${updates.join(", ")} WHERE id = $${paramIndex} RETURNING *`,
+    `UPDATE tenants SET ${updates.join(", ")} WHERE id = $${paramIndex}
+     RETURNING id, name, slug, nit, owner_name, phone, email, address, city,
+               timezone, opening_time, closing_time, bays_count, currency, plan,
+               whatsapp_enabled, whatsapp_phone, whatsapp_provider, created_at`,
     values,
   );
 
@@ -84,7 +90,7 @@ async function getDayStats(req, res) {
        COUNT(*) FILTER (WHERE status = 'cancelled') AS cancelled
      FROM appointments
      WHERE tenant_id = $1 AND scheduled_date = $2`,
-    [req.tenantId, today],
+    [req.tenantId, todayDate],
   );
 
   const { rows: revenueRows } = await db.query(
@@ -93,11 +99,11 @@ async function getDayStats(req, res) {
      FROM payments p
      JOIN appointments a ON a.id = p.appointment_id
      WHERE a.tenant_id = $1 AND a.scheduled_date = $2`,
-    [req.tenantId, today],
+    [req.tenantId, todayDate],
   );
 
   res.json({
-    date: today,
+    date: todayDate,
     appointments: rows[0],
     revenue: {
       total: parseInt(revenueRows[0].total_revenue),
@@ -120,9 +126,15 @@ async function getOperators(req, res) {
   res.json(rows);
 }
 
+// ---------------------------------------------------------------------------
+// GET /api/tenants/me/usage - Uso vs límites del plan
+// ---------------------------------------------------------------------------
 async function getUsage(req, res) {
   const usage = await getTenantUsage(req.tenantId);
+  if (!usage) {
+    throw new AppError("No se pudo obtener el uso del tenant", 404);
+  }
   res.json(usage);
 }
 
-module.exports = { getCurrent, updateCurrent, getDayStats, getOperators };
+module.exports = { getCurrent, updateCurrent, getDayStats, getOperators, getUsage };

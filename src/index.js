@@ -1,4 +1,7 @@
 require("dotenv").config();
+const sentry = require('./shared/utils/sentry');
+sentry.init(); // Debe ejecutarse ANTES de cargar el resto para capturar errores en el bootstrap
+
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -26,6 +29,12 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ---------------------------------------------------------------------------
+// Trust proxy (Railway/Heroku/Nginx ponen X-Forwarded-For; sin esto rate-limit
+// confunde 1 IP detrás del proxy con todos los usuarios).
+// ---------------------------------------------------------------------------
+app.set('trust proxy', 1);
+
+// ---------------------------------------------------------------------------
 // Middleware Global
 // ---------------------------------------------------------------------------
 app.use(helmet());
@@ -38,7 +47,7 @@ app.use(
 app.use(express.json({ limit: "1mb" }));
 app.use(httpLogger());
 
-// Rate limiting global
+// Rate limiting global — todas las rutas /api
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
   max: parseInt(process.env.RATE_LIMIT_MAX) || 100,
@@ -50,6 +59,22 @@ const limiter = rateLimit({
 });
 app.use("/api/", limiter);
 
+// Rate limiting estricto — endpoints públicos sensibles.
+// Previene abuso en signup/login (creación masiva de tenants, brute force).
+// 5 intentos por IP cada 15 min.
+const strictLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: parseInt(process.env.STRICT_RATE_LIMIT_MAX) || 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true, // login exitoso no consume cuota
+  message: {
+    error: "Demasiados intentos. Espera 15 minutos antes de intentar de nuevo.",
+  },
+});
+app.use("/api/auth/login", strictLimiter);
+app.use("/api/onboarding/register", strictLimiter);
+
 // ---------------------------------------------------------------------------
 // Health Check
 // ---------------------------------------------------------------------------
@@ -58,6 +83,7 @@ app.get("/api/health", (req, res) => {
     status: "ok",
     timestamp: new Date().toISOString(),
     env: process.env.NODE_ENV,
+    version: process.env.SENTRY_RELEASE || 'dev',
   });
 });
 
@@ -80,6 +106,11 @@ app.use('/api/superadmin', superadminRoutes);
 
 // WhatsApp AI Bridge (consumido por n8n)
 app.use("/api/wa-bridge", waBridgeRoutes);
+
+// ---------------------------------------------------------------------------
+// Sentry error handler (antes del errorHandler propio para capturar 5xx)
+// ---------------------------------------------------------------------------
+app.use(sentry.errorHandler());
 
 // ---------------------------------------------------------------------------
 // Error Handler (siempre al final)

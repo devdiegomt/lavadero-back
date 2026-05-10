@@ -11,9 +11,11 @@
  *   POST   /api/billing/invoice/:paymentId    — Genera factura para un pago
  *   GET    /api/billing/invoice/:paymentId     — Consulta estado de factura
  *   GET    /api/billing/invoices               — Lista de facturas del tenant
+ *   GET    /api/billing/pending                — Pagos sin factura (pendientes de facturar)
  *   POST   /api/billing/credit-note/:paymentId — Genera nota crédito (anulación)
  *   POST   /api/billing/retry/:paymentId       — Reintenta factura fallida
  *   GET    /api/billing/config                 — Estado de configuración fiscal
+ *   PATCH  /api/billing/config                 — Guarda configuración fiscal (cifra API key)
  *   POST   /api/billing/config/test            — Prueba conexión con Alegra
  *   POST   /api/billing/sync-services          — Sincroniza servicios con Alegra
  */
@@ -23,6 +25,7 @@ const { AppError } = require('../../shared/middleware/errorHandler');
 const { createAlegraClientForTenant } = require('./alegra.client');
 const { syncCustomerToAlegra, syncServiceToAlegra, syncAllServicesToAlegra } = require('./billing.sync');
 const { centsToPesos, formatCOP } = require('../../shared/utils/pricing');
+const { encrypt } = require('../../shared/utils/crypto');
 
 // ─────────────────────────────────────────────────────────────────────────
 // POST /api/billing/invoice/:paymentId
@@ -322,6 +325,60 @@ async function listInvoices(req, res) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// GET /api/billing/pending?page=1&limit=20&from=YYYY-MM-DD&to=YYYY-MM-DD
+// Lista los pagos sin factura emitida (para poder facturarlos manualmente).
+// ─────────────────────────────────────────────────────────────────────────
+async function getPendingPayments(req, res) {
+  const { page = 1, limit = 20, from, to } = req.query;
+  const offset = (parseInt(page) - 1) * parseInt(limit);
+  const params = [req.tenantId];
+  let conditions = ['p.tenant_id = $1', 'p.invoice_id IS NULL'];
+
+  if (from) {
+    params.push(from);
+    conditions.push(`p.created_at >= $${params.length}::date`);
+  }
+  if (to) {
+    params.push(to + ' 23:59:59');
+    conditions.push(`p.created_at <= $${params.length}::timestamp`);
+  }
+
+  const where = conditions.join(' AND ');
+
+  const { rows: countRows } = await db.query(
+    `SELECT COUNT(*) FROM payments p WHERE ${where}`, params
+  );
+
+  params.push(parseInt(limit), offset);
+  const { rows } = await db.query(
+    `SELECT p.id, p.amount, p.payment_method, p.created_at, p.invoice_status,
+            c.first_name, c.last_name, c.phone, c.document_number, c.email,
+            v.plate, v.vehicle_type,
+            s.name AS service_name,
+            u.first_name AS received_by_name
+     FROM payments p
+     JOIN appointments a ON a.id = p.appointment_id
+     JOIN customers c ON c.id = a.customer_id
+     JOIN vehicles v ON v.id = a.vehicle_id
+     JOIN services s ON s.id = a.service_id
+     LEFT JOIN users u ON u.id = p.received_by
+     WHERE ${where}
+     ORDER BY p.created_at DESC
+     LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params
+  );
+
+  res.json({
+    data: rows,
+    pagination: {
+      total: parseInt(countRows[0].count),
+      page: parseInt(page),
+      limit: parseInt(limit),
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // POST /api/billing/credit-note/:paymentId
 // Genera nota crédito (anulación/devolución).
 // ─────────────────────────────────────────────────────────────────────────
@@ -459,6 +516,69 @@ async function getConfig(req, res) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// PATCH /api/billing/config
+// Guarda configuración fiscal del tenant. La API key se cifra antes de
+// almacenarse. Acepta los campos:
+//   - provider:        'alegra' (por ahora solo Alegra)
+//   - apiKey:          formato "email:token" (se cifra)
+//   - resolution:      número de resolución DIAN
+//   - prefix:          prefijo de facturación (ej. 'FE')
+//   - nit:             NIT del lavadero (sincroniza con tenants.nit)
+// Si apiKey llega vacío o no se envía, NO se sobrescribe la actual.
+// ─────────────────────────────────────────────────────────────────────────
+async function updateConfig(req, res) {
+  const { provider, apiKey, resolution, prefix, nit } = req.body;
+
+  const updates = [];
+  const values = [];
+  let i = 1;
+
+  if (provider !== undefined) {
+    if (provider && !['alegra', 'siigo'].includes(provider)) {
+      throw new AppError('Provider inválido. Valores permitidos: alegra, siigo', 400);
+    }
+    updates.push(`billing_provider = $${i++}`);
+    values.push(provider || null);
+  }
+
+  // apiKey se cifra solo si viene con valor; si viene null/empty se ignora
+  // (para no borrar la key existente al guardar el resto del formulario)
+  if (apiKey) {
+    updates.push(`billing_api_key = $${i++}`);
+    values.push(encrypt(apiKey.trim()));
+  }
+
+  if (resolution !== undefined) {
+    updates.push(`billing_resolution = $${i++}`);
+    values.push(resolution || null);
+  }
+
+  if (prefix !== undefined) {
+    updates.push(`billing_prefix = $${i++}`);
+    values.push(prefix || null);
+  }
+
+  if (nit !== undefined) {
+    updates.push(`nit = $${i++}`);
+    values.push(nit || null);
+  }
+
+  if (updates.length === 0) {
+    throw new AppError('No hay campos para actualizar', 400);
+  }
+
+  values.push(req.tenantId);
+
+  await db.query(
+    `UPDATE tenants SET ${updates.join(', ')} WHERE id = $${i}`,
+    values
+  );
+
+  // Devolver el config refrescado (sin retornar la api key cifrada)
+  return getConfig(req, res);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // POST /api/billing/config/test
 // Prueba la conexión con Alegra.
 // ─────────────────────────────────────────────────────────────────────────
@@ -536,9 +656,11 @@ module.exports = {
   generateInvoice,
   getInvoiceStatus,
   listInvoices,
+  getPendingPayments,
   createCreditNote,
   retryInvoice,
   getConfig,
+  updateConfig,
   testConnection,
   syncServices,
 };
