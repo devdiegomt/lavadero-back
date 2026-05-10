@@ -4,29 +4,26 @@
   "description": "SaaS para lavaderos de autos - Backend API",
   "main": "dist/index.js",
   "scripts": {
-    "dev":              "ts-node-dev --respawn --transpile-only --require dotenv/config src/index.js",
-    "start":            "node dist/index.js",
-    "build":            "tsc --project tsconfig.json",
-    "typecheck":        "tsc --noEmit",
-    "typecheck:watch":  "tsc --noEmit --watch",
+    "dev":             "ts-node-dev --respawn --transpile-only --require dotenv/config src/index.js",
+    "start":           "node dist/index.js",
+    "build":           "tsc --project tsconfig.json",
+    "typecheck":       "tsc --noEmit",
+    "typecheck:watch": "tsc --noEmit --watch",
 
-    "db:migrate":           "node src/shared/db/migrate.js",
-    "db:migrate-billing":   "node src/shared/db/migrate-billing.js",
-    "db:migrate-mt":        "node src/shared/db/migrate-multitenant.js",
-    "db:migrate-all":       "node src/shared/db/migrate.js && node src/shared/db/migrate-billing.js && node src/shared/db/migrate-multitenant.js",
-    "db:seed-superadmin":   "node src/shared/db/seed-superadmin.js",
-    "db:seed":              "node src/shared/db/seed.js",
-    "db:reset":             "npm run db:migrate-all && npm run db:seed",
-    "db:demo":              "node src/shared/db/seed.js && node src/shared/db/demo-seed.js",
-    "db:encrypt-billing-keys": "node src/shared/db/migrate-encrypt-billing-keys.js",
-    "db:rotate-key":        "node src/shared/db/rotate-encryption-key.js",
-    "encrypt":              "node src/shared/db/encrypt-value.js",
+    "db:migrate":            "ts-node --transpile-only -r dotenv/config src/shared/db/migrate.js",
+    "db:migrate-billing":    "ts-node --transpile-only -r dotenv/config src/shared/db/migrate-billing.js",
+    "db:migrate-mt":         "ts-node --transpile-only -r dotenv/config src/shared/db/migrate-multitenant.js",
+    "db:migrate-all":        "npm run db:migrate && npm run db:migrate-billing && npm run db:migrate-mt",
+    "db:seed-superadmin":    "ts-node --transpile-only -r dotenv/config src/shared/db/seed-superadmin.js",
+    "db:seed":               "ts-node --transpile-only -r dotenv/config src/shared/db/seed.js",
+    "db:reset":              "npm run db:migrate-all && npm run db:seed",
+    "db:demo":               "ts-node --transpile-only -r dotenv/config src/shared/db/seed.js && ts-node --transpile-only -r dotenv/config src/shared/db/demo-seed.js",
+    "db:encrypt-billing-keys": "ts-node --transpile-only -r dotenv/config src/shared/db/migrate-encrypt-billing-keys.js",
+    "db:rotate-key":         "ts-node --transpile-only -r dotenv/config src/shared/db/rotate-encryption-key.js",
+    "encrypt":               "ts-node --transpile-only -r dotenv/config src/shared/db/encrypt-value.js",
 
-    "test":             "jest --detectOpenHandles --forceExit",
-    "test:watch":       "jest --watch --detectOpenHandles",
-
-    "lint":             "eslint src --ext .ts,.js",
-    "lint:fix":         "eslint src --ext .ts,.js --fix"
+    "test":            "jest --detectOpenHandles --forceExit",
+    "test:watch":      "jest --watch --detectOpenHandles"
   },
   "dependencies": {
     "bcryptjs":          "^2.4.3",
@@ -44,20 +41,22 @@
     "zod":               "^3.24.0"
   },
   "devDependencies": {
-    "typescript":         "^5.4.5",
-    "ts-node-dev":        "^2.0.0",
+    "typescript":          "^5.4.5",
+    "ts-node":             "^10.9.2",
+    "ts-node-dev":         "^2.0.0",
 
-    "@types/node":        "^20.14.0",
-    "@types/express":     "^4.17.21",
-    "@types/pg":          "^8.11.6",
-    "@types/bcryptjs":    "^2.4.6",
-    "@types/jsonwebtoken":"^9.0.6",
-    "@types/cors":        "^2.8.17",
+    "@types/node":         "^20.14.0",
+    "@types/express":      "^4.17.21",
+    "@types/pg":           "^8.11.6",
+    "@types/bcryptjs":     "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/cors":         "^2.8.17",
 
-    "jest":               "^29.7.0",
-    "supertest":          "^7.0.0",
-    "@types/jest":        "^29.5.12",
-    "@types/supertest":   "^6.0.2"
+    "jest":                "^29.7.0",
+    "supertest":           "^7.0.0",
+    "@types/jest":         "^29.5.12",
+    "@types/supertest":    "^6.0.2",
+    "ts-jest":             "^29.1.4"
   },
   "engines": {
     "node": ">=20.0.0"
