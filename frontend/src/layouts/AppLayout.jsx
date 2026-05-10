@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { to: '/appointments', icon: '📅', label: 'Agenda' },
   { to: '/payments', icon: '💰', label: 'Pagos' },
   { to: '/history', icon: '🔍', label: 'Historial' },
+  { to: '/billing', icon: '🧾', label: 'Facturación', adminOnly: true },
   { to: '/reports', icon: '📈', label: 'Reportes', adminOnly: true },
   { to: '/customers', icon: '👥', label: 'Clientes' },
   { to: '/settings', icon: '⚙️', label: 'Config', adminOnly: true },

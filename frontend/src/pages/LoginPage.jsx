@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -87,6 +87,14 @@ export default function LoginPage() {
           >
             {loading ? 'Ingresando...' : 'Ingresar'}
           </button>
+
+          {/* Signup CTA */}
+          <div className="text-center text-sm text-gray-500 pt-2 border-t border-gray-100">
+            ¿No tienes cuenta?{' '}
+            <Link to="/signup" className="text-brand-600 hover:text-brand-800 font-semibold">
+              Crea tu lavadero
+            </Link>
+          </div>
         </form>
 
         <p className="text-center text-brand-300 text-xs mt-6">

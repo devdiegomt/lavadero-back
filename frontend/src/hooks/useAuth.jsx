@@ -47,6 +47,26 @@ export function AuthProvider({ children }) {
     return data.user;
   }, []);
 
+  /**
+   * Registro self-service de un lavadero nuevo (onboarding paso 1).
+   * El backend devuelve tokens en la misma respuesta para evitar un
+   * segundo round-trip de login. El payload tiene la forma del schema
+   * onboardingRegister del backend.
+   */
+  const signup = useCallback(async (payload) => {
+    const data = await api('/onboarding/register', {
+      method: 'POST',
+      body: payload,
+    });
+    setTokens(data.accessToken, data.refreshToken);
+    // El response de register no incluye tenant anidado en user;
+    // /auth/me devuelve el user con tenant para mantener el shape consistente.
+    const fullUser = await api('/auth/me');
+    setUser(fullUser);
+    setStoredUser(fullUser);
+    return { user: fullUser, tenant: data.tenant };
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       const rt = localStorage.getItem('refreshToken');
@@ -65,6 +85,7 @@ export function AuthProvider({ children }) {
     user,
     loading,
     login,
+    signup,
     logout,
     isAuthenticated: !!user,
     isAdmin: user?.role === 'admin' || user?.role === 'super_admin',
