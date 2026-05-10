@@ -1,0 +1,57 @@
+{
+  "compilerOptions": {
+    // ── Target ──────────────────────────────────────────────────────────────
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+
+    // ── Output ──────────────────────────────────────────────────────────────
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "sourceMap": true,
+
+    // ── Strict ──────────────────────────────────────────────────────────────
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    // Estos dos quedan en false DURANTE la migración para que los archivos
+    // .js que aún no se han convertido no generen ruido innecesario.
+    // Se activan al final cuando todos los archivos sean .ts.
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+
+    // ── Interop ──────────────────────────────────────────────────────────────
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+
+    // ── Migración gradual ────────────────────────────────────────────────────
+    // Permite mezclar .js y .ts durante la transición. Cuando el último
+    // archivo .js se haya convertido, eliminar estas dos líneas.
+    "allowJs": true,
+    "checkJs": false         // Los .js no se type-check, solo se compilan
+  },
+  "include": ["src/**/*"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "bot-wa",
+    // Scripts de admin: se quedan en JS, no entran al build de producción.
+    // Se corren directamente con `node src/shared/db/xxx.js`.
+    "src/shared/db/migrate*.js",
+    "src/shared/db/seed*.js",
+    "src/shared/db/demo-seed.js",
+    "src/shared/db/cron.js",
+    "src/shared/db/encrypt-value.js",
+    "src/shared/db/rotate-encryption-key.js"
+  ],
+  "ts-node": {
+    // ts-node-dev usa esto en modo dev; respeta la misma config
+    "transpileOnly": true,
+    "files": true
+  }
+}
