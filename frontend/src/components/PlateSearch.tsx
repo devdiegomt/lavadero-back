@@ -1,15 +1,49 @@
 import { useState, useRef, useEffect } from 'react';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { formatCOP } from '../lib/format';
+import type { AppointmentStatus } from '../types';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface VehicleResult {
+  plate: string;
+  vehicle_type: string;
+  brand: string | null;
+  model: string | null;
+  color: string | null;
+  year: number | null;
+}
+
+interface CustomerResult {
+  first_name: string;
+  last_name: string | null;
+  phone: string;
+  email: string | null;
+}
+
+interface AppointmentResult {
+  id: string;
+  service_name: string;
+  scheduled_date: string;
+  price: number;
+  status: AppointmentStatus;
+}
+
+interface SearchResult {
+  vehicle: VehicleResult;
+  customer: CustomerResult | null;
+  appointments: AppointmentResult[];
+}
+
+// ─── PlateSearch ──────────────────────────────────────────────────────────────
 
 export default function PlateSearch() {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [result, setResult] = useState(null);
-  const [history, setHistory] = useState([]);
+  const [open, setOpen]       = useState(false);
+  const [query, setQuery]     = useState('');
+  const [result, setResult]   = useState<SearchResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const inputRef = useRef(null);
+  const [error, setError]     = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -29,17 +63,19 @@ export default function PlateSearch() {
 
     try {
       // Un solo fetch: el endpoint de historial trae vehículo + cliente + últimas citas.
-      const data = await api(`/history/vehicle/${encodeURIComponent(query.trim())}`);
+      const data = await api<{ vehicle: VehicleResult; customer: CustomerResult | null; appointments: AppointmentResult[] }>(
+        `/history/vehicle/${encodeURIComponent(query.trim())}`,
+      );
       setResult({
         vehicle: data.vehicle,
         customer: data.customer,
-        appointments: (data.appointments || []).slice(0, 5),
+        appointments: (data.appointments ?? []).slice(0, 5),
       });
     } catch (err) {
-      if (err.status === 404) {
+      if (err instanceof ApiError && err.status === 404) {
         setError('No se encontró un vehículo con esa placa');
       } else {
-        setError(err.message);
+        setError((err as Error).message);
       }
     } finally {
       setLoading(false);
@@ -128,8 +164,10 @@ export default function PlateSearch() {
                       )}
                     </div>
                     {result.customer.phone && (
-                      <a href={`tel:${result.customer.phone}`}
-                        className="bg-green-100 text-green-700 px-3 py-2 rounded-lg text-xs font-medium hover:bg-green-200 transition">
+                      <a
+                        href={`tel:${result.customer.phone}`}
+                        className="bg-green-100 text-green-700 px-3 py-2 rounded-lg text-xs font-medium hover:bg-green-200 transition"
+                      >
                         📞 Llamar
                       </a>
                     )}
@@ -142,7 +180,7 @@ export default function PlateSearch() {
                 <div>
                   <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Últimos servicios</p>
                   <div className="space-y-2">
-                    {result.appointments.map(a => (
+                    {result.appointments.map((a) => (
                       <div key={a.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                         <div>
                           <p className="text-sm text-gray-700">{a.service_name}</p>
@@ -174,14 +212,17 @@ export default function PlateSearch() {
   );
 }
 
-function StatusPill({ status }) {
-  const config = {
-    pending: { label: 'Esperando', cls: 'bg-gray-100 text-gray-600' },
-    in_progress: { label: 'Lavando', cls: 'bg-yellow-100 text-yellow-700' },
-    done: { label: 'Listo', cls: 'bg-green-100 text-green-700' },
-    delivered: { label: 'Entregado', cls: 'bg-blue-100 text-blue-700' },
-    cancelled: { label: 'Cancelado', cls: 'bg-red-100 text-red-600' },
-  };
-  const c = config[status] || config.pending;
+// ─── StatusPill ───────────────────────────────────────────────────────────────
+
+const STATUS_CONFIG: Record<AppointmentStatus, { label: string; cls: string }> = {
+  pending:     { label: 'Esperando', cls: 'bg-gray-100 text-gray-600' },
+  in_progress: { label: 'Lavando',   cls: 'bg-yellow-100 text-yellow-700' },
+  done:        { label: 'Listo',     cls: 'bg-green-100 text-green-700' },
+  delivered:   { label: 'Entregado', cls: 'bg-blue-100 text-blue-700' },
+  cancelled:   { label: 'Cancelado', cls: 'bg-red-100 text-red-600' },
+};
+
+function StatusPill({ status }: { status: AppointmentStatus }) {
+  const c = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending;
   return <span className={`text-xs px-2 py-0.5 rounded-full ${c.cls}`}>{c.label}</span>;
 }

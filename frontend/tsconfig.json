@@ -30,14 +30,15 @@
 
     // ── Migración gradual ────────────────────────────────────────────────────
     "allowJs": true,
-    "checkJs": false,
+    "checkJs": false
 
-    // ── Path aliases (opcional, agregar si el proyecto crece) ────────────────
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"],
-      "@types/*": ["src/types/*"]
-    }
+    // NOTA: no se usan `baseUrl` ni `paths` porque todos los imports son
+    // relativos. Si en el futuro quieres aliases tipo "@/lib/api", agrega
+    // SOLO `paths` (sin `baseUrl`, deprecado en TS 7.0):
+    //   "paths": {
+    //     "@/*": ["./src/*"]
+    //   }
+    // y configura también `resolve.alias` en vite.config.ts.
   },
   "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]

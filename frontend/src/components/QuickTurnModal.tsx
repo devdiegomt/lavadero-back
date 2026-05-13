@@ -1,43 +1,91 @@
-import { useState, useEffect } from 'react';
-import { api } from '../lib/api';
+import { useState, useEffect, type HTMLInputTypeAttribute } from 'react';
+import { api, ApiError } from '../lib/api';
 import { formatCOP } from '../lib/format';
+import type { Service, VehicleType } from '../types';
 
-const VEHICLE_TYPES = [
-  { value: 'sedan', label: 'Sedán' },
-  { value: 'suv', label: 'SUV' },
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface QuickTurnModalProps {
+  onClose(): void;
+  onCreated(): void;
+}
+
+type Step = 1 | 2 | 3 | 4;
+
+interface VehicleTypeOption {
+  value: VehicleType;
+  label: string;
+}
+
+interface ExistingVehicle {
+  id: string;
+  plate: string;
+  vehicle_type: VehicleType;
+  brand: string | null;
+  model: string | null;
+  color: string | null;
+  customer_phone: string;
+  customer_first_name: string;
+  customer_last_name: string | null;
+}
+
+interface QuickTurnForm {
+  customerPhone: string;
+  customerFirstName: string;
+  customerLastName: string;
+  vehicleType: VehicleType;
+  brand: string;
+  model: string;
+  color: string;
+  serviceId: string;
+  assignedTo: string;
+  bayNumber: string;
+  scheduledTime: string;
+  notes: string;
+}
+
+type PriceKey = 'price_sedan' | 'price_suv' | 'price_camioneta' | 'price_moto' | 'price_pickup';
+
+interface ServiceRaw extends Service {
+  // shape de la BD (snake_case) que aún viene en algunos endpoints
+  price_sedan?: number;
+  price_suv?: number;
+  price_camioneta?: number;
+  price_moto?: number;
+  price_pickup?: number;
+  estimated_minutes?: number;
+}
+
+const VEHICLE_TYPES: VehicleTypeOption[] = [
+  { value: 'sedan',     label: 'Sedán' },
+  { value: 'suv',       label: 'SUV' },
   { value: 'camioneta', label: 'Camioneta' },
-  { value: 'pickup', label: 'Pickup' },
-  { value: 'moto', label: 'Moto' },
+  { value: 'pickup',    label: 'Pickup' },
+  { value: 'moto',      label: 'Moto' },
 ];
 
-export default function QuickTurnModal({ onClose, onCreated }) {
-  const [step, setStep] = useState(1); // 1: plate, 2: customer+vehicle, 3: service, 4: confirm
-  const [services, setServices] = useState([]);
-  const [operators, setOperators] = useState([]);
+const emptyForm = (): QuickTurnForm => ({
+  customerPhone: '', customerFirstName: '', customerLastName: '',
+  vehicleType: 'sedan', brand: '', model: '', color: '',
+  serviceId: '', assignedTo: '', bayNumber: '', scheduledTime: '', notes: '',
+});
+
+// ─── QuickTurnModal ───────────────────────────────────────────────────────────
+
+export default function QuickTurnModal({ onClose, onCreated }: QuickTurnModalProps) {
+  const [step, setStep]       = useState<Step>(1);
+  const [services, setServices] = useState<ServiceRaw[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError]     = useState('');
 
   // Form data
-  const [plate, setPlate] = useState('');
-  const [existingVehicle, setExistingVehicle] = useState(null);
-  const [form, setForm] = useState({
-    customerPhone: '',
-    customerFirstName: '',
-    customerLastName: '',
-    vehicleType: 'sedan',
-    brand: '',
-    model: '',
-    color: '',
-    serviceId: '',
-    assignedTo: '',
-    bayNumber: '',
-    scheduledTime: '',
-    notes: '',
-  });
+  const [plate, setPlate]                     = useState('');
+  const [existingVehicle, setExistingVehicle] = useState<ExistingVehicle | null>(null);
+  const [form, setForm]                       = useState<QuickTurnForm>(emptyForm);
 
   // Load services on mount
   useEffect(() => {
-    api('/services').then(setServices).catch(console.error);
+    api<ServiceRaw[]>('/services').then(setServices).catch(console.error);
   }, []);
 
   // Step 1: Search by plate
@@ -47,25 +95,25 @@ export default function QuickTurnModal({ onClose, onCreated }) {
     setLoading(true);
 
     try {
-      const vehicle = await api(`/vehicles/plate/${plate.trim()}`);
+      const vehicle = await api<ExistingVehicle>(`/vehicles/plate/${plate.trim()}`);
       setExistingVehicle(vehicle);
-      setForm(f => ({
+      setForm((f) => ({
         ...f,
-        customerPhone: vehicle.customer_phone || '',
+        customerPhone:     vehicle.customer_phone || '',
         customerFirstName: vehicle.customer_first_name || '',
-        customerLastName: vehicle.customer_last_name || '',
-        vehicleType: vehicle.vehicle_type || 'sedan',
-        brand: vehicle.brand || '',
-        model: vehicle.model || '',
-        color: vehicle.color || '',
+        customerLastName:  vehicle.customer_last_name || '',
+        vehicleType:       vehicle.vehicle_type || 'sedan',
+        brand:             vehicle.brand || '',
+        model:             vehicle.model || '',
+        color:             vehicle.color || '',
       }));
       setStep(3); // Skip to service selection if vehicle found
     } catch (err) {
-      if (err.status === 404) {
+      if (err instanceof ApiError && err.status === 404) {
         setExistingVehicle(null);
         setStep(2); // Go to create customer+vehicle
       } else {
-        setError(err.message);
+        setError((err as Error).message);
       }
     } finally {
       setLoading(false);
@@ -73,11 +121,12 @@ export default function QuickTurnModal({ onClose, onCreated }) {
   };
 
   // Get selected service price for display
-  const getSelectedServicePrice = () => {
-    const svc = services.find(s => s.id === form.serviceId);
+  const getSelectedServicePrice = (): number => {
+    const svc = services.find((s) => s.id === form.serviceId);
     if (!svc) return 0;
-    const vType = existingVehicle?.vehicle_type || form.vehicleType;
-    return svc[`price_${vType}`] || svc.price_sedan || 0;
+    const vType = existingVehicle?.vehicle_type ?? form.vehicleType;
+    const key = `price_${vType}` as PriceKey;
+    return svc[key] ?? svc.price_sedan ?? svc.priceSedan ?? 0;
   };
 
   // Submit
@@ -89,28 +138,31 @@ export default function QuickTurnModal({ onClose, onCreated }) {
       await api('/appointments/quick', {
         method: 'POST',
         body: {
-          customerPhone: form.customerPhone,
+          customerPhone:     form.customerPhone,
           customerFirstName: form.customerFirstName,
-          customerLastName: form.customerLastName,
-          plate: plate.toUpperCase().trim(),
-          vehicleType: form.vehicleType,
-          brand: form.brand,
-          model: form.model,
-          color: form.color,
-          serviceId: form.serviceId,
-          assignedTo: form.assignedTo || undefined,
-          bayNumber: form.bayNumber ? parseInt(form.bayNumber) : undefined,
-          scheduledTime: form.scheduledTime || undefined,
-          notes: form.notes || undefined,
+          customerLastName:  form.customerLastName,
+          plate:             plate.toUpperCase().trim(),
+          vehicleType:       form.vehicleType,
+          brand:             form.brand,
+          model:             form.model,
+          color:             form.color,
+          serviceId:         form.serviceId,
+          assignedTo:        form.assignedTo || undefined,
+          bayNumber:         form.bayNumber ? parseInt(form.bayNumber, 10) : undefined,
+          scheduledTime:     form.scheduledTime || undefined,
+          notes:             form.notes || undefined,
         },
       });
       onCreated();
     } catch (err) {
-      setError(err.message);
+      setError((err as Error).message);
     } finally {
       setLoading(false);
     }
   };
+
+  const set = <K extends keyof QuickTurnForm>(key: K, value: QuickTurnForm[K]) =>
+    setForm((f) => ({ ...f, [key]: value }));
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
@@ -170,24 +222,24 @@ export default function QuickTurnModal({ onClose, onCreated }) {
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Datos del cliente</p>
               <div className="grid grid-cols-2 gap-3">
                 <Input label="Nombre *" value={form.customerFirstName}
-                  onChange={(v) => setForm(f => ({...f, customerFirstName: v}))} autoFocus />
+                  onChange={(v) => set('customerFirstName', v)} autoFocus />
                 <Input label="Apellido" value={form.customerLastName}
-                  onChange={(v) => setForm(f => ({...f, customerLastName: v}))} />
+                  onChange={(v) => set('customerLastName', v)} />
               </div>
               <Input label="Teléfono *" value={form.customerPhone} type="tel"
-                onChange={(v) => setForm(f => ({...f, customerPhone: v}))} placeholder="3001234567" />
+                onChange={(v) => set('customerPhone', v)} placeholder="3001234567" />
 
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide pt-2">Datos del vehículo</p>
               <Select label="Tipo" value={form.vehicleType}
-                onChange={(v) => setForm(f => ({...f, vehicleType: v}))}
+                onChange={(v) => set('vehicleType', v as VehicleType)}
                 options={VEHICLE_TYPES} />
               <div className="grid grid-cols-3 gap-3">
                 <Input label="Marca" value={form.brand}
-                  onChange={(v) => setForm(f => ({...f, brand: v}))} placeholder="Chevrolet" />
+                  onChange={(v) => set('brand', v)} placeholder="Chevrolet" />
                 <Input label="Modelo" value={form.model}
-                  onChange={(v) => setForm(f => ({...f, model: v}))} placeholder="Spark" />
+                  onChange={(v) => set('model', v)} placeholder="Spark" />
                 <Input label="Color" value={form.color}
-                  onChange={(v) => setForm(f => ({...f, color: v}))} placeholder="Blanco" />
+                  onChange={(v) => set('color', v)} placeholder="Blanco" />
               </div>
 
               <button
@@ -213,20 +265,23 @@ export default function QuickTurnModal({ onClose, onCreated }) {
                 <div className="bg-green-50 text-green-800 text-sm px-4 py-3 rounded-lg">
                   <strong>{plate}</strong> — {existingVehicle.brand} {existingVehicle.model} ({existingVehicle.color})
                   <br />
-                  <span className="text-green-600">Cliente: {existingVehicle.customer_first_name} {existingVehicle.customer_last_name} — {existingVehicle.customer_phone}</span>
+                  <span className="text-green-600">
+                    Cliente: {existingVehicle.customer_first_name} {existingVehicle.customer_last_name} — {existingVehicle.customer_phone}
+                  </span>
                 </div>
               )}
 
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Selecciona el servicio</p>
               <div className="space-y-2">
                 {services.map((svc) => {
-                  const vType = existingVehicle?.vehicle_type || form.vehicleType;
-                  const price = svc[`price_${vType}`] || svc.price_sedan;
+                  const vType = (existingVehicle?.vehicle_type ?? form.vehicleType) as VehicleType;
+                  const key = `price_${vType}` as PriceKey;
+                  const price = svc[key] ?? svc.price_sedan ?? 0;
                   const selected = form.serviceId === svc.id;
                   return (
                     <button
                       key={svc.id}
-                      onClick={() => setForm(f => ({...f, serviceId: svc.id}))}
+                      onClick={() => set('serviceId', svc.id)}
                       className={`w-full text-left p-4 rounded-xl border-2 transition ${
                         selected ? 'border-brand-500 bg-brand-50' : 'border-gray-100 hover:border-gray-200'
                       }`}
@@ -234,7 +289,9 @@ export default function QuickTurnModal({ onClose, onCreated }) {
                       <div className="flex justify-between items-center">
                         <div>
                           <p className="font-semibold text-sm text-gray-900">{svc.name}</p>
-                          <p className="text-xs text-gray-500">{svc.description} · ~{svc.estimated_minutes} min</p>
+                          <p className="text-xs text-gray-500">
+                            {svc.description} · ~{svc.estimated_minutes ?? svc.estimatedMinutes} min
+                          </p>
                         </div>
                         <p className="font-bold text-brand-700 text-sm">{formatCOP(price)}</p>
                       </div>
@@ -264,20 +321,20 @@ export default function QuickTurnModal({ onClose, onCreated }) {
               <div className="bg-gray-50 rounded-xl p-4 space-y-2">
                 <SummaryRow label="Placa" value={plate} />
                 <SummaryRow label="Cliente" value={`${form.customerFirstName} ${form.customerLastName} — ${form.customerPhone}`} />
-                <SummaryRow label="Vehículo" value={`${form.brand || ''} ${form.model || ''} (${existingVehicle?.vehicle_type || form.vehicleType})`} />
-                <SummaryRow label="Servicio" value={services.find(s => s.id === form.serviceId)?.name} />
+                <SummaryRow label="Vehículo" value={`${form.brand || ''} ${form.model || ''} (${existingVehicle?.vehicle_type ?? form.vehicleType})`} />
+                <SummaryRow label="Servicio" value={services.find((s) => s.id === form.serviceId)?.name ?? ''} />
                 <SummaryRow label="Precio" value={formatCOP(getSelectedServicePrice())} bold />
               </div>
 
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Detalles opcionales</p>
               <div className="grid grid-cols-2 gap-3">
                 <Input label="Hora" type="time" value={form.scheduledTime}
-                  onChange={(v) => setForm(f => ({...f, scheduledTime: v}))} />
+                  onChange={(v) => set('scheduledTime', v)} />
                 <Input label="Bahía" type="number" value={form.bayNumber}
-                  onChange={(v) => setForm(f => ({...f, bayNumber: v}))} placeholder="1" />
+                  onChange={(v) => set('bayNumber', v)} placeholder="1" />
               </div>
               <Input label="Notas" value={form.notes}
-                onChange={(v) => setForm(f => ({...f, notes: v}))} placeholder="Ej: Cera extra, rayón en puerta..." />
+                onChange={(v) => set('notes', v)} placeholder="Ej: Cera extra, rayón en puerta..." />
 
               <button
                 onClick={handleSubmit}
@@ -292,7 +349,7 @@ export default function QuickTurnModal({ onClose, onCreated }) {
           {/* Back button */}
           {step > 1 && (
             <button
-              onClick={() => { setError(''); setStep(step - 1); }}
+              onClick={() => { setError(''); setStep((step - 1) as Step); }}
               className="w-full py-2.5 text-sm text-gray-500 hover:text-gray-700 transition"
             >
               ← Volver
@@ -304,8 +361,18 @@ export default function QuickTurnModal({ onClose, onCreated }) {
   );
 }
 
-// Reusable input component
-function Input({ label, value, onChange, type = 'text', placeholder, autoFocus }) {
+// ─── Input ────────────────────────────────────────────────────────────────────
+
+interface InputProps {
+  label: string;
+  value: string;
+  onChange(v: string): void;
+  type?: HTMLInputTypeAttribute;
+  placeholder?: string;
+  autoFocus?: boolean;
+}
+
+function Input({ label, value, onChange, type = 'text', placeholder, autoFocus }: InputProps) {
   return (
     <div>
       <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
@@ -321,22 +388,36 @@ function Input({ label, value, onChange, type = 'text', placeholder, autoFocus }
   );
 }
 
-function Select({ label, value, onChange, options }) {
+// ─── Select ───────────────────────────────────────────────────────────────────
+
+interface SelectOption { value: string; label: string }
+
+interface SelectProps {
+  label: string;
+  value: string;
+  onChange(v: string): void;
+  options: SelectOption[];
+}
+
+function Select({ label, value, onChange, options }: SelectProps) {
   return (
     <div>
       <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
       <select
+        title={label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none bg-white"
       >
-        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </div>
   );
 }
 
-function SummaryRow({ label, value, bold }) {
+// ─── SummaryRow ───────────────────────────────────────────────────────────────
+
+function SummaryRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
     <div className="flex justify-between text-sm">
       <span className="text-gray-500">{label}</span>

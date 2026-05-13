@@ -1,21 +1,42 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../lib/api';
 import { formatCOP } from '../lib/format';
 import { useToast } from '../components/ui';
 import QuickTurnModal from '../components/QuickTurnModal';
+import type { AppointmentStatus } from '../types';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface DayStats {
+  appointments: {
+    total_appointments: number | string;
+    in_progress: number | string;
+    done: number | string;
+  };
+  revenue: { total: number };
+}
+
+interface SummaryAppointment {
+  id: string;
+  status: AppointmentStatus;
+  plate: string;
+  service_name: string;
+}
+
+// ─── DashboardPage ────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const toast = useToast();
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { user }   = useAuth();
+  const navigate   = useNavigate();
+  const toast      = useToast();
+  const [stats, setStats]                 = useState<DayStats | null>(null);
+  const [loading, setLoading]             = useState(true);
   const [showQuickTurn, setShowQuickTurn] = useState(false);
 
   const fetchStats = useCallback(() => {
-    return api('/tenants/me/stats')
+    return api<DayStats>('/tenants/me/stats')
       .then(setStats)
       .catch(console.error);
   }, []);
@@ -30,7 +51,7 @@ export default function DashboardPage() {
     fetchStats();
   };
 
-  const greeting = () => {
+  const greeting = (): string => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Buenos días';
     if (hour < 18) return 'Buenas tardes';
@@ -110,7 +131,16 @@ export default function DashboardPage() {
   );
 }
 
-function StatCard({ label, value, icon, color }) {
+// ─── StatCard ─────────────────────────────────────────────────────────────────
+
+interface StatCardProps {
+  label: string;
+  value: ReactNode;
+  icon: string;
+  color: string;
+}
+
+function StatCard({ label, value, icon, color }: StatCardProps) {
   return (
     <div className="bg-white rounded-xl p-4 border border-gray-100">
       <div className="flex items-center gap-2 mb-2">
@@ -124,9 +154,18 @@ function StatCard({ label, value, icon, color }) {
   );
 }
 
-function QuickAction({ href, onClick, icon, label }) {
+// ─── QuickAction ──────────────────────────────────────────────────────────────
+
+interface QuickActionProps {
+  href?: string;
+  onClick?: () => void;
+  icon: string;
+  label: string;
+}
+
+function QuickAction({ href, onClick, icon, label }: QuickActionProps) {
   const navigate = useNavigate();
-  const handleClick = onClick || (() => navigate(href));
+  const handleClick = onClick ?? (() => href && navigate(href));
   return (
     <button
       onClick={handleClick}
@@ -138,21 +177,23 @@ function QuickAction({ href, onClick, icon, label }) {
   );
 }
 
+// ─── LiveBoardSummary ─────────────────────────────────────────────────────────
+
 function LiveBoardSummary() {
-  const [appointments, setAppointments] = useState([]);
+  const [appointments, setAppointments] = useState<SummaryAppointment[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
-    api('/appointments/today').then(setAppointments).catch(() => {});
+    api<SummaryAppointment[]>('/appointments/today').then(setAppointments).catch(() => {});
   }, []);
 
-  const active = appointments.filter(a => ['pending', 'in_progress', 'done'].includes(a.status));
+  const active = appointments.filter((a) => ['pending', 'in_progress', 'done'].includes(a.status));
   if (active.length === 0) return null;
 
   const byStatus = {
-    pending: active.filter(a => a.status === 'pending'),
-    in_progress: active.filter(a => a.status === 'in_progress'),
-    done: active.filter(a => a.status === 'done'),
+    pending:     active.filter((a) => a.status === 'pending'),
+    in_progress: active.filter((a) => a.status === 'in_progress'),
+    done:        active.filter((a) => a.status === 'done'),
   };
 
   return (
@@ -181,7 +222,15 @@ function LiveBoardSummary() {
   );
 }
 
-function MiniColumn({ label, color, items }) {
+// ─── MiniColumn ───────────────────────────────────────────────────────────────
+
+interface MiniColumnProps {
+  label: string;
+  color: string;
+  items: SummaryAppointment[];
+}
+
+function MiniColumn({ label, color, items }: MiniColumnProps) {
   return (
     <div>
       <div className="flex items-center gap-1.5 mb-2">
@@ -189,7 +238,7 @@ function MiniColumn({ label, color, items }) {
         <span className="text-xs font-medium text-gray-500">{label} ({items.length})</span>
       </div>
       <div className="space-y-1">
-        {items.slice(0, 3).map(a => (
+        {items.slice(0, 3).map((a) => (
           <div key={a.id} className="bg-gray-50 rounded-lg px-3 py-2">
             <p className="text-xs font-bold text-gray-900">{a.plate}</p>
             <p className="text-xs text-gray-400">{a.service_name}</p>

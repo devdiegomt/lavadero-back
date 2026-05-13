@@ -1,16 +1,17 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate, Link } from 'react-router-dom';
+import { ApiError } from '../lib/api';
 
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [error, setError]       = useState('');
+  const [loading, setLoading]   = useState(false);
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -19,7 +20,8 @@ export default function LoginPage() {
       await login(email, password);
       navigate('/');
     } catch (err) {
-      setError(err.message || 'Error al iniciar sesión');
+      const msg = err instanceof ApiError ? err.message : (err as Error).message;
+      setError(msg || 'Error al iniciar sesión');
     } finally {
       setLoading(false);
     }
@@ -88,8 +90,8 @@ export default function LoginPage() {
             {loading ? 'Ingresando...' : 'Ingresar'}
           </button>
 
-          {/* Signup CTA */}
-          <div className="text-center text-sm text-gray-500 pt-2 border-t border-gray-100">
+          {/* Signup link - feature de Phase 3 (onboarding self-service) */}
+          <div className="text-center text-sm text-gray-500 pt-3 border-t border-gray-100">
             ¿No tienes cuenta?{' '}
             <Link to="/signup" className="text-brand-600 hover:text-brand-800 font-semibold">
               Crea tu lavadero

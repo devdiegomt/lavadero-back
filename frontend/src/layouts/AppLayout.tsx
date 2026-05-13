@@ -2,21 +2,33 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import PlateSearch from '../components/PlateSearch';
 import InstallPrompt from '../components/InstallPrompt';
+import type { UserRole } from '../types';
 
-const NAV_ITEMS = [
-  { to: '/', icon: '🏠', label: 'Inicio' },
-  { to: '/board', icon: '📊', label: 'Tablero' },
+interface NavItem {
+  to: string;
+  icon: string;
+  label: string;
+  adminOnly?: boolean;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { to: '/',             icon: '🏠', label: 'Inicio' },
+  { to: '/board',        icon: '📊', label: 'Tablero' },
   { to: '/appointments', icon: '📅', label: 'Agenda' },
-  { to: '/payments', icon: '💰', label: 'Pagos' },
-  { to: '/history', icon: '🔍', label: 'Historial' },
-  { to: '/billing', icon: '🧾', label: 'Facturación', adminOnly: true },
-  { to: '/reports', icon: '📈', label: 'Reportes', adminOnly: true },
-  { to: '/customers', icon: '👥', label: 'Clientes' },
-  { to: '/settings', icon: '⚙️', label: 'Config', adminOnly: true },
+  { to: '/payments',     icon: '💰', label: 'Pagos' },
+  { to: '/history',      icon: '🔍', label: 'Historial' },
+  { to: '/billing',      icon: '🧾', label: 'Facturación', adminOnly: true },
+  { to: '/reports',      icon: '📈', label: 'Reportes',    adminOnly: true },
+  { to: '/customers',    icon: '👥', label: 'Clientes' },
+  { to: '/settings',     icon: '⚙️', label: 'Config',      adminOnly: true },
 ];
+
+const isAdmin = (role: UserRole | undefined): boolean =>
+  role === 'admin' || role === 'super_admin';
 
 export default function AppLayout() {
   const { user, logout } = useAuth();
+  const visibleItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin(user?.role));
 
   return (
     <div className="min-h-screen bg-gray-50 lg:flex">
@@ -35,7 +47,7 @@ export default function AppLayout() {
 
         {/* Nav */}
         <nav className="flex-1 p-4 space-y-1">
-          {NAV_ITEMS.filter(item => !item.adminOnly || user?.role === 'admin').map((item) => (
+          {visibleItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -108,24 +120,23 @@ export default function AppLayout() {
 
       {/* Bottom nav (mobile) */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-100 px-2 py-1 flex justify-around safe-area-bottom">
-        {NAV_ITEMS.filter(item => !item.adminOnly || user?.role === 'admin')
-          .slice(0, 5)
-          .map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/'}
-              className={({ isActive }) =>
-                `flex flex-col items-center py-2 px-3 text-xs font-medium transition ${
-                  isActive ? 'text-brand-600' : 'text-gray-400'
-                }`
-              }
-            >
-              <span className="text-xl mb-0.5">{item.icon}</span>
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
+        {visibleItems.slice(0, 5).map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === '/'}
+            className={({ isActive }) =>
+              `flex flex-col items-center py-2 px-3 text-xs font-medium transition ${
+                isActive ? 'text-brand-600' : 'text-gray-400'
+              }`
+            }
+          >
+            <span className="text-xl mb-0.5">{item.icon}</span>
+            <span>{item.label}</span>
+          </NavLink>
+        ))}
       </nav>
+
       {/* PWA install prompt */}
       <InstallPrompt />
     </div>

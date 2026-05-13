@@ -1,29 +1,29 @@
 import { useState, useEffect } from 'react';
 
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
 export default function InstallPrompt() {
-  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    const handler = (e) => {
+    const handler = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e);
-      // Only show if not already installed and not dismissed
-      const dismissed = sessionStorage.getItem('pwa-dismissed');
-      if (!dismissed) setShow(true);
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
+      if (!sessionStorage.getItem('pwa-dismissed')) setShow(true);
     };
-
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
   const handleInstall = async () => {
     if (!deferredPrompt) return;
-    deferredPrompt.prompt();
+    await deferredPrompt.prompt();
     const result = await deferredPrompt.userChoice;
-    if (result.outcome === 'accepted') {
-      setShow(false);
-    }
+    if (result.outcome === 'accepted') setShow(false);
     setDeferredPrompt(null);
   };
 
@@ -43,9 +43,7 @@ export default function InstallPrompt() {
           <p className="text-xs text-brand-200">Accede más rápido desde tu pantalla de inicio</p>
         </div>
         <div className="flex gap-2 shrink-0">
-          <button onClick={handleDismiss} className="text-xs text-brand-300 hover:text-white px-2 py-1">
-            No
-          </button>
+          <button onClick={handleDismiss} className="text-xs text-brand-300 hover:text-white px-2 py-1">No</button>
           <button onClick={handleInstall}
             className="bg-white text-brand-700 text-xs font-semibold px-3 py-1.5 rounded-lg">
             Instalar

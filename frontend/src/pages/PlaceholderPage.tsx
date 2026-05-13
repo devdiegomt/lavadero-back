@@ -1,13 +1,20 @@
 import { useLocation } from 'react-router-dom';
 
+interface PageInfo {
+  icon: string;
+  name: string;
+  phase: string;
+}
+
+const PAGES: Record<string, PageInfo> = {
+  '/settings': { icon: '⚙️', name: 'Configuración', phase: 'Fase 1 - Semana 4' },
+};
+
+const FALLBACK: PageInfo = { icon: '🚧', name: 'Página', phase: 'Próximamente' };
+
 export default function PlaceholderPage() {
   const { pathname } = useLocation();
-
-  const pages = {
-    '/settings': { icon: '⚙️', name: 'Configuración', phase: 'Fase 1 - Semana 4' },
-  };
-
-  const page = pages[pathname] || { icon: '🚧', name: 'Página', phase: 'Próximamente' };
+  const page = PAGES[pathname] ?? FALLBACK;
 
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">

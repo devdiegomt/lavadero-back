@@ -120,7 +120,7 @@ npm install @sentry/react
 echo "VITE_SENTRY_DSN=https://xxx@sentry.io/xxx" >> .env
 ```
 
-Luego en `main.jsx`:
+Luego en `main.tsx`:
 
 ```jsx
 import { initSentry, ErrorBoundary } from './lib/sentry';
