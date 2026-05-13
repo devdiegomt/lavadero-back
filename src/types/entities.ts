@@ -136,7 +136,7 @@ export interface AppointmentRow {
   notes: string | null;
   source: AppointmentSource;
   started_at: Date | null;
-  finished_at: Date | null;
+  completed_at: Date | null;   // cuando status → 'done'
   delivered_at: Date | null;
   cancelled_at: Date | null;
   total_amount: number;       // en centavos
@@ -179,8 +179,8 @@ export interface AppointmentHistoryRow {
   id: string;
   appointment_id: string;
   tenant_id: string;
-  from_status: AppointmentStatus | null;
-  to_status: AppointmentStatus;
+  previous_status: AppointmentStatus | null;
+  new_status: AppointmentStatus;
   changed_by: string | null;
   notes: string | null;
   created_at: Date;

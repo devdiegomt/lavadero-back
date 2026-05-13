@@ -47,7 +47,7 @@ pool.on('error', (err: Error) => {
  *     [tenantId]
  *   );
  */
-export async function query<T extends Record<string, unknown> = Record<string, unknown>>(
+export async function query<T extends object = Record<string, unknown>>(
   text: string,
   params?: (string | number | boolean | null | Date | undefined)[],
 ): Promise<QueryResult<T>> {
