@@ -1,3 +1,4 @@
+
 /**
  * Tests de integración — Flujos críticos.
  *

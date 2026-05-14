@@ -3,12 +3,22 @@
     // ── Target ──────────────────────────────────────────────────────────────
     "target": "ES2022",
     "lib": ["ES2022"],
-    "module": "CommonJS",
-    "moduleResolution": "Node",
+
+    // ── Modules ─────────────────────────────────────────────────────────────
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    /* "ignoreDeprecations": "6.0", */
+
+    // ── Types ───────────────────────────────────────────────────────────────
+    "types": ["node", "jest"],
 
     // ── Output ──────────────────────────────────────────────────────────────
     "outDir": "./dist",
-    "rootDir": "./src",
+
+    // IMPORTANTE:
+    // Como __tests__ está fuera de src, rootDir debe ser "."
+    "rootDir": ".",
+
     "sourceMap": true,
 
     // ── Strict ──────────────────────────────────────────────────────────────
@@ -19,35 +29,39 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
 
-    // ── Interop ──────────────────────────────────────────────────────────────
+    // ── Interop ─────────────────────────────────────────────────────────────
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
 
-    // ── JS sidecars que quedan en JS ─────────────────────────────────────────
-    // Únicos JS en el bundle de producción:
-    //   - src/modules/billing/alegra.client.js
-    //   - src/modules/billing/billing.sync.js
-    // (Migrarlos a TS es un proyecto aparte porque dependen del SDK de Alegra)
+    // ── JS sidecars que quedan en JS ────────────────────────────────────────
     "allowJs": true,
     "checkJs": false
   },
-  "include": ["src/**/*"],
+
+  // ── Archivos incluidos ────────────────────────────────────────────────────
+  "include": [
+    "src/**/*",
+    "__tests__/**/*"
+  ],
+
+  // ── Exclusiones ───────────────────────────────────────────────────────────
   "exclude": [
     "node_modules",
     "dist",
     "bot-wa",
-    "__tests__",
-    // Scripts de admin: viven en JS, se ejecutan con `node src/shared/db/xxx.js`.
-    // No entran al build del servidor.
+
+    // Scripts de admin
     "src/shared/db/migrate*.js",
     "src/shared/db/seed*.js",
     "src/shared/db/demo-seed.js",
     "src/shared/db/encrypt-value.js",
     "src/shared/db/rotate-encryption-key.js"
   ],
+
+  // ── ts-node ───────────────────────────────────────────────────────────────
   "ts-node": {
     "transpileOnly": true,
     "files": true
