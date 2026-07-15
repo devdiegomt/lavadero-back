@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only --require dotenv/config src/index.ts",
-    "start": "node dist/index.ts",
+    "start": "node dist/src/index.js",
     "build": "tsc --project tsconfig.json",
     "typecheck": "tsc --noEmit",
     "typecheck:watch": "tsc --noEmit --watch",

@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import './config';
 import express, { type Express, type Request, type Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';

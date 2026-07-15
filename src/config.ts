@@ -63,7 +63,7 @@ const envSchema = z.object({
 
   // ── Database ──────────────────────────────────────────────────────────────
   DATABASE_URL: postgresUrl,
-  REDIS_URL: redisUrl.default('redis://localhost:6379'),
+  REDIS_URL: redisUrl.optional(),
 
   // ── JWT ───────────────────────────────────────────────────────────────────
   JWT_SECRET: z
