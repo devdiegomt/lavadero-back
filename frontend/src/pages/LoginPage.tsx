@@ -98,10 +98,6 @@ export default function LoginPage() {
             </Link>
           </div>
         </form>
-
-        <p className="text-center text-brand-300 text-xs mt-6">
-          Demo: admin@elbrillante.co / admin123
-        </p>
       </div>
     </div>
   );
