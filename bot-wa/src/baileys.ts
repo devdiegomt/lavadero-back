@@ -4,8 +4,10 @@ import {
   DisconnectReason,
   fetchLatestBaileysVersion,
   isJidBroadcast,
+  jidDecode,
   proto,
   WASocket,
+  WAMessageKey,
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import qrcode from 'qrcode-terminal';
@@ -22,11 +24,55 @@ let sock: WASocket | null = null;
 
 /**
  * Mapa de LID (@lid) → JID real (@s.whatsapp.net).
- * Se puebla con los eventos contacts.upsert de Baileys.
+ * Se puebla con contacts.upsert y con el senderPn de los mensajes entrantes.
  * Necesario porque WhatsApp multi-device usa LIDs internos
  * que no corresponden al numero de telefono real.
  */
 const lidToJid = new Map<string, string>();
+
+/**
+ * Extrae el numero de telefono en formato E.164 (+digitos) de un JID.
+ *
+ * Devuelve null si el valor no representa un telefono real: un @lid es un
+ * identificador interno de WhatsApp, NO un numero, y tratarlo como tal
+ * corrompe las busquedas y los registros de clientes en la BD.
+ */
+function phoneFromJid(value?: string | null): string | null {
+  if (!value) return null;
+
+  // jidDecode separa user/server y descarta el sufijo de dispositivo
+  // (573001234567:12@s.whatsapp.net → user 573001234567)
+  const decoded = jidDecode(value);
+  const user = decoded ? decoded.user : value.split('@')[0];
+  const server = decoded ? decoded.server : value.split('@')[1];
+
+  if (server === 'lid') return null;
+  if (!user || !/^\d{7,15}$/.test(user)) return null;
+
+  return '+' + user;
+}
+
+/**
+ * Resuelve el telefono real del cliente a partir de un mensaje entrante.
+ * Devuelve null cuando no se puede determinar, para que el backend no
+ * reciba un LID disfrazado de numero.
+ */
+function resolveCustomerPhone(key: WAMessageKey): string | null {
+  // 1. senderPn: telefono que WhatsApp adjunta a los mensajes @lid
+  const fromSenderPn = phoneFromJid(key.senderPn);
+  if (fromSenderPn) return fromSenderPn;
+
+  // 2. El JID ya es un numero (@s.whatsapp.net)
+  const fromJid = phoneFromJid(key.remoteJid);
+  if (fromJid) return fromJid;
+
+  // 3. Mapa poblado por contacts.upsert
+  if (key.remoteJid?.endsWith('@lid')) {
+    return phoneFromJid(lidToJid.get(key.remoteJid));
+  }
+
+  return null;
+}
 
 export async function startBaileys(state: BotState): Promise<void> {
   const { state: authState, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
@@ -130,15 +176,31 @@ function resolveReplyJid(incomingJid: string): string {
 async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
   if (!msg.message || msg.key.fromMe) return;
 
-  const jid = msg.key.remoteJid || '';
+  const key = msg.key as WAMessageKey;
+  const jid = key.remoteJid || '';
   if (isJidBroadcast(jid)) return;
 
   const isDirect = jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid');
   if (!isDirect) return;
 
-  // Intentar resolver el JID real lo antes posible
+  // WhatsApp adjunta el telefono real en senderPn: aprovecharlo para
+  // enriquecer el mapa y poder responder al JID de numero mas adelante.
+  if (key.senderPn && jid.endsWith('@lid') && !lidToJid.has(jid)) {
+    lidToJid.set(jid, key.senderPn);
+    logger.info({ lid: jid, phoneJid: key.senderPn }, 'Mapeado LID -> JID (senderPn)');
+  }
+
+  // JID para responder (puede seguir siendo @lid: la entrega funciona igual)
   const replyJid = resolveReplyJid(jid);
-  const phone = '+' + replyJid.replace(/@s\.whatsapp\.net$|@lid$/, '');
+  // Telefono real para la BD: null si no se puede determinar
+  const phone = resolveCustomerPhone(key);
+
+  if (!phone) {
+    logger.warn(
+      { jid, replyJid },
+      'No se pudo resolver el telefono real; las consultas por cliente se omitiran'
+    );
+  }
 
   const text =
     msg.message?.conversation ??

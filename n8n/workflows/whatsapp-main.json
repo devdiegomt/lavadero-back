@@ -208,11 +208,42 @@
       }
     },
     {
+      "id": "node-011a-if-phone",
+      "name": "Tiene Telefono?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1200, 540],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "phone-check",
+              "leftValue": "={{ $json.clientPhone || '' }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEquals", "name": "filter.operator.notEquals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "node-011b-solicitar-contacto",
+      "name": "Solicitar Contacto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1420, 460],
+      "parameters": {
+        "jsCode": "return {\n  reply: '📱 No pude identificar tu número automáticamente.\\n\\nPara consultar tu historial, escríbeme la *placa* de tu vehículo y te ayudo por ahí. 🚗'\n};"
+      }
+    },
+    {
       "id": "node-011-get-history",
       "name": "Consultar Historial",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1200, 540],
+      "position": [1420, 600],
       "parameters": {
         "method": "GET",
         "url": "={{ $env.BACKEND_URL + '/api/wa-bridge/customer-history?phone=' + encodeURIComponent($json.clientPhone || '') }}",
@@ -231,7 +262,7 @@
       "name": "Formatear Historial",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1420, 540],
+      "position": [1640, 600],
       "parameters": {
         "jsCode": "const data = $input.item.json;\n\nif (!data.found) {\n  return { reply: 'No encontr\u00e9 visitas anteriores con tu n\u00famero. \u00bfEs tu primera vez con nosotros? \u00a1Bienvenido! \ud83c\udf89\\n\\n\u00bfDeseas agendar tu primer turno?' };\n}\n\nconst { customer, history } = data;\n\nif (!history || history.length === 0) {\n  return { reply: 'Hola *' + customer.name + '*! A\u00fan no tienes visitas registradas. \u00bfDeseas agendar tu primer turno? \ud83d\ude97' };\n}\n\nconst list = history.map(h => {\n  const fecha = new Date(h.scheduled_at).toLocaleDateString('es-CO', { dateStyle: 'short' });\n  const price = h.price ? ' - $' + Number(h.price).toLocaleString('es-CO') : '';\n  return '\u2022 ' + fecha + ': *' + h.plate + '* \u2014 ' + h.service_name + price;\n}).join('\\n');\n\nreturn {\n  reply: '\ud83d\udccb *Historial de ' + customer.name + '*\\n' +\n    'Visitas totales: ' + customer.visit_count + '\\n\\n' +\n    '\u00daltimas visitas:\\n' + list + '\\n\\n\u00bfDeseas agendar un nuevo turno? \ud83d\ude0a'\n};"
       }
@@ -297,7 +328,7 @@
         [{ "node": "Formatear Saludo", "type": "main", "index": 0 }],
         [{ "node": "Tiene Placa?", "type": "main", "index": 0 }],
         [{ "node": "Consultar Servicios", "type": "main", "index": 0 }],
-        [{ "node": "Consultar Historial", "type": "main", "index": 0 }],
+        [{ "node": "Tiene Telefono?", "type": "main", "index": 0 }],
         [{ "node": "Formatear Info Agendamiento", "type": "main", "index": 0 }],
         [{ "node": "Formatear Asesor Humano", "type": "main", "index": 0 }],
         [{ "node": "Formatear Respuesta Desconocida", "type": "main", "index": 0 }]
@@ -325,6 +356,15 @@
       "main": [[{ "node": "Formatear Servicios", "type": "main", "index": 0 }]]
     },
     "Formatear Servicios": {
+      "main": [[{ "node": "Responder al Webhook", "type": "main", "index": 0 }]]
+    },
+    "Tiene Telefono?": {
+      "main": [
+        [{ "node": "Consultar Historial", "type": "main", "index": 0 }],
+        [{ "node": "Solicitar Contacto", "type": "main", "index": 0 }]
+      ]
+    },
+    "Solicitar Contacto": {
       "main": [[{ "node": "Responder al Webhook", "type": "main", "index": 0 }]]
     },
     "Consultar Historial": {
