@@ -1,0 +1,69 @@
+{
+  "compilerOptions": {
+    // ── Target ──────────────────────────────────────────────────────────────
+    "target": "ES2022",
+    "lib": ["ES2022"],
+
+    // ── Modules ─────────────────────────────────────────────────────────────
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    /* "ignoreDeprecations": "6.0", */
+
+    // ── Types ───────────────────────────────────────────────────────────────
+    "types": ["node", "jest"],
+
+    // ── Output ──────────────────────────────────────────────────────────────
+    "outDir": "./dist",
+
+    // IMPORTANTE:
+    // Como __tests__ está fuera de src, rootDir debe ser "."
+    "rootDir": ".",
+
+    "sourceMap": true,
+
+    // ── Strict ──────────────────────────────────────────────────────────────
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+
+    // ── Interop ─────────────────────────────────────────────────────────────
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+
+    // ── JS sidecars que quedan en JS ────────────────────────────────────────
+    "allowJs": true,
+    "checkJs": false
+  },
+
+  // ── Archivos incluidos ────────────────────────────────────────────────────
+  "include": [
+    "src/**/*",
+    "__tests__/**/*"
+  ],
+
+  // ── Exclusiones ───────────────────────────────────────────────────────────
+  "exclude": [
+    "node_modules",
+    "dist",
+    "bot-wa",
+
+    // Scripts de admin
+    "src/shared/db/migrate*.js",
+    "src/shared/db/seed*.js",
+    "src/shared/db/demo-seed.js",
+    "src/shared/db/encrypt-value.js",
+    "src/shared/db/rotate-encryption-key.js"
+  ],
+
+  // ── ts-node ───────────────────────────────────────────────────────────────
+  "ts-node": {
+    "transpileOnly": true,
+    "files": true
+  }
+}
