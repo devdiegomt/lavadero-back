@@ -511,6 +511,58 @@
         "responseBody": "={{ { reply: $json.reply } }}",
         "options": {}
       }
+    },
+    {
+      "id": "node-017-audit-prep",
+      "name": "Preparar Auditoria",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2080,
+        480
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Arma las entradas de auditoria (entrante + saliente) para POST /log.\n// Corre DESPUES de responder al webhook: el cliente ya recibio su mensaje,\n// asi que registrar no le suma latencia.\nconst ctx = $('Parsear Intencion').item.json;\nconst reply = $input.item.json.reply || '';\n\n// phone es NOT NULL en whatsapp_messages. Cuando bot-wa no pudo resolver el\n// telefono real (LID sin senderPn) no hay a quien atribuir el mensaje, y meter\n// el LID ahi seria volver al bug que ya corregimos. Se omite el registro.\nif (!ctx.clientPhone) {\n  console.log('[auditoria] omitida: sin telefono resuelto para', ctx.messageId);\n  return [];\n}\n\nconst base = {\n  phone: ctx.clientPhone,\n  tenantPhone: ctx.tenantPhone,\n  flowStep: ctx.intent,\n  messageId: ctx.messageId,\n};\n\nconst entries = [];\n\nif (ctx.originalMessage) {\n  entries.push({ json: { ...base, direction: 'inbound', content: ctx.originalMessage } });\n}\n\nif (reply) {\n  entries.push({ json: { ...base, direction: 'outbound', content: reply } });\n}\n\n// Un item por llamada: el nodo HTTP se ejecuta una vez por cada uno.\nreturn entries;\n"
+      }
+    },
+    {
+      "id": "node-018-audit-log",
+      "name": "Registrar Mensajes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2300,
+        480
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_URL }}/api/wa-bridge/log",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.N8N_API_KEY }}"
+            },
+            {
+              "name": "x-tenant-phone",
+              "value": "={{ $json.tenantPhone }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ phone: $json.phone, direction: $json.direction, content: $json.content, flowStep: $json.flowStep, messageId: $json.messageId }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -773,6 +825,28 @@
         [
           {
             "node": "Responder al Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder al Webhook": {
+      "main": [
+        [
+          {
+            "node": "Preparar Auditoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Auditoria": {
+      "main": [
+        [
+          {
+            "node": "Registrar Mensajes",
             "type": "main",
             "index": 0
           }

@@ -237,10 +237,13 @@ async function bookAppointment(req, res) {
 // POST /api/wa-bridge/log
 // Registra un mensaje en whatsapp_messages para auditoría.
 //
-// Body: { phone, direction, content, flowStep }
+// Body: { phone, direction, content, flowStep, messageId }
+//   direction: 'inbound' | 'outbound' | 'system'
+//   flowStep:  el intent detectado, para saber qué ramas usa la gente
+//   messageId: el ID del mensaje de WhatsApp, se guarda en external_id
 // ---------------------------------------------------------------------------
 async function logMessage(req, res) {
-  const { phone, direction, content, flowStep } = req.body;
+  const { phone, direction, content, flowStep, messageId } = req.body;
 
   if (!phone || !direction || !content) {
     return res
@@ -253,16 +256,23 @@ async function logMessage(req, res) {
     return res.status(400).json({ error: 'direction invalido' });
   }
 
+  // phone es VARCHAR(20): un valor mas largo reventaria en la BD con un 500.
+  // Mejor rechazarlo aca con un error claro.
+  if (String(phone).length > 20) {
+    return res.status(400).json({ error: 'phone excede 20 caracteres' });
+  }
+
   await db.query(
     `INSERT INTO whatsapp_messages
-       (tenant_id, phone, direction, message_type, content, flow_step)
-     VALUES ($1, $2, $3, 'text', $4, $5)`,
+       (tenant_id, phone, direction, message_type, content, flow_step, external_id)
+     VALUES ($1, $2, $3, 'text', $4, $5, $6)`,
     [
       req.tenantId,
       phone,
       direction,
       String(content).substring(0, 2000),
-      flowStep || null,
+      flowStep ? String(flowStep).substring(0, 50) : null,
+      messageId ? String(messageId).substring(0, 100) : null,
     ]
   );
 
