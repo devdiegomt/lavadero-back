@@ -15,6 +15,7 @@ const PORT = parseInt(process.env.PORT ?? '3001', 10);
 /** Estado compartido entre el servidor de health y Baileys */
 const state: BotState = {
   connected: false,
+  status: 'starting',
 };
 
 async function main(): Promise<void> {

@@ -10,7 +10,11 @@ export function startHealthServer(port: number, state: BotState): void {
   app.get('/health', (_req, res) => {
     res.json({
       status: state.connected ? 'ok' : 'disconnected',
+      // En que punto de la vinculacion esta: awaiting_qr, logged_out, etc.
+      state: state.status,
       connected: state.connected,
+      // Si esta esperando escaneo, avisar sin volcar el QR entero.
+      qrPending: Boolean(state.qrCode),
       lastConnected: state.lastConnected ?? null,
       timestamp: new Date().toISOString(),
     });

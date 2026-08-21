@@ -10,6 +10,7 @@ import {
   WAMessageKey,
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
+import { promises as fs } from 'fs';
 import qrcode from 'qrcode-terminal';
 import pino from 'pino';
 import { forwardToN8n } from './n8n-client';
@@ -21,6 +22,9 @@ const TENANT_PHONE = process.env.TENANT_PHONE || '';
 const AUTH_DIR = process.env.AUTH_DIR || './auth';
 
 let sock: WASocket | null = null;
+
+/** Cuando se borraron las credenciales por ultima vez, para no entrar en bucle. */
+let clearedAuthAt: number | null = null;
 
 /**
  * Mapa de LID (@lid) → JID real (@s.whatsapp.net).
@@ -120,11 +124,13 @@ export async function startBaileys(state: BotState): Promise<void> {
     const { connection, lastDisconnect, qr } = update;
     if (qr) {
       state.qrCode = qr;
+      state.status = 'awaiting_qr';
       qrcode.generate(qr, { small: true });
       logger.info('QR generado — escanea con WhatsApp para conectar');
     }
     if (connection === 'open') {
       state.connected = true;
+      state.status = 'connected';
       state.lastConnected = new Date().toISOString();
       state.qrCode = undefined;
       logger.info('WhatsApp conectado correctamente');
@@ -132,13 +138,43 @@ export async function startBaileys(state: BotState): Promise<void> {
     if (connection === 'close') {
       state.connected = false;
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-      logger.warn({ statusCode, shouldReconnect }, 'Conexion cerrada');
-      if (shouldReconnect) {
+      const loggedOut = statusCode === DisconnectReason.loggedOut;
+      logger.warn({ statusCode, loggedOut }, 'Conexion cerrada');
+
+      if (!loggedOut) {
+        state.status = 'reconnecting';
         const delay = parseInt(process.env.RECONNECT_INTERVAL_MS || '5000', 10);
         setTimeout(() => startBaileys(state), delay);
-      } else {
-        logger.error('Sesion cerrada (loggedOut). Elimina auth/ y reinicia.');
+        return;
+      }
+
+      // 401/loggedOut: WhatsApp invalido las credenciales de forma permanente.
+      // Ya no sirven para nada, asi que se borran y se pide un QR nuevo en vez
+      // de quedarse muerto esperando que alguien entre a borrar el volumen.
+      state.status = 'logged_out';
+
+      if (clearedAuthAt && Date.now() - clearedAuthAt < 60_000) {
+        // Se limpio hace nada y volvio a pasar: algo mas esta mal y reintentar
+        // solo generaria un bucle de QRs.
+        logger.error(
+          'Sesion cerrada otra vez tras limpiar credenciales. Se detiene el reintento; ' +
+          'revisa que el numero no este vinculado en otro lugar.'
+        );
+        return;
+      }
+
+      try {
+        await fs.rm(AUTH_DIR, { recursive: true, force: true });
+        await fs.mkdir(AUTH_DIR, { recursive: true });
+        clearedAuthAt = Date.now();
+        state.status = 'awaiting_qr';
+        logger.warn('Credenciales invalidas: se borraron. Generando QR nuevo para vincular.');
+        setTimeout(() => startBaileys(state), 1_000);
+      } catch (err) {
+        logger.error(
+          { err: (err as Error).message, authDir: AUTH_DIR },
+          'No se pudieron borrar las credenciales. Borra el volumen a mano y reinicia.'
+        );
       }
     }
   });
