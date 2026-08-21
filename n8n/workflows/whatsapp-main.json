@@ -324,7 +324,7 @@
         260
       ],
       "parameters": {
-        "jsCode": "const data = $input.item.json;\nconst plate = $('Parsear Intencion').item.json.entities.plate;\n\nif (!data.found) {\n  return { reply: 'No encontré un turno activo para la placa *' + plate + '*.\\n\\n¿Deseas agendar un turno? Escríbeme y te ayudo. 😊' };\n}\n\nconst a = data.appointment;\nconst statusMap = {\n  pending: '⏳ En espera',\n  confirmed: '✅ Confirmado',\n  in_progress: '🚿 En lavado'\n};\nconst statusText = statusMap[a.status] || a.status;\nconst fecha = new Date(a.scheduled_at).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });\n\nreturn {\n  reply: '🚗 *Estado de tu vehículo*\\n\\n' +\n    'Placa: *' + a.plate + '*\\n' +\n    'Vehículo: ' + a.brand + ' ' + a.model + '\\n' +\n    'Servicio: ' + a.service_name + '\\n' +\n    'Estado: ' + statusText + '\\n' +\n    'Fecha: ' + fecha +\n    (a.staff_name ? '\\nResponsable: ' + a.staff_name : '') +\n    '\\n\\n¿Necesitas algo más? 😊'\n};"
+        "jsCode": "const data = $input.item.json;\nconst plate = $('Parsear Intencion').item.json.entities.plate;\n\nif (!data.found) {\n  return { reply: 'No encontré un turno activo para la placa *' + plate + '*.\\n\\n¿Quieres agendar uno? Escríbeme y te ayudo. 😊' };\n}\n\nconst a = data.appointment;\n\n// Estados reales del esquema: pending, in_progress, done, delivered, cancelled.\n// Solo llegan aca los tres primeros.\nconst statusMap = {\n  pending: '⏳ En espera',\n  in_progress: '🚿 En lavado',\n  done: '✅ Listo para recoger',\n};\nconst statusText = statusMap[a.status] || a.status;\n\nconst vehiculo = [a.brand, a.model].filter(Boolean).join(' ');\n\n// scheduled_time es TIME ('14:30:00') y puede venir null.\nlet cuando = new Date(a.scheduled_date).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });\nif (a.scheduled_time) {\n  cuando += ' a las ' + String(a.scheduled_time).slice(0, 5);\n}\n\nreturn {\n  reply: '🚗 *Estado de tu vehículo*\\n\\n' +\n    'Placa: *' + a.plate + '*\\n' +\n    (vehiculo ? 'Vehículo: ' + vehiculo + '\\n' : '') +\n    'Servicio: ' + a.service_name + '\\n' +\n    'Estado: ' + statusText + '\\n' +\n    'Fecha: ' + cuando +\n    (a.staff_name ? '\\nResponsable: ' + a.staff_name : '') +\n    '\\n\\n¿Necesitas algo más? 😊'\n};"
       }
     },
     {
@@ -367,7 +367,7 @@
         400
       ],
       "parameters": {
-        "jsCode": "const data = $input.item.json;\n\nif (!data.services || data.services.length === 0) {\n  return { reply: 'Actualmente no tenemos servicios configurados. Por favor contáctanos directamente.' };\n}\n\nconst list = data.services.map(s => {\n  const price = s.price ? '$' + Number(s.price).toLocaleString('es-CO') : 'Consultar';\n  const dur = s.duration_minutes ? ' (~' + s.duration_minutes + ' min)' : '';\n  const desc = s.description ? '\\n  ' + s.description : '';\n  return '• *' + s.name + '*' + dur + '\\n  💰 ' + price + desc;\n}).join('\\n\\n');\n\nreturn { reply: '🚿 *Nuestros servicios:*\\n\\n' + list + '\\n\\n¿Deseas agendar alguno? 😊' };"
+        "jsCode": "const data = $input.item.json;\n\nif (!data.services || data.services.length === 0) {\n  return { reply: 'Todavía no tenemos servicios cargados. Escríbenos y te contamos. 😊' };\n}\n\n// Los precios se guardan en centavos y varian por tipo de vehiculo.\n// Como no sabemos que vehiculo tiene el cliente, se muestra el mas bajo.\nconst cop = (centavos) => '$' + Math.round(centavos / 100).toLocaleString('es-CO');\n\nconst list = data.services.map((s) => {\n  const precios = [s.price_sedan, s.price_suv, s.price_camioneta, s.price_moto, s.price_pickup]\n    .map(Number)\n    .filter((p) => p > 0);\n  const desde = precios.length ? 'desde ' + cop(Math.min(...precios)) : 'Consultar';\n  const dur = s.estimated_minutes ? ' (~' + s.estimated_minutes + ' min)' : '';\n  const desc = s.description ? '\\n  ' + s.description : '';\n  return '• *' + s.name + '*' + dur + '\\n  💰 ' + desde + desc;\n}).join('\\n\\n');\n\nreturn { reply: '🚿 *Nuestros servicios:*\\n\\n' + list + '\\n\\nEl precio final depende del tipo de vehículo.\\n\\n¿Agendamos alguno? 😊' };"
       }
     },
     {
@@ -455,20 +455,7 @@
         600
       ],
       "parameters": {
-        "jsCode": "const data = $input.item.json;\n\nif (!data.found) {\n  return { reply: 'No encontré visitas anteriores con tu número. ¿Es tu primera vez con nosotros? ¡Bienvenido! 🎉\\n\\n¿Deseas agendar tu primer turno?' };\n}\n\nconst { customer, history } = data;\n\nif (!history || history.length === 0) {\n  return { reply: 'Hola *' + customer.name + '*! Aún no tienes visitas registradas. ¿Deseas agendar tu primer turno? 🚗' };\n}\n\nconst list = history.map(h => {\n  const fecha = new Date(h.scheduled_at).toLocaleDateString('es-CO', { dateStyle: 'short' });\n  const price = h.price ? ' - $' + Number(h.price).toLocaleString('es-CO') : '';\n  return '• ' + fecha + ': *' + h.plate + '* — ' + h.service_name + price;\n}).join('\\n');\n\nreturn {\n  reply: '📋 *Historial de ' + customer.name + '*\\n' +\n    'Visitas totales: ' + customer.visit_count + '\\n\\n' +\n    'Últimas visitas:\\n' + list + '\\n\\n¿Deseas agendar un nuevo turno? 😊'\n};"
-      }
-    },
-    {
-      "id": "node-013-book-info",
-      "name": "Formatear Info Agendamiento",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1200,
-        680
-      ],
-      "parameters": {
-        "jsCode": "return {\n  reply: '📅 *Agendar un turno*\\n\\nCon gusto te ayudo a agendar. Necesito algunos datos:\\n\\n1. *Placa* del vehículo\\n2. *Servicio* que deseas (escríbeme \"servicios\" para ver la lista)\\n3. *Fecha y hora* preferida\\n\\nEnvíame esa info y listo. 🚿'\n};"
+        "jsCode": "const data = $input.item.json;\n\nif (!data.found) {\n  return { reply: 'No encontré visitas anteriores con tu número. ¿Es tu primera vez? ¡Bienvenido! 🎉\\n\\n¿Agendamos tu primer turno?' };\n}\n\nconst { customer, history } = data;\n\nif (!history || history.length === 0) {\n  return { reply: 'Hola *' + customer.name + '*! Aún no tienes visitas registradas. ¿Agendamos tu primer turno? 🚗' };\n}\n\n// appointments.price esta en centavos.\nconst cop = (centavos) => '$' + Math.round(Number(centavos) / 100).toLocaleString('es-CO');\n\nconst list = history.map((h) => {\n  const fecha = new Date(h.scheduled_date).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: '2-digit' });\n  const precio = Number(h.price) > 0 ? ' — ' + cop(h.price) : '';\n  return '• ' + fecha + ': *' + h.plate + '* — ' + h.service_name + precio;\n}).join('\\n');\n\nreturn {\n  reply: '📋 *Historial de ' + customer.name + '*\\n' +\n    'Visitas totales: ' + customer.visit_count + '\\n\\n' +\n    'Últimas visitas:\\n' + list + '\\n\\n¿Agendamos una nueva? 😊'\n};"
       }
     },
     {
@@ -523,7 +510,7 @@
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Arma las entradas de auditoria (entrante + saliente) para POST /log.\n// Corre DESPUES de responder al webhook: el cliente ya recibio su mensaje,\n// asi que registrar no le suma latencia.\nconst ctx = $('Parsear Intencion').item.json;\nconst reply = $input.item.json.reply || '';\n\n// phone es NOT NULL en whatsapp_messages. Cuando bot-wa no pudo resolver el\n// telefono real (LID sin senderPn) no hay a quien atribuir el mensaje, y meter\n// el LID ahi seria volver al bug que ya corregimos. Se omite el registro.\nif (!ctx.clientPhone) {\n  console.log('[auditoria] omitida: sin telefono resuelto para', ctx.messageId);\n  return [];\n}\n\nconst base = {\n  phone: ctx.clientPhone,\n  tenantPhone: ctx.tenantPhone,\n  flowStep: ctx.intent,\n  messageId: ctx.messageId,\n};\n\nconst entries = [];\n\nif (ctx.originalMessage) {\n  entries.push({ json: { ...base, direction: 'inbound', content: ctx.originalMessage } });\n}\n\nif (reply) {\n  entries.push({ json: { ...base, direction: 'outbound', content: reply } });\n}\n\n// Un item por llamada: el nodo HTTP se ejecuta una vez por cada uno.\nreturn entries;\n"
+        "jsCode": "// Arma las entradas de auditoria (entrante + saliente) para POST /log.\n// Corre DESPUES de responder al webhook: el cliente ya recibio su mensaje,\n// asi que registrar no le suma latencia.\n\n// El Webhook es el unico nodo que corre en todas las ramas. 'Parsear Intencion'\n// se saltea cuando el cliente esta a mitad de un agendamiento, y referenciar un\n// nodo que no se ejecuto tira error, por eso va dentro de un try.\nconst body = $('Webhook').item.json.body || {};\nconst reply = $input.item.json.reply || '';\n\nlet flowStep = 'booking';\ntry {\n  flowStep = $('Parsear Intencion').item.json.intent || 'unknown';\n} catch (e) {\n  // Rama de agendamiento en curso: no hubo clasificacion de intencion.\n}\n\n// phone es NOT NULL en whatsapp_messages. Cuando bot-wa no pudo resolver el\n// telefono real (LID sin senderPn) no hay a quien atribuir el mensaje, y meter\n// el LID ahi seria volver al bug que ya corregimos. Se omite el registro.\nif (!body.phone) {\n  console.log('[auditoria] omitida: sin telefono resuelto para', body.messageId);\n  return [];\n}\n\nconst base = {\n  phone: body.phone,\n  tenantPhone: body.tenantPhone,\n  flowStep,\n  messageId: body.messageId,\n};\n\nconst entries = [];\n\nif (body.message) {\n  entries.push({ json: { ...base, direction: 'inbound', content: body.message } });\n}\n\nif (reply) {\n  entries.push({ json: { ...base, direction: 'outbound', content: reply } });\n}\n\n// Un item por llamada: el nodo HTTP se ejecuta una vez por cada uno.\nreturn entries;\n"
       }
     },
     {
@@ -563,6 +550,140 @@
       "maxTries": 2,
       "waitBetweenTries": 1000,
       "onError": "continueRegularOutput"
+    },
+    {
+      "id": "node-019-booking-continue",
+      "name": "Continuar Agendamiento",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        320,
+        120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_URL }}/api/wa-bridge/booking-step",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.N8N_API_KEY }}"
+            },
+            {
+              "name": "x-tenant-phone",
+              "value": "={{ $('Webhook').item.json.body.tenantPhone }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ phone: $('Webhook').item.json.body.phone, message: $('Webhook').item.json.body.message, start: false }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "node-020-booking-if",
+      "name": "En Agendamiento?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        540,
+        120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "is-active",
+              "leftValue": "={{ $json.active === true && !!$json.reply }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "node-021-booking-reply",
+      "name": "Respuesta Agendamiento",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        60
+      ],
+      "parameters": {
+        "jsCode": "return { reply: $json.reply };"
+      }
+    },
+    {
+      "id": "node-022-booking-start",
+      "name": "Iniciar Agendamiento",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1200,
+        680
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_URL }}/api/wa-bridge/booking-step",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.N8N_API_KEY }}"
+            },
+            {
+              "name": "x-tenant-phone",
+              "value": "={{ $('Parsear Intencion').item.json.tenantPhone }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ phone: $('Parsear Intencion').item.json.clientPhone, message: '', start: true }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "node-023-booking-start-fmt",
+      "name": "Formatear Inicio Agendamiento",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        680
+      ],
+      "parameters": {
+        "jsCode": "const data = $input.item.json;\n\n// Sin telefono resuelto no se puede guardar la sesion del cliente.\nif (!$('Parsear Intencion').item.json.clientPhone) {\n  return { reply: '📅 Para agendarte necesito identificarte.\\n\\nEscríbeme la *placa* de tu vehículo y seguimos por ahí. 🚗' };\n}\n\nif (!data.reply) {\n  return { reply: 'No pude iniciar el agendamiento en este momento. ¿Lo intentamos de nuevo? 🙏' };\n}\n\nreturn { reply: data.reply };"
+      }
     }
   ],
   "connections": {
@@ -570,7 +691,7 @@
       "main": [
         [
           {
-            "node": "Preparar Solicitud Claude",
+            "node": "Continuar Agendamiento",
             "type": "main",
             "index": 0
           }
@@ -642,7 +763,7 @@
         ],
         [
           {
-            "node": "Formatear Info Agendamiento",
+            "node": "Iniciar Agendamiento",
             "type": "main",
             "index": 0
           }
@@ -798,17 +919,6 @@
         ]
       ]
     },
-    "Formatear Info Agendamiento": {
-      "main": [
-        [
-          {
-            "node": "Responder al Webhook",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Formatear Asesor Humano": {
       "main": [
         [
@@ -847,6 +957,68 @@
         [
           {
             "node": "Registrar Mensajes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continuar Agendamiento": {
+      "main": [
+        [
+          {
+            "node": "En Agendamiento?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "En Agendamiento?": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Agendamiento",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparar Solicitud Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respuesta Agendamiento": {
+      "main": [
+        [
+          {
+            "node": "Responder al Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Iniciar Agendamiento": {
+      "main": [
+        [
+          {
+            "node": "Formatear Inicio Agendamiento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Inicio Agendamiento": {
+      "main": [
+        [
+          {
+            "node": "Responder al Webhook",
             "type": "main",
             "index": 0
           }

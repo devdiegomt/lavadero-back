@@ -13,6 +13,10 @@
  */
 
 const db = require('../../shared/db');
+const { getServicePrice } = require('../../shared/utils/pricing');
+
+// vehicles.vehicle_type: determina cual columna price_* aplica.
+const VEHICLE_TYPES = ['sedan', 'suv', 'camioneta', 'moto', 'pickup'];
 
 // ---------------------------------------------------------------------------
 // GET /api/wa-bridge/appointment-status?plate=XXX
@@ -25,27 +29,31 @@ async function getAppointmentStatus(req, res) {
     return res.status(400).json({ error: 'plate es requerido' });
   }
 
+  // appointments guarda fecha y hora en columnas separadas y no tiene
+  // deleted_at. scheduled_at se compone aca para no cambiar el contrato.
   const { rows } = await db.query(
     `SELECT
        a.id,
        a.status,
-       a.scheduled_at,
+       a.scheduled_date,
+       a.scheduled_time,
+       (a.scheduled_date + COALESCE(a.scheduled_time, '00:00'::time)) AS scheduled_at,
+       a.price,
        v.plate,
        v.brand,
        v.model,
        v.color,
-       s.name          AS service_name,
-       s.duration_minutes,
-       u.first_name    AS staff_name
+       s.name              AS service_name,
+       s.estimated_minutes AS duration_minutes,
+       u.first_name        AS staff_name
      FROM appointments a
      JOIN vehicles  v ON v.id = a.vehicle_id
      JOIN services  s ON s.id = a.service_id
      LEFT JOIN users u ON u.id = a.assigned_to
      WHERE a.tenant_id = $1
        AND UPPER(v.plate) = UPPER($2)
-       AND a.status IN ('pending', 'confirmed', 'in_progress')
-       AND a.deleted_at IS NULL
-     ORDER BY a.scheduled_at ASC
+       AND a.status IN ('pending', 'in_progress', 'done')
+     ORDER BY a.scheduled_date ASC, a.scheduled_time ASC NULLS LAST
      LIMIT 1`,
     [req.tenantId, plate.trim()]
   );
@@ -62,13 +70,15 @@ async function getAppointmentStatus(req, res) {
 // Lista todos los servicios activos del tenant con precios.
 // ---------------------------------------------------------------------------
 async function getServices(req, res) {
+  // services no tiene columna price ni deleted_at: el precio depende del tipo
+  // de vehiculo (price_sedan, price_suv, ...) y se devuelven todos.
   const { rows } = await db.query(
-    `SELECT id, name, description, price, duration_minutes, category
+    `SELECT id, name, description, estimated_minutes,
+            price_sedan, price_suv, price_camioneta, price_moto, price_pickup
      FROM services
      WHERE tenant_id = $1
        AND is_active = true
-       AND deleted_at IS NULL
-     ORDER BY category, price ASC`,
+     ORDER BY sort_order, name`,
     [req.tenantId]
   );
 
@@ -101,23 +111,25 @@ async function getCustomerHistory(req, res) {
     return res.json({ found: false });
   }
 
+  // El precio real cobrado vive en appointments.price, no en services.
   const { rows: history } = await db.query(
     `SELECT
        a.id,
        a.status,
-       a.scheduled_at,
+       a.scheduled_date,
+       a.scheduled_time,
+       (a.scheduled_date + COALESCE(a.scheduled_time, '00:00'::time)) AS scheduled_at,
+       a.price,
        v.plate,
        v.brand,
        v.model,
-       s.name  AS service_name,
-       s.price
+       s.name AS service_name
      FROM appointments a
      JOIN vehicles v ON v.id = a.vehicle_id
      JOIN services s ON s.id = a.service_id
      WHERE a.tenant_id = $1
-       AND v.customer_id = $2
-       AND a.deleted_at IS NULL
-     ORDER BY a.scheduled_at DESC
+       AND a.customer_id = $2
+     ORDER BY a.scheduled_date DESC, a.scheduled_time DESC NULLS LAST
      LIMIT 5`,
     [req.tenantId, customer.id]
   );
@@ -136,22 +148,44 @@ async function getCustomerHistory(req, res) {
 // POST /api/wa-bridge/book
 // Crea o reutiliza cliente + vehículo y registra un turno.
 //
-// Body: { phone, customerName, plate, brand, model, color, serviceId, scheduledAt }
+// Body: { phone, customerName, plate, vehicleType, brand, model, color,
+//         serviceId, scheduledDate, scheduledTime }
+//   scheduledDate: 'YYYY-MM-DD'  (appointments.scheduled_date, NOT NULL)
+//   scheduledTime: 'HH:MM'       (appointments.scheduled_time, opcional)
+// El precio se calcula del servicio segun el tipo de vehiculo.
 // ---------------------------------------------------------------------------
 async function bookAppointment(req, res) {
-  const { phone, customerName, plate, brand, model, color, serviceId, scheduledAt } =
-    req.body;
+  const {
+    phone, customerName, plate, vehicleType, brand, model, color,
+    serviceId, scheduledDate, scheduledTime,
+  } = req.body;
   const tenantId = req.tenantId;
 
-  if (!phone || !plate || !serviceId || !scheduledAt) {
+  if (!phone || !plate || !serviceId || !scheduledDate) {
     return res
       .status(400)
-      .json({ error: 'phone, plate, serviceId, scheduledAt son requeridos' });
+      .json({ error: 'phone, plate, serviceId, scheduledDate son requeridos' });
   }
+
+  const type = VEHICLE_TYPES.includes(vehicleType) ? vehicleType : 'sedan';
 
   const client = await db.getClient();
   try {
     await client.query('BEGIN');
+
+    // El precio depende del tipo de vehiculo y appointments.price es NOT NULL.
+    const { rows: svc } = await client.query(
+      `SELECT price_sedan, price_suv, price_camioneta, price_moto, price_pickup
+       FROM services
+       WHERE id = $1 AND tenant_id = $2 AND is_active = true
+       LIMIT 1`,
+      [serviceId, tenantId]
+    );
+    if (!svc[0]) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Servicio no encontrado' });
+    }
+    const price = getServicePrice(svc[0], type);
 
     // 1. Upsert cliente
     let customerId;
@@ -169,11 +203,12 @@ async function bookAppointment(req, res) {
       const firstName = nameParts[0];
       const lastName = nameParts.slice(1).join(' ') || '';
 
+      // customers no tiene columna source.
       const { rows: newCust } = await client.query(
-        `INSERT INTO customers (tenant_id, phone, first_name, last_name, source)
-         VALUES ($1, $2, $3, $4, 'whatsapp')
+        `INSERT INTO customers (tenant_id, phone, first_name, last_name)
+         VALUES ($1, $2, $3, $4)
          RETURNING id`,
-        [tenantId, phone, firstName, lastName]
+        [tenantId, phone, firstName, lastName || null]
       );
       customerId = newCust[0].id;
     }
@@ -192,28 +227,38 @@ async function bookAppointment(req, res) {
       vehicleId = existingVeh[0].id;
     } else {
       const { rows: newVeh } = await client.query(
-        `INSERT INTO vehicles (tenant_id, customer_id, plate, brand, model, color)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO vehicles (tenant_id, customer_id, plate, vehicle_type, brand, model, color)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id`,
         [
           tenantId,
           customerId,
           plate.toUpperCase(),
-          brand || '',
-          model || '',
-          color || '',
+          type,
+          brand || null,
+          model || null,
+          color || null,
         ]
       );
       vehicleId = newVeh[0].id;
     }
 
-    // 3. Crear turno
+    // 3. Crear turno. customer_id es NOT NULL y la fecha/hora van separadas.
     const { rows: appt } = await client.query(
       `INSERT INTO appointments
-         (tenant_id, vehicle_id, service_id, scheduled_at, status, source)
-       VALUES ($1, $2, $3, $4, 'pending', 'whatsapp')
-       RETURNING id, status, scheduled_at`,
-      [tenantId, vehicleId, serviceId, scheduledAt]
+         (tenant_id, customer_id, vehicle_id, service_id,
+          scheduled_date, scheduled_time, price, status, source)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', 'whatsapp')
+       RETURNING id, status, scheduled_date, scheduled_time, price`,
+      [
+        tenantId,
+        customerId,
+        vehicleId,
+        serviceId,
+        scheduledDate,
+        scheduledTime || null,
+        price,
+      ]
     );
 
     await client.query('COMMIT');

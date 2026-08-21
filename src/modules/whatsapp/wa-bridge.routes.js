@@ -16,6 +16,7 @@ const {
   bookAppointment,
   logMessage,
 } = require('./wa-bridge.controller');
+const { bookingStep } = require('./wa-bridge.booking');
 
 const router = Router();
 
@@ -91,6 +92,7 @@ router.get('/appointment-status', getAppointmentStatus);
 router.get('/services', getServices);
 router.get('/customer-history', getCustomerHistory);
 router.post('/book', bookAppointment);
+router.post('/booking-step', bookingStep);
 router.post('/log', logMessage);
 
 module.exports = router;

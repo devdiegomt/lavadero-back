@@ -18,6 +18,7 @@ const onboardingRoutes = require('./modules/onboarding/onboarding.routes');
 const superadminRoutes = require('./modules/superadmin/superadmin.routes');
 const billingRoutes = require("./modules/billing/billing.routes");
 const waBridgeRoutes = require("./modules/whatsapp/wa-bridge.routes");
+const { initBooking } = require("./modules/whatsapp/wa-bridge.booking");
 const logger = require('./shared/utils/logger');
 const { httpLogger } = require('./shared/utils/logger');
 const { errorHandler } = require("./shared/middleware/errorHandler");
@@ -80,6 +81,26 @@ app.use('/api/superadmin', superadminRoutes);
 
 // WhatsApp AI Bridge (consumido por n8n)
 app.use("/api/wa-bridge", waBridgeRoutes);
+
+// ---------------------------------------------------------------------------
+// Redis — guarda el avance de las conversaciones de agendamiento.
+// Si no esta disponible el resto de la API sigue funcionando; solo el
+// agendamiento conversacional responde 503.
+// ---------------------------------------------------------------------------
+if (process.env.REDIS_URL) {
+  const Redis = require("ioredis");
+  const redis = new Redis(process.env.REDIS_URL, {
+    maxRetriesPerRequest: 2,
+    lazyConnect: false,
+  });
+  redis.on("error", (err) =>
+    logger.error({ err: err.message }, "Redis: error de conexion")
+  );
+  redis.on("connect", () => logger.info("Redis conectado"));
+  initBooking(redis);
+} else {
+  logger.warn("REDIS_URL no configurado: el agendamiento por WhatsApp queda deshabilitado");
+}
 
 // ---------------------------------------------------------------------------
 // Error Handler (siempre al final)
