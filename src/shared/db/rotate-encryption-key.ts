@@ -33,15 +33,15 @@
  * de recuperar.
  */
 
-require('dotenv').config();
-const { pool } = require('./index');
-const crypto = require('crypto');
+import 'dotenv/config';
+import { pool } from './index';
+import crypto from 'crypto';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
 const SEPARATOR = ':';
 
-function loadKey(envVar) {
+function loadKey(envVar: string): Buffer {
   const raw = process.env[envVar];
   if (!raw) throw new Error(`${envVar} no está configurada en .env`);
   if (!/^[0-9a-fA-F]{64}$/.test(raw)) {
@@ -50,7 +50,7 @@ function loadKey(envVar) {
   return Buffer.from(raw, 'hex');
 }
 
-function encrypt(plaintext, key) {
+function encrypt(plaintext: string, key: Buffer): string {
   const iv = crypto.randomBytes(IV_LENGTH);
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
   const encrypted = Buffer.concat([
@@ -65,7 +65,7 @@ function encrypt(plaintext, key) {
   ].join(SEPARATOR);
 }
 
-function tryDecrypt(ciphertext, key) {
+function tryDecrypt(ciphertext: string, key: Buffer): string | null {
   const parts = String(ciphertext).split(SEPARATOR);
   if (parts.length !== 3) return null;
   try {
@@ -149,7 +149,7 @@ rotate()
     process.exit(ok ? 0 : 1);
   })
   .catch(err => {
-    console.error('\n❌ Error en rotación:', err.message);
+    console.error('\n❌ Error en rotación:', (err as Error).message);
     process.exit(1);
   })
   .finally(() => pool.end());

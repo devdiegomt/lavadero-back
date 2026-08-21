@@ -5,9 +5,9 @@
  * Este usuario NO pertenece a ningún tenant.
  * Tiene acceso a /api/superadmin/* exclusivamente.
  */
-require('dotenv').config();
-const bcrypt = require('bcryptjs');
-const { pool } = require('./index');
+import 'dotenv/config';
+import bcrypt from 'bcryptjs';
+import { pool } from './index';
 
 async function seedSuperAdmin() {
   const email = process.env.SUPER_ADMIN_EMAIL || 'superadmin@carwash-saas.com';
@@ -40,7 +40,7 @@ async function seedSuperAdmin() {
     console.log(`   🔐 Password: ${password}`);
     console.log('   ⚠️  Cambia la contraseña en producción!');
   } catch (err) {
-    console.error('❌ Error:', err.message);
+    console.error('❌ Error:', (err as Error).message);
     process.exit(1);
   } finally {
     await pool.end();

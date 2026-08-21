@@ -11,8 +11,8 @@
  *   - payments: ya tiene los campos invoice_* (creados en migrate.js original)
  */
 
-require('dotenv').config();
-const { pool } = require('./index');
+import 'dotenv/config';
+import { pool } from './index';
 
 const migration = `
 -- ============================================================================
@@ -75,7 +75,7 @@ async function migrate() {
     console.log('   📋 Tablas creadas: billing_sync, billing_errors');
     console.log('   📋 La tabla payments ya tiene campos invoice_*');
   } catch (err) {
-    console.error('❌ Error en migración:', err.message);
+    console.error('❌ Error en migración:', (err as Error).message);
     process.exit(1);
   } finally {
     await pool.end();

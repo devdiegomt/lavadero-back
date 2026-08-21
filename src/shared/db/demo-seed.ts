@@ -5,8 +5,8 @@
  *
  * Usa esto DESPUÉS de npm run db:seed (que crea el tenant, users, services, etc.)
  */
-require('dotenv').config();
-const { pool } = require('./index');
+import 'dotenv/config';
+import { pool } from './index';
 
 const TENANT_ID = 'a0000000-0000-0000-0000-000000000001';
 const ADMIN_ID = 'b0000000-0000-0000-0000-000000000001';
@@ -65,7 +65,7 @@ async function demoSeed() {
       const { rows } = await pool.query(
         `INSERT INTO customers (tenant_id, first_name, last_name, phone, document_type, document_number)
          VALUES ($1, $2, $3, $4, 'CC', $5)
-         ON CONFLICT ON CONSTRAINT uq_customers_phone_skip DO NOTHING
+         ON CONFLICT DO NOTHING
          RETURNING id`,
         [TENANT_ID, c.fn, c.ln, c.phone, c.doc]
       );
@@ -105,7 +105,7 @@ async function demoSeed() {
     }
 
     // Helper to get price
-    function getPrice(service, vehicleType) {
+    function getPrice(service: Record<string, number>, vehicleType: string): number {
       return service[`price_${vehicleType}`] || service.price_sedan;
     }
 
@@ -169,7 +169,9 @@ async function demoSeed() {
       if (!veh) continue;
       const price = getPrice(svc, veh.vehicle_type);
 
-      let startedAt = null, completedAt = null, deliveredAt = null;
+      let startedAt: string | null = null,
+        completedAt: string | null = null,
+        deliveredAt: string | null = null;
       if (['in_progress', 'done', 'delivered'].includes(apt.status)) {
         startedAt = `${today} ${apt.time}:00`;
       }
@@ -181,7 +183,9 @@ async function demoSeed() {
         d.setMinutes(d.getMinutes() + mins);
         completedAt = d.toISOString();
       }
-      if (apt.status === 'delivered') {
+      // El bloque anterior ya asigno completedAt para 'delivered'; el guard
+      // solo se lo hace explicito a TypeScript.
+      if (apt.status === 'delivered' && completedAt) {
         const d = new Date(completedAt);
         d.setMinutes(d.getMinutes() + 5);
         deliveredAt = d.toISOString();
@@ -264,10 +268,7 @@ async function demoSeed() {
     console.log(`   🔐 Login: admin@elbrillante.co / admin123\n`);
 
   } catch (err) {
-    console.error('❌ Error:', err.message);
-    if (err.message.includes('uq_customers_phone_skip')) {
-      console.log('💡 Tip: La constraint no existe. Los customers se crearán normalmente.');
-    }
+    console.error('❌ Error:', (err as Error).message);
     console.error(err);
     process.exit(1);
   } finally {

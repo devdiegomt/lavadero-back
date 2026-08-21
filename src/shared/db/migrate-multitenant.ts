@@ -2,8 +2,8 @@
  * Migración Fase 5: Multi-tenant — Planes, límites y super admin.
  * Ejecutar: node src/shared/db/migrate-multitenant.js
  */
-require('dotenv').config();
-const { pool } = require('./index');
+import 'dotenv/config';
+import { pool } from './index';
 
 const migration = `
 -- ============================================================================
@@ -88,7 +88,7 @@ async function migrate() {
     console.log('   📋 Tabla tenant_usage para conteo mensual');
     console.log('   📋 Tabla onboarding_log para tracking');
   } catch (err) {
-    console.error('❌ Error:', err.message);
+    console.error('❌ Error:', (err as Error).message);
     process.exit(1);
   } finally {
     await pool.end();

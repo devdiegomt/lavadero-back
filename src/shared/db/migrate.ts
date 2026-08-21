@@ -5,8 +5,8 @@
  * NOTA: Esto es suficiente para un solo dev. Si luego necesitas migraciones
  * incrementales, agrega una librería como node-pg-migrate. No antes.
  */
-require('dotenv').config();
-const { pool } = require('./index');
+import 'dotenv/config';
+import { pool } from './index';
 
 const migration = `
 -- Extensiones
@@ -309,7 +309,7 @@ async function migrate() {
     await pool.query(migration);
     console.log('✅ Migración completada exitosamente');
   } catch (err) {
-    console.error('❌ Error en migración:', err.message);
+    console.error('❌ Error en migración:', (err as Error).message);
     process.exit(1);
   } finally {
     await pool.end();
