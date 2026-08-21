@@ -2,6 +2,10 @@ import type { Request, Response } from 'express';
 import * as db from '../../shared/db';
 import type { ServiceRow } from '../../types/entities';
 
+// vehicles.vehicle_type: determina cuál columna price_* aplica.
+const VEHICLE_TYPES = ['sedan', 'suv', 'camioneta', 'moto', 'pickup'] as const;
+type VehicleType = (typeof VEHICLE_TYPES)[number];
+
 // ─── GET /api/wa-bridge/appointment-status?plate=XXX ─────────────────────────
 
 export async function getAppointmentStatus(req: Request, res: Response): Promise<void> {
@@ -91,9 +95,9 @@ export async function getCustomerHistory(req: Request, res: Response): Promise<v
 // ─── POST /api/wa-bridge/book ─────────────────────────────────────────────────
 
 export async function bookAppointment(req: Request, res: Response): Promise<void> {
-  const { phone, customerName, plate, brand, model, color, serviceId, scheduledAt } =
+  const { phone, customerName, plate, vehicleType, brand, model, color, serviceId, scheduledAt } =
     req.body as {
-      phone: string; customerName?: string; plate: string;
+      phone: string; customerName?: string; plate: string; vehicleType?: string;
       brand?: string; model?: string; color?: string;
       serviceId: string; scheduledAt: string;
     };
@@ -113,9 +117,27 @@ export async function bookAppointment(req: Request, res: Response): Promise<void
     scheduledDate = scheduledAt;
   }
 
+  const type = VEHICLE_TYPES.includes(vehicleType as VehicleType)
+    ? (vehicleType as VehicleType)
+    : 'sedan';
+
   const client = await db.getClient();
   try {
     await client.query('BEGIN');
+
+    // appointments.price es NOT NULL: sin esto todos los turnos quedan en 0.
+    // El precio depende del tipo de vehículo (price_sedan, price_suv, ...).
+    const { rows: svc } = await client.query<Record<string, number>>(
+      `SELECT price_sedan, price_suv, price_camioneta, price_moto, price_pickup
+       FROM services WHERE id = $1 AND tenant_id = $2 AND is_active = true LIMIT 1`,
+      [serviceId, req.tenantId],
+    );
+    if (!svc[0]) {
+      await client.query('ROLLBACK');
+      res.status(404).json({ error: 'Servicio no encontrado' });
+      return;
+    }
+    const price = svc[0][`price_${type}`] ?? svc[0].price_sedan ?? 0;
 
     // Upsert cliente
     const { rows: existing } = await client.query<{ id: string }>(
@@ -144,18 +166,18 @@ export async function bookAppointment(req: Request, res: Response): Promise<void
       vehicleId = existingVeh[0].id;
     } else {
       const { rows: newVeh } = await client.query<{ id: string }>(
-        `INSERT INTO vehicles (tenant_id, customer_id, plate, brand, model, color) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-        [req.tenantId, customerId, plate.toUpperCase(), brand ?? null, model ?? null, color ?? null],
+        `INSERT INTO vehicles (tenant_id, customer_id, plate, vehicle_type, brand, model, color) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+        [req.tenantId, customerId, plate.toUpperCase(), type, brand ?? null, model ?? null, color ?? null],
       );
       vehicleId = newVeh[0].id;
     }
 
     // Crear turno
     const { rows: appt } = await client.query<{ id: string; status: string; scheduled_date: string; scheduled_time: string | null }>(
-      `INSERT INTO appointments (tenant_id, customer_id, vehicle_id, service_id, scheduled_date, scheduled_time, status, source)
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending', 'whatsapp')
-       RETURNING id, status, scheduled_date, scheduled_time`,
-      [req.tenantId, customerId, vehicleId, serviceId, scheduledDate, scheduledTime],
+      `INSERT INTO appointments (tenant_id, customer_id, vehicle_id, service_id, scheduled_date, scheduled_time, price, status, source)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', 'whatsapp')
+       RETURNING id, status, scheduled_date, scheduled_time, price`,
+      [req.tenantId, customerId, vehicleId, serviceId, scheduledDate, scheduledTime, price],
     );
 
     await client.query('COMMIT');
@@ -174,8 +196,8 @@ export async function bookAppointment(req: Request, res: Response): Promise<void
 type MessageDirection = 'inbound' | 'outbound' | 'system';
 
 export async function logMessage(req: Request, res: Response): Promise<void> {
-  const { phone, direction, content, flowStep } = req.body as {
-    phone: string; direction: string; content: string; flowStep?: string;
+  const { phone, direction, content, flowStep, messageId } = req.body as {
+    phone: string; direction: string; content: string; flowStep?: string; messageId?: string;
   };
 
   if (!phone || !direction || !content) {
@@ -189,10 +211,25 @@ export async function logMessage(req: Request, res: Response): Promise<void> {
     return;
   }
 
+  // phone es VARCHAR(20): un valor más largo reventaría en la BD con un 500.
+  if (String(phone).length > 20) {
+    res.status(400).json({ error: 'phone excede 20 caracteres' });
+    return;
+  }
+
+  // messageId va a external_id: permite rastrear la fila hasta el mensaje
+  // concreto de WhatsApp. flow_step guarda el intent detectado.
   await db.query(
-    `INSERT INTO whatsapp_messages (tenant_id, phone, direction, message_type, content, flow_step)
-     VALUES ($1, $2, $3, 'text', $4, $5)`,
-    [req.tenantId, phone, direction, String(content).substring(0, 2_000), flowStep ?? null],
+    `INSERT INTO whatsapp_messages (tenant_id, phone, direction, message_type, content, flow_step, external_id)
+     VALUES ($1, $2, $3, 'text', $4, $5, $6)`,
+    [
+      req.tenantId,
+      phone,
+      direction,
+      String(content).substring(0, 2_000),
+      flowStep ? String(flowStep).substring(0, 50) : null,
+      messageId ? String(messageId).substring(0, 100) : null,
+    ],
   );
   res.status(201).json({ ok: true });
 }

@@ -144,6 +144,9 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       BACKEND_URL: http://backend:3000
       N8N_API_KEY: ${N8N_API_KEY}
+      # Permite leer variables de entorno desde expresiones ({{ $env.X }}).
+      # Sin esto n8n las devuelve como undefined en los nodos.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       EXECUTIONS_DATA_PRUNE: "true"
       EXECUTIONS_DATA_MAX_AGE: 336
       GENERIC_TIMEZONE: ${TIMEZONE:-America/Bogota}

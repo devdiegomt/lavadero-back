@@ -19,6 +19,8 @@ import onboardingRoutes  from './modules/onboarding/onboarding.routes';
 import superadminRoutes  from './modules/superadmin/superadmin.routes';
 import billingRoutes     from './modules/billing/billing.routes';
 import waBridgeRoutes    from './modules/whatsapp/wa-bridge.routes';
+import { initBooking }   from './modules/whatsapp/wa-bridge.booking';
+import Redis             from 'ioredis';
 
 import logger, { httpLogger } from './shared/utils/logger';
 import { errorHandler } from './shared/middleware/errorHandler';
@@ -104,6 +106,20 @@ if (process.env.NODE_ENV !== 'test') {
   });
 
   initCronJobs();
+
+  // Redis guarda el avance de las conversaciones de agendamiento por WhatsApp.
+  // Va dentro de este guard para no dejar una conexión abierta durante los
+  // tests. Si falta, el resto de la API sigue igual y solo agendar da 503.
+  if (process.env.REDIS_URL) {
+    const redis = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: 2 });
+    redis.on('error', (err: Error) =>
+      logger.error({ err: err.message }, 'Redis: error de conexión'),
+    );
+    redis.on('connect', () => logger.info('Redis conectado'));
+    initBooking(redis);
+  } else {
+    logger.warn('REDIS_URL no configurado: el agendamiento por WhatsApp queda deshabilitado');
+  }
 }
 
 export default app;

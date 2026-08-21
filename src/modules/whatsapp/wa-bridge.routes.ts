@@ -6,6 +6,7 @@ import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import * as db from '../../shared/db';
+import { bookingStep } from './wa-bridge.booking';
 import * as ctrl from './wa-bridge.controller';
 
 const router = Router();
@@ -72,6 +73,7 @@ router.get('/appointment-status', ctrl.getAppointmentStatus);
 router.get('/services',           ctrl.getServices);
 router.get('/customer-history',   ctrl.getCustomerHistory);
 router.post('/book',              ctrl.bookAppointment);
+router.post('/booking-step',      bookingStep);
 router.post('/log',               ctrl.logMessage);
 
 export default router;
