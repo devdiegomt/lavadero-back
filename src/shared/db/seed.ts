@@ -2,9 +2,9 @@
  * Seed de datos de prueba.
  * Ejecutar: npm run db:seed
  */
-require('dotenv').config();
-const bcrypt = require('bcryptjs');
-const { pool } = require('./index');
+import 'dotenv/config';
+import bcrypt from 'bcryptjs';
+import { pool } from './index';
 
 async function seed() {
   console.log('🌱 Insertando datos de prueba...');
@@ -93,7 +93,7 @@ async function seed() {
     console.log('   🧑 5 clientes');
     console.log('   🚗 6 vehículos');
   } catch (err) {
-    console.error('❌ Error en seed:', err.message);
+    console.error('❌ Error en seed:', (err as Error).message);
     process.exit(1);
   } finally {
     await pool.end();

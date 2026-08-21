@@ -8,8 +8,8 @@
  *   UPDATE tenants SET billing_api_key = '<output>' WHERE id = '<tenant>';
  */
 
-require('dotenv').config();
-const { encrypt } = require('../utils/crypto');
+import 'dotenv/config';
+import { encrypt } from '../utils/crypto';
 
 const value = process.argv[2];
 if (!value) {
@@ -21,6 +21,6 @@ try {
   const ciphertext = encrypt(value);
   console.log(ciphertext);
 } catch (err) {
-  console.error('❌ Error:', err.message);
+  console.error('❌ Error:', (err as Error).message);
   process.exit(1);
 }

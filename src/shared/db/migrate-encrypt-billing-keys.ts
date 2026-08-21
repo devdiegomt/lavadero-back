@@ -11,9 +11,9 @@
  * misma ENCRYPTION_KEY. Guárdala en un lugar seguro.
  */
 
-require('dotenv').config();
-const { pool } = require('./index');
-const { encrypt, isEncrypted } = require('../utils/crypto');
+import 'dotenv/config';
+import { pool } from './index';
+import { encrypt, isEncrypted } from '../utils/crypto';
 
 async function migrate() {
   console.log('🔐 Migrando billing_api_key a formato cifrado...');
@@ -50,7 +50,7 @@ async function migrate() {
 
 migrate()
   .catch(err => {
-    console.error('❌ Error en migración:', err.message);
+    console.error('❌ Error en migración:', (err as Error).message);
     process.exit(1);
   })
   .finally(() => pool.end());
