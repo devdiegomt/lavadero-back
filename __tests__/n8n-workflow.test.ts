@@ -20,6 +20,7 @@ import Redis from 'ioredis';
 import app from '../src/index';
 import * as db from '../src/shared/db';
 import { initBooking } from '../src/modules/whatsapp/wa-bridge.booking';
+import { fijarHoraDelTenantEnLaManana } from './helpers/tenant-clock';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { runWorkflow, claude } = require('./helpers/n8n-runner');
@@ -59,6 +60,7 @@ beforeAll(async () => {
     `UPDATE tenants SET whatsapp_phone = $1, is_active = true WHERE slug = 'el-brillante'`,
     [TENANT],
   );
+  await fijarHoraDelTenantEnLaManana();
   await redis.flushdb();
   await new Promise<void>((ok) => { server = app.listen(PORT, ok); });
 });

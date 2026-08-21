@@ -11,6 +11,7 @@ import Redis from 'ioredis';
 import app from '../src/index';
 import * as db from '../src/shared/db';
 import { initBooking } from '../src/modules/whatsapp/wa-bridge.booking';
+import { fijarHoraDelTenantEnLaManana } from './helpers/tenant-clock';
 
 const API_KEY = process.env.N8N_API_KEY as string;
 const TENANT_PHONE = '+573223772019';
@@ -32,6 +33,7 @@ beforeAll(async () => {
      WHERE slug = 'el-brillante'`,
     [TENANT_PHONE],
   );
+  await fijarHoraDelTenantEnLaManana();
   await redis.flushdb();
 });
 
