@@ -40,4 +40,6 @@ export interface BotState {
   status: BotStatus;
   qrCode?: string;
   lastConnected?: string;
+  /** Numero con el que quedo vinculada la sesion, en E.164. */
+  linkedPhone?: string | null;
 }

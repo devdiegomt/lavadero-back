@@ -36,6 +36,9 @@ export function startHealthServer(port: number, state: BotState): void {
       // Si esta esperando escaneo, avisar sin volcar el QR entero.
       qrPending: Boolean(state.qrCode),
       lastConnected: state.lastConnected ?? null,
+      // Comparar con TENANT_PHONE: si difieren, el backend no resuelve el tenant.
+      linkedPhone: state.linkedPhone ?? null,
+      tenantPhone: process.env.TENANT_PHONE ?? null,
       // Para distinguir "el codigo es viejo" de "el bot esta mal".
       build: BUILD,
       startedAt: ARRANQUE,
