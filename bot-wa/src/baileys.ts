@@ -138,7 +138,30 @@ export async function startBaileys(state: BotState): Promise<void> {
       state.status = 'connected';
       state.lastConnected = new Date().toISOString();
       state.qrCode = undefined;
-      logger.info('WhatsApp conectado correctamente');
+
+      // El numero con el que quedo vinculada la sesion. Se compara con
+      // TENANT_PHONE porque ese es el que viaja en cada mensaje y el que el
+      // backend usa para resolver el tenant: si no coinciden, todas las
+      // consultas responden "Tenant no encontrado" y el error apunta al
+      // backend, no a la configuracion del bot.
+      const vinculado = phoneFromJid(sock?.user?.id);
+      state.linkedPhone = vinculado;
+
+      if (vinculado && TENANT_PHONE && vinculado !== TENANT_PHONE) {
+        logger.error(
+          { vinculado, tenantPhone: TENANT_PHONE },
+          'TENANT_PHONE no coincide con el numero vinculado. El backend va a ' +
+          'responder "Tenant no encontrado" a todo. Corrige TENANT_PHONE en el ' +
+          '.env y actualiza tenants.whatsapp_phone con ese mismo valor.'
+        );
+      } else if (!TENANT_PHONE) {
+        logger.warn(
+          { vinculado },
+          'TENANT_PHONE vacio: el backend no va a poder resolver el tenant.'
+        );
+      } else {
+        logger.info({ vinculado }, 'WhatsApp conectado correctamente');
+      }
     }
     if (connection === 'close') {
       state.connected = false;

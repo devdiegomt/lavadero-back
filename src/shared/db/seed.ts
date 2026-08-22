@@ -26,8 +26,8 @@ async function seed() {
     // Tenant de prueba
     const tenantId = 'a0000000-0000-0000-0000-000000000001';
     await pool.query(`
-      INSERT INTO tenants (id, name, slug, nit, owner_name, phone, email, address, city, bays_count)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      INSERT INTO tenants (id, name, slug, nit, owner_name, phone, email, address, city, bays_count, whatsapp_phone, whatsapp_enabled)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
     `, [
       tenantId,
       'Lavadero El Brillante',
@@ -39,6 +39,11 @@ async function seed() {
       'Cra 15 #45-67, Local 101',
       'Bogotá',
       3,
+      // El bridge resuelve el tenant por este numero. Sin esto, cada db:reset
+      // deja el WhatsApp respondiendo "Tenant no encontrado" hasta que alguien
+      // recuerda actualizarlo a mano.
+      process.env.TENANT_PHONE ?? null,
+      Boolean(process.env.TENANT_PHONE),
     ]);
 
     // Usuarios
@@ -92,6 +97,12 @@ async function seed() {
     console.log('   🧽 5 servicios');
     console.log('   🧑 5 clientes');
     console.log('   🚗 6 vehículos');
+    if (process.env.TENANT_PHONE) {
+      console.log(`   📱 WhatsApp del tenant: ${process.env.TENANT_PHONE}`);
+    } else {
+      console.log('   ⚠️  TENANT_PHONE no está en el .env: el bridge de WhatsApp');
+      console.log('      responderá "Tenant no encontrado" hasta que lo configures.');
+    }
   } catch (err) {
     console.error('❌ Error en seed:', (err as Error).message);
     process.exit(1);
