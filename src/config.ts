@@ -119,7 +119,20 @@ const envSchema = z.object({
 // Parse y salida en caso de error
 // ─────────────────────────────────────────────────────────────────────────────
 
-const result = envSchema.safeParse(process.env);
+/**
+ * Una variable vacía cuenta como no definida.
+ *
+ * En docker-compose, `VAR: ${VAR:-}` no deja la variable sin definir: la
+ * define como string vacío. Zod entonces ve un valor presente, `.optional()`
+ * no aplica y el formato se valida contra '' — SENTRY_DSN='' fallaba como
+ * "Invalid url" y tumbaba el arranque del backend por una variable que
+ * justamente es opcional. Lo mismo haría cualquier default con `''`.
+ */
+const envSinVacios = Object.fromEntries(
+  Object.entries(process.env).filter(([, v]) => v !== ''),
+);
+
+const result = envSchema.safeParse(envSinVacios);
 
 if (!result.success) {
   // eslint-disable-next-line no-console
