@@ -22,6 +22,13 @@ async function main(): Promise<void> {
   // Arrancar health check primero (Docker necesita el endpoint)
   startHealthServer(PORT, state);
 
+  // Deja constancia en el log de que capacidades trae esta build, para poder
+  // descartar de un vistazo que el contenedor este corriendo una imagen vieja.
+  console.log(
+    '[bot-wa] build con: resolucion-telefono, diagnostico-lid, ' +
+    'fallback-sin-n8n, recuperacion-logout'
+  );
+
   // Conectar a WhatsApp
   await startBaileys(state);
 }
