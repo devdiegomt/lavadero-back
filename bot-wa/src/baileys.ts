@@ -19,6 +19,11 @@ import type { BotState, IncomingMessage } from './types';
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 
 const TENANT_PHONE = process.env.TENANT_PHONE || '';
+
+/** Lo que se responde cuando n8n no devuelve nada utilizable. */
+const FALLBACK_REPLY =
+  'Uy, se me enredaron los cables 😅\n\nNo pude procesar tu mensaje. ' +
+  '¿Lo intentas de nuevo en un momento?';
 const AUTH_DIR = process.env.AUTH_DIR || './auth';
 
 let sock: WASocket | null = null;
@@ -276,9 +281,13 @@ async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
 
   if (response?.reply) {
     await sendMessage(replyJid, response.reply);
-  } else {
-    logger.warn({ from: phone }, 'n8n no retorno respuesta');
+    return;
   }
+
+  // Que n8n falle no puede traducirse en silencio: del otro lado hay una
+  // persona esperando, y quedarse sin respuesta es peor que una disculpa.
+  logger.warn({ from: phone, replyJid }, 'n8n no retorno respuesta; enviando fallback');
+  await sendMessage(replyJid, FALLBACK_REPLY);
 }
 
 export async function sendMessage(jid: string, text: string): Promise<void> {
