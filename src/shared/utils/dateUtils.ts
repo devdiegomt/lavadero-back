@@ -58,6 +58,33 @@ export function getDateInTimezone(timezone: string): string {
 }
 
 /**
+ * Hora actual en una timezone, como minutos desde medianoche.
+ *
+ * Necesario para comparar contra horarios de atención: el servidor corre en
+ * UTC y usar su reloj descarta turnos que en la zona del lavadero todavía no
+ * pasaron (y al revés, ofrece turnos vencidos después del cierre).
+ *
+ * @returns minutos desde las 00:00 en esa timezone (ej: 14:30 → 870)
+ */
+export function getMinutesOfDayInTimezone(timezone: string): number {
+  try {
+    const hhmm = new Intl.DateTimeFormat('en-GB', {
+      timeZone: timezone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date());
+    const [h, m] = hhmm.split(':').map(Number);
+    return h * 60 + m;
+  } catch {
+    // Fallback manual para Colombia (UTC-5)
+    const now = new Date();
+    const utcMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+    return (utcMin - 5 * 60 + 24 * 60) % (24 * 60);
+  }
+}
+
+/**
  * Formatea centavos COP sin depender del locale del servidor.
  * Funciona en Docker Alpine donde `toLocaleString` puede fallar.
  * @returns '$25.000'

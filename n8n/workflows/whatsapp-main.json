@@ -251,24 +251,26 @@
       "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": false,
+            "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "loose"
+            "typeValidation": "loose",
+            "version": 2
           },
           "conditions": [
             {
               "id": "plate-check",
-              "leftValue": "={{ $json.entities && $json.entities.plate ? $json.entities.plate : '' }}",
+              "leftValue": "={{ $json.entities?.plate || '' }}",
               "rightValue": "",
               "operator": {
                 "type": "string",
-                "operation": "notEquals",
-                "name": "filter.operator.notEquals"
+                "operation": "notEmpty",
+                "singleValue": true
               }
             }
           ],
           "combinator": "and"
-        }
+        },
+        "options": {}
       }
     },
     {
@@ -312,7 +314,11 @@
         "options": {
           "timeout": 10000
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
     },
     {
       "id": "node-008-fmt-status",
@@ -324,7 +330,7 @@
         260
       ],
       "parameters": {
-        "jsCode": "const data = $input.item.json;\nconst plate = $('Parsear Intencion').item.json.entities.plate;\n\nif (!data.found) {\n  return { reply: 'No encontré un turno activo para la placa *' + plate + '*.\\n\\n¿Quieres agendar uno? Escríbeme y te ayudo. 😊' };\n}\n\nconst a = data.appointment;\n\n// Estados reales del esquema: pending, in_progress, done, delivered, cancelled.\n// Solo llegan aca los tres primeros.\nconst statusMap = {\n  pending: '⏳ En espera',\n  in_progress: '🚿 En lavado',\n  done: '✅ Listo para recoger',\n};\nconst statusText = statusMap[a.status] || a.status;\n\nconst vehiculo = [a.brand, a.model].filter(Boolean).join(' ');\n\n// scheduled_time es TIME ('14:30:00') y puede venir null.\nlet cuando = new Date(a.scheduled_date).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });\nif (a.scheduled_time) {\n  cuando += ' a las ' + String(a.scheduled_time).slice(0, 5);\n}\n\nreturn {\n  reply: '🚗 *Estado de tu vehículo*\\n\\n' +\n    'Placa: *' + a.plate + '*\\n' +\n    (vehiculo ? 'Vehículo: ' + vehiculo + '\\n' : '') +\n    'Servicio: ' + a.service_name + '\\n' +\n    'Estado: ' + statusText + '\\n' +\n    'Fecha: ' + cuando +\n    (a.staff_name ? '\\nResponsable: ' + a.staff_name : '') +\n    '\\n\\n¿Necesitas algo más? 😊'\n};"
+        "jsCode": "const data = $input.item.json;\n// El nodo HTTP dejo pasar el error en vez de cortar el flujo.\nif (data.error) {\n  return { reply: 'No pude consultar esa información en este momento 😕\\n\\n¿Lo intentas de nuevo en un ratito?' };\n}\n\nconst plate = $('Parsear Intencion').item.json.entities.plate;\n\nif (!data.found) {\n  return { reply: 'No encontré un turno activo para la placa *' + plate + '*.\\n\\n¿Quieres agendar uno? Escríbeme y te ayudo. 😊' };\n}\n\nconst a = data.appointment;\n\n// Estados reales del esquema: pending, in_progress, done, delivered, cancelled.\n// Solo llegan aca los tres primeros.\nconst statusMap = {\n  pending: '⏳ En espera',\n  in_progress: '🚿 En lavado',\n  done: '✅ Listo para recoger',\n};\nconst statusText = statusMap[a.status] || a.status;\n\nconst vehiculo = [a.brand, a.model].filter(Boolean).join(' ');\n\n// scheduled_time es TIME ('14:30:00') y puede venir null.\nlet cuando = new Date(a.scheduled_date).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });\nif (a.scheduled_time) {\n  cuando += ' a las ' + String(a.scheduled_time).slice(0, 5);\n}\n\nreturn {\n  reply: '🚗 *Estado de tu vehículo*\\n\\n' +\n    'Placa: *' + a.plate + '*\\n' +\n    (vehiculo ? 'Vehículo: ' + vehiculo + '\\n' : '') +\n    'Servicio: ' + a.service_name + '\\n' +\n    'Estado: ' + statusText + '\\n' +\n    'Fecha: ' + cuando +\n    (a.staff_name ? '\\nResponsable: ' + a.staff_name : '') +\n    '\\n\\n¿Necesitas algo más? 😊'\n};"
       }
     },
     {
@@ -355,7 +361,11 @@
         "options": {
           "timeout": 10000
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
     },
     {
       "id": "node-010-fmt-services",
@@ -367,7 +377,7 @@
         400
       ],
       "parameters": {
-        "jsCode": "const data = $input.item.json;\n\nif (!data.services || data.services.length === 0) {\n  return { reply: 'Todavía no tenemos servicios cargados. Escríbenos y te contamos. 😊' };\n}\n\n// Los precios se guardan en centavos y varian por tipo de vehiculo.\n// Como no sabemos que vehiculo tiene el cliente, se muestra el mas bajo.\nconst cop = (centavos) => '$' + Math.round(centavos / 100).toLocaleString('es-CO');\n\nconst list = data.services.map((s) => {\n  const precios = [s.price_sedan, s.price_suv, s.price_camioneta, s.price_moto, s.price_pickup]\n    .map(Number)\n    .filter((p) => p > 0);\n  const desde = precios.length ? 'desde ' + cop(Math.min(...precios)) : 'Consultar';\n  const dur = s.estimated_minutes ? ' (~' + s.estimated_minutes + ' min)' : '';\n  const desc = s.description ? '\\n  ' + s.description : '';\n  return '• *' + s.name + '*' + dur + '\\n  💰 ' + desde + desc;\n}).join('\\n\\n');\n\nreturn { reply: '🚿 *Nuestros servicios:*\\n\\n' + list + '\\n\\nEl precio final depende del tipo de vehículo.\\n\\n¿Agendamos alguno? 😊' };"
+        "jsCode": "const data = $input.item.json;\n\n// El nodo HTTP dejo pasar el error en vez de cortar el flujo.\nif (data.error) {\n  return { reply: 'No pude consultar esa información en este momento 😕\\n\\n¿Lo intentas de nuevo en un ratito?' };\n}\n\nif (!data.services || data.services.length === 0) {\n  return { reply: 'Todavía no tenemos servicios cargados. Escríbenos y te contamos. 😊' };\n}\n\n// Los precios se guardan en centavos y varian por tipo de vehiculo.\n// Como no sabemos que vehiculo tiene el cliente, se muestra el mas bajo.\nconst cop = (centavos) => '$' + Math.round(centavos / 100).toLocaleString('es-CO');\n\nconst list = data.services.map((s) => {\n  const precios = [s.price_sedan, s.price_suv, s.price_camioneta, s.price_moto, s.price_pickup]\n    .map(Number)\n    .filter((p) => p > 0);\n  const desde = precios.length ? 'desde ' + cop(Math.min(...precios)) : 'Consultar';\n  const dur = s.estimated_minutes ? ' (~' + s.estimated_minutes + ' min)' : '';\n  const desc = s.description ? '\\n  ' + s.description : '';\n  return '• *' + s.name + '*' + dur + '\\n  💰 ' + desde + desc;\n}).join('\\n\\n');\n\nreturn { reply: '🚿 *Nuestros servicios:*\\n\\n' + list + '\\n\\nEl precio final depende del tipo de vehículo.\\n\\n¿Agendamos alguno? 😊' };"
       }
     },
     {
@@ -382,9 +392,10 @@
       "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": false,
+            "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "loose"
+            "typeValidation": "loose",
+            "version": 2
           },
           "conditions": [
             {
@@ -393,13 +404,14 @@
               "rightValue": "",
               "operator": {
                 "type": "string",
-                "operation": "notEquals",
-                "name": "filter.operator.notEquals"
+                "operation": "notEmpty",
+                "singleValue": true
               }
             }
           ],
           "combinator": "and"
-        }
+        },
+        "options": {}
       }
     },
     {
@@ -443,7 +455,11 @@
         "options": {
           "timeout": 10000
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
     },
     {
       "id": "node-012-fmt-history",
@@ -455,7 +471,7 @@
         600
       ],
       "parameters": {
-        "jsCode": "const data = $input.item.json;\n\nif (!data.found) {\n  return { reply: 'No encontré visitas anteriores con tu número. ¿Es tu primera vez? ¡Bienvenido! 🎉\\n\\n¿Agendamos tu primer turno?' };\n}\n\nconst { customer, history } = data;\n\nif (!history || history.length === 0) {\n  return { reply: 'Hola *' + customer.name + '*! Aún no tienes visitas registradas. ¿Agendamos tu primer turno? 🚗' };\n}\n\n// appointments.price esta en centavos.\nconst cop = (centavos) => '$' + Math.round(Number(centavos) / 100).toLocaleString('es-CO');\n\nconst list = history.map((h) => {\n  const fecha = new Date(h.scheduled_date).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: '2-digit' });\n  const precio = Number(h.price) > 0 ? ' — ' + cop(h.price) : '';\n  return '• ' + fecha + ': *' + h.plate + '* — ' + h.service_name + precio;\n}).join('\\n');\n\nreturn {\n  reply: '📋 *Historial de ' + customer.name + '*\\n' +\n    'Visitas totales: ' + customer.visit_count + '\\n\\n' +\n    'Últimas visitas:\\n' + list + '\\n\\n¿Agendamos una nueva? 😊'\n};"
+        "jsCode": "const data = $input.item.json;\n\n// El nodo HTTP dejo pasar el error en vez de cortar el flujo.\nif (data.error) {\n  return { reply: 'No pude consultar esa información en este momento 😕\\n\\n¿Lo intentas de nuevo en un ratito?' };\n}\n\nif (!data.found) {\n  return { reply: 'No encontré visitas anteriores con tu número. ¿Es tu primera vez? ¡Bienvenido! 🎉\\n\\n¿Agendamos tu primer turno?' };\n}\n\nconst { customer, history } = data;\n\nif (!history || history.length === 0) {\n  return { reply: 'Hola *' + customer.name + '*! Aún no tienes visitas registradas. ¿Agendamos tu primer turno? 🚗' };\n}\n\n// appointments.price esta en centavos.\nconst cop = (centavos) => '$' + Math.round(Number(centavos) / 100).toLocaleString('es-CO');\n\nconst list = history.map((h) => {\n  const fecha = new Date(h.scheduled_date).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: '2-digit' });\n  const precio = Number(h.price) > 0 ? ' — ' + cop(h.price) : '';\n  return '• ' + fecha + ': *' + h.plate + '* — ' + h.service_name + precio;\n}).join('\\n');\n\nreturn {\n  reply: '📋 *Historial de ' + customer.name + '*\\n' +\n    'Visitas totales: ' + customer.visit_count + '\\n\\n' +\n    'Últimas visitas:\\n' + list + '\\n\\n¿Agendamos una nueva? 😊'\n};"
       }
     },
     {
@@ -601,24 +617,26 @@
       "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": false,
+            "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "loose"
+            "typeValidation": "loose",
+            "version": 2
           },
           "conditions": [
             {
               "id": "is-active",
-              "leftValue": "={{ $json.active === true && !!$json.reply }}",
-              "rightValue": true,
+              "leftValue": "={{ $json.active === true ? ($json.reply || '') : '' }}",
+              "rightValue": "",
               "operator": {
-                "type": "boolean",
-                "operation": "true",
+                "type": "string",
+                "operation": "notEmpty",
                 "singleValue": true
               }
             }
           ],
           "combinator": "and"
-        }
+        },
+        "options": {}
       }
     },
     {

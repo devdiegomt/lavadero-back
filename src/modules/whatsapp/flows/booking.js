@@ -10,7 +10,12 @@
 
 const db = require('../../../shared/db');
 const { getServicePrice, formatCOP } = require('../../../shared/utils/pricing');
-const { getTenantToday } = require('../../../shared/utils/dateUtils');
+const {
+  getTenantToday,
+  getTenantTimezone,
+  getDateInTimezone,
+  getMinutesOfDayInTimezone,
+} = require('../../../shared/utils/dateUtils');
 
 /**
  * Genera slots disponibles para un tenant en una fecha dada.
@@ -44,19 +49,20 @@ async function getAvailableSlots(tenantId, date, estimatedMinutes) {
   const closeMin = parseInt(closing_time.split(':')[1] || '0');
 
   const slots = [];
-  const now = new Date();
-  const isToday = date === now.toISOString().split('T')[0];
+
+  // Comparar contra la hora del lavadero, no la del servidor (que corre en
+  // UTC): usar el reloj del servidor descarta turnos que localmente todavia
+  // no pasaron, y despues del cierre ofrece turnos ya vencidos.
+  const tz = await getTenantTimezone(tenantId);
+  const isToday = date === getDateInTimezone(tz);
+  const ahoraMin = getMinutesOfDayInTimezone(tz);
 
   for (let h = openHour; h < closeHour || (h === closeHour && 0 < closeMin); h++) {
     for (let m of [0, 30]) {
       if (h === closeHour && m >= closeMin) break;
 
-      // Si es hoy, saltar slots que ya pasaron (+ 30 min buffer)
-      if (isToday) {
-        const slotTime = new Date();
-        slotTime.setHours(h, m, 0, 0);
-        if (slotTime <= new Date(now.getTime() + 30 * 60000)) continue;
-      }
+      // Si es hoy, saltar slots que ya pasaron (+ 30 min de margen)
+      if (isToday && h * 60 + m <= ahoraMin + 30) continue;
 
       // Contar cuántas bahías están ocupadas en este slot
       const slotStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;

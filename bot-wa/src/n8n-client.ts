@@ -33,7 +33,24 @@ export async function forwardToN8n(
       return response.data;
     }
 
-    logger.warn({ data: response.data }, 'n8n respondio sin campo reply');
+    // Cuerpo vacio con 200: el workflow murio antes del nodo que responde.
+    // Sin el status y el content-type no hay forma de distinguir eso de un
+    // workflow que respondio bien pero con otra forma.
+    logger.warn(
+      {
+        status: response.status,
+        contentType: response.headers?.['content-type'],
+        dataType: typeof response.data,
+        // El tipo declarado es N8nResponse, pero cuando el workflow muere
+        // antes de responder llega un string vacio: hay que mirarlo como
+        // unknown para poder registrarlo.
+        data: ((): unknown => {
+          const d: unknown = response.data;
+          return typeof d === 'string' ? d.slice(0, 300) : d;
+        })(),
+      },
+      'n8n respondio sin campo reply'
+    );
     return null;
   } catch (err) {
     const error = err as AxiosError;

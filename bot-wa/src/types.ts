@@ -18,8 +18,20 @@ export interface N8nResponse {
   reply: string;
 }
 
+/**
+ * En que punto del ciclo de vinculacion esta el bot. Se expone en /health
+ * para poder diagnosticar sin entrar a leer los logs del contenedor.
+ */
+export type BotStatus =
+  | 'starting'
+  | 'awaiting_qr'
+  | 'connected'
+  | 'reconnecting'
+  | 'logged_out';
+
 export interface BotState {
   connected: boolean;
+  status: BotStatus;
   qrCode?: string;
   lastConnected?: string;
 }

@@ -10,6 +10,7 @@ import {
   WAMessageKey,
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
+import { promises as fs } from 'fs';
 import qrcode from 'qrcode-terminal';
 import pino from 'pino';
 import { forwardToN8n } from './n8n-client';
@@ -18,9 +19,17 @@ import type { BotState, IncomingMessage } from './types';
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 
 const TENANT_PHONE = process.env.TENANT_PHONE || '';
+
+/** Lo que se responde cuando n8n no devuelve nada utilizable. */
+const FALLBACK_REPLY =
+  'Uy, se me enredaron los cables 😅\n\nNo pude procesar tu mensaje. ' +
+  '¿Lo intentas de nuevo en un momento?';
 const AUTH_DIR = process.env.AUTH_DIR || './auth';
 
 let sock: WASocket | null = null;
+
+/** Cuando se borraron las credenciales por ultima vez, para no entrar en bucle. */
+let clearedAuthAt: number | null = null;
 
 /**
  * Mapa de LID (@lid) → JID real (@s.whatsapp.net).
@@ -120,11 +129,13 @@ export async function startBaileys(state: BotState): Promise<void> {
     const { connection, lastDisconnect, qr } = update;
     if (qr) {
       state.qrCode = qr;
+      state.status = 'awaiting_qr';
       qrcode.generate(qr, { small: true });
       logger.info('QR generado — escanea con WhatsApp para conectar');
     }
     if (connection === 'open') {
       state.connected = true;
+      state.status = 'connected';
       state.lastConnected = new Date().toISOString();
       state.qrCode = undefined;
       logger.info('WhatsApp conectado correctamente');
@@ -132,13 +143,43 @@ export async function startBaileys(state: BotState): Promise<void> {
     if (connection === 'close') {
       state.connected = false;
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-      logger.warn({ statusCode, shouldReconnect }, 'Conexion cerrada');
-      if (shouldReconnect) {
+      const loggedOut = statusCode === DisconnectReason.loggedOut;
+      logger.warn({ statusCode, loggedOut }, 'Conexion cerrada');
+
+      if (!loggedOut) {
+        state.status = 'reconnecting';
         const delay = parseInt(process.env.RECONNECT_INTERVAL_MS || '5000', 10);
         setTimeout(() => startBaileys(state), delay);
-      } else {
-        logger.error('Sesion cerrada (loggedOut). Elimina auth/ y reinicia.');
+        return;
+      }
+
+      // 401/loggedOut: WhatsApp invalido las credenciales de forma permanente.
+      // Ya no sirven para nada, asi que se borran y se pide un QR nuevo en vez
+      // de quedarse muerto esperando que alguien entre a borrar el volumen.
+      state.status = 'logged_out';
+
+      if (clearedAuthAt && Date.now() - clearedAuthAt < 60_000) {
+        // Se limpio hace nada y volvio a pasar: algo mas esta mal y reintentar
+        // solo generaria un bucle de QRs.
+        logger.error(
+          'Sesion cerrada otra vez tras limpiar credenciales. Se detiene el reintento; ' +
+          'revisa que el numero no este vinculado en otro lugar.'
+        );
+        return;
+      }
+
+      try {
+        await fs.rm(AUTH_DIR, { recursive: true, force: true });
+        await fs.mkdir(AUTH_DIR, { recursive: true });
+        clearedAuthAt = Date.now();
+        state.status = 'awaiting_qr';
+        logger.warn('Credenciales invalidas: se borraron. Generando QR nuevo para vincular.');
+        setTimeout(() => startBaileys(state), 1_000);
+      } catch (err) {
+        logger.error(
+          { err: (err as Error).message, authDir: AUTH_DIR },
+          'No se pudieron borrar las credenciales. Borra el volumen a mano y reinicia.'
+        );
       }
     }
   });
@@ -196,8 +237,23 @@ async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
   const phone = resolveCustomerPhone(key);
 
   if (!phone) {
+    // Volcar que trae realmente la key: si WhatsApp manda el telefono bajo
+    // otro nombre, aca se ve. Sin esto solo sabemos que senderPn vino vacio,
+    // no si existe alguna otra via.
+    const camposKey: Record<string, unknown> = {};
+    for (const k of Object.keys(key)) {
+      const v = (key as Record<string, unknown>)[k];
+      if (v !== null && v !== undefined) camposKey[k] = v;
+    }
     logger.warn(
-      { jid, replyJid },
+      {
+        jid,
+        replyJid,
+        camposKey,
+        lidMapSize: lidToJid.size,
+        // pushName es lo unico que identifica al cliente cuando no hay telefono
+        pushName: msg.pushName ?? null,
+      },
       'No se pudo resolver el telefono real; las consultas por cliente se omitiran'
     );
   }
@@ -225,9 +281,13 @@ async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
 
   if (response?.reply) {
     await sendMessage(replyJid, response.reply);
-  } else {
-    logger.warn({ from: phone }, 'n8n no retorno respuesta');
+    return;
   }
+
+  // Que n8n falle no puede traducirse en silencio: del otro lado hay una
+  // persona esperando, y quedarse sin respuesta es peor que una disculpa.
+  logger.warn({ from: phone, replyJid }, 'n8n no retorno respuesta; enviando fallback');
+  await sendMessage(replyJid, FALLBACK_REPLY);
 }
 
 export async function sendMessage(jid: string, text: string): Promise<void> {
