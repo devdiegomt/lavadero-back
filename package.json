@@ -12,7 +12,7 @@
     "db:migrate": "ts-node --transpile-only -r dotenv/config src/shared/db/migrate.ts",
     "db:migrate-billing": "ts-node --transpile-only -r dotenv/config src/shared/db/migrate-billing.ts",
     "db:migrate-mt": "ts-node --transpile-only -r dotenv/config src/shared/db/migrate-multitenant.ts",
-    "db:migrate-all": "npm run db:migrate && npm run db:migrate-billing && npm run db:migrate-mt",
+    "db:migrate-all": "npm run db:migrate && npm run db:migrate-billing && npm run db:migrate-mt && npm run db:migrate-wa-lid",
     "db:seed-superadmin": "ts-node --transpile-only -r dotenv/config src/shared/db/seed-superadmin.ts",
     "db:seed": "ts-node --transpile-only -r dotenv/config src/shared/db/seed.ts",
     "db:reset": "npm run db:migrate-all && npm run db:seed",
@@ -25,9 +25,11 @@
     "db:migrate:prod": "node dist/src/shared/db/migrate.js",
     "db:migrate-billing:prod": "node dist/src/shared/db/migrate-billing.js",
     "db:migrate-mt:prod": "node dist/src/shared/db/migrate-multitenant.js",
-    "db:migrate-all:prod": "npm run db:migrate:prod && npm run db:migrate-billing:prod && npm run db:migrate-mt:prod",
+    "db:migrate-all:prod": "npm run db:migrate:prod && npm run db:migrate-billing:prod && npm run db:migrate-mt:prod && npm run db:migrate-wa-lid:prod",
     "db:seed:prod": "node dist/src/shared/db/seed.js",
-    "db:seed-superadmin:prod": "node dist/src/shared/db/seed-superadmin.js"
+    "db:seed-superadmin:prod": "node dist/src/shared/db/seed-superadmin.js",
+    "db:migrate-wa-lid": "ts-node --transpile-only -r dotenv/config src/shared/db/migrate-wa-lid.ts",
+    "db:migrate-wa-lid:prod": "node dist/src/shared/db/migrate-wa-lid.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -7,6 +7,12 @@ export interface IncomingMessage {
   phone: string | null;
   /** JID de WhatsApp al que se responde (puede ser @s.whatsapp.net o @lid) */
   jid: string;
+  /**
+   * LID de WhatsApp del cliente (ej: 16733343588585@lid), o null si el chat
+   * usa el formato antiguo con numero. Es el identificador estable cuando no
+   * hay telefono: WhatsApp multi-device no lo entrega.
+   */
+  waLid: string | null;
   message: string;
   tenantPhone: string;
   timestamp: string;

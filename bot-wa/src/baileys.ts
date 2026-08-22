@@ -267,6 +267,8 @@ async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
 
   const incoming: IncomingMessage = {
     phone,
+    // Identificador estable cuando no hay telefono.
+    waLid: jid.endsWith('@lid') ? jid : null,
     jid: replyJid,
     message: text.trim().substring(0, 1000),
     tenantPhone: TENANT_PHONE,
