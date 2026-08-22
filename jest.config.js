@@ -5,6 +5,11 @@ module.exports = {
 
   testTimeout: 15000,
 
+  // Cargar .env antes de cada suite. Sin esto solo funcionan los tests que
+  // importan src/index (que hace el require de dotenv de refilon); los que
+  // prueban un modulo suelto se conectan al 5432 por defecto y fallan.
+  setupFiles: ['dotenv/config'],
+
   // Las suites de integración comparten una sola Postgres y un solo Redis.
   // En paralelo se pisan: el flushdb() del beforeAll de una borra la sesión de
   // agendamiento que otra tiene a mitad de conversación, y las aserciones

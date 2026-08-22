@@ -10,7 +10,7 @@
  * de vehículo y alta de clientes nuevos— y guarda el avance en Redis.
  *
  *   POST /api/wa-bridge/booking-step
- *   Body: { phone, message, start }
+ *   Body: { waLid | phone, message, start }
  *
  *   start:true  arranca el flujo (lo dispara el intent book_appointment).
  *   start:false continúa una conversación en curso; si no hay ninguna
@@ -20,6 +20,7 @@
 import type { Request, Response } from 'express';
 import type { Redis } from 'ioredis';
 import * as db from '../../shared/db';
+import { leerIdentidad, tieneIdentidad, claveSesion } from './wa-identity';
 
 // flows/booking.js y session.js siguen en JS (allowJs está activo).
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -44,9 +45,9 @@ interface FlowResult {
 }
 
 interface SessionStore {
-  get(tenantId: string, phone: string): Promise<BookingSession | null>;
-  set(tenantId: string, phone: string, session: BookingSession): Promise<void>;
-  delete(tenantId: string, phone: string): Promise<void>;
+  get(tenantId: string, clave: string): Promise<BookingSession | null>;
+  set(tenantId: string, clave: string, session: BookingSession): Promise<void>;
+  delete(tenantId: string, clave: string): Promise<void>;
 }
 
 let sessionManager: SessionStore | null = null;
@@ -60,15 +61,17 @@ export function initBooking(redis: Redis): void {
 const CANCEL_WORDS = ['0', 'menu', 'menú', 'cancelar', 'salir'];
 
 export async function bookingStep(req: Request, res: Response): Promise<void> {
-  const { phone, message, start } = req.body as {
-    phone?: string; message?: string; start?: boolean;
-  };
+  const { message, start } = req.body as { message?: string; start?: boolean };
   const tenantId = req.tenantId as string;
 
-  if (!phone) {
-    res.status(400).json({ error: 'phone es requerido' });
+  // WhatsApp no entrega el telefono: el LID es lo que identifica al cliente
+  // entre mensajes, y por eso es tambien la clave de la sesion.
+  const identidad = leerIdentidad(req.body as Record<string, unknown>);
+  if (!tieneIdentidad(identidad)) {
+    res.status(400).json({ error: 'Se requiere waLid o phone' });
     return;
   }
+  const clave = claveSesion(identidad);
 
   // Sin Redis no hay forma de recordar el paso: mejor decirlo que fallar raro.
   if (!sessionManager) {
@@ -77,7 +80,7 @@ export async function bookingStep(req: Request, res: Response): Promise<void> {
   }
 
   const text = String(message ?? '').trim();
-  const session = await sessionManager.get(tenantId, phone);
+  const session = await sessionManager.get(tenantId, clave);
 
   // Nada que continuar: que n8n siga con la detección de intención.
   if (!session && !start) {
@@ -87,7 +90,7 @@ export async function bookingStep(req: Request, res: Response): Promise<void> {
 
   // Salir del flujo en cualquier paso.
   if (session && CANCEL_WORDS.includes(text.toLowerCase())) {
-    await sessionManager.delete(tenantId, phone);
+    await sessionManager.delete(tenantId, clave);
     res.json({
       active: true,
       done: true,
@@ -111,7 +114,8 @@ export async function bookingStep(req: Request, res: Response): Promise<void> {
   try {
     const result: FlowResult = await bookingFlow.handle({
       text,
-      phone,
+      phone: identidad.phone,
+      waLid: identidad.waLid,
       tenant: tenants[0],
       // En el arranque no hay sesión: step 'init' pide la placa.
       session: session ?? { flow: 'booking', step: 'init', data: {}, retries: 0 },
@@ -119,7 +123,7 @@ export async function bookingStep(req: Request, res: Response): Promise<void> {
 
     // nextFlow null significa que el flujo terminó (agendado o cancelado).
     if (result.nextFlow) {
-      await sessionManager.set(tenantId, phone, {
+      await sessionManager.set(tenantId, clave, {
         flow: result.nextFlow,
         step: result.nextStep as string,
         data: result.data ?? {},
@@ -127,7 +131,7 @@ export async function bookingStep(req: Request, res: Response): Promise<void> {
         createdAt: session?.createdAt ?? new Date().toISOString(),
       });
     } else {
-      await sessionManager.delete(tenantId, phone);
+      await sessionManager.delete(tenantId, clave);
     }
 
     res.json({
@@ -139,7 +143,7 @@ export async function bookingStep(req: Request, res: Response): Promise<void> {
   } catch (err) {
     // Un error a mitad del flujo dejaría la sesión en un paso irrecuperable.
     console.error('[wa-bridge] Error en bookingStep:', (err as Error).message);
-    await sessionManager.delete(tenantId, phone);
+    await sessionManager.delete(tenantId, clave);
     res.status(500).json({
       active: true,
       done: true,

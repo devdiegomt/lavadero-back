@@ -1,6 +1,12 @@
 import type { Request, Response } from 'express';
 import * as db from '../../shared/db';
 import type { ServiceRow } from '../../types/entities';
+import {
+  leerIdentidad,
+  tieneIdentidad,
+  buscarCliente,
+  buscarOCrearCliente,
+} from './wa-identity';
 
 // vehicles.vehicle_type: determina cuál columna price_* aplica.
 const VEHICLE_TYPES = ['sedan', 'suv', 'camioneta', 'moto', 'pickup'] as const;
@@ -52,23 +58,19 @@ export async function getServices(req: Request, res: Response): Promise<void> {
   res.json({ services: rows });
 }
 
-// ─── GET /api/wa-bridge/customer-history?phone=XXX ───────────────────────────
+// ─── GET /api/wa-bridge/customer-history?waLid=XXX | ?phone=XXX ──────────────
+// WhatsApp no entrega el telefono, asi que el identificador habitual es el
+// LID. Se sigue aceptando phone para chats en formato antiguo.
 
 export async function getCustomerHistory(req: Request, res: Response): Promise<void> {
-  const { phone } = req.query as Record<string, string | undefined>;
-  if (!phone) {
-    res.status(400).json({ error: 'phone es requerido' });
+  const identidad = leerIdentidad(req.query as Record<string, unknown>);
+  if (!tieneIdentidad(identidad)) {
+    res.status(400).json({ error: 'Se requiere waLid o phone' });
     return;
   }
 
-  const { rows: customers } = await db.query<{ id: string; first_name: string; last_name: string | null; visit_count: number }>(
-    `SELECT id, first_name, last_name, visit_count FROM customers
-     WHERE tenant_id = $1 AND phone = $2 AND deleted_at IS NULL LIMIT 1`,
-    [req.tenantId, phone.trim()],
-  );
-
-  if (!customers[0]) { res.json({ found: false }); return; }
-  const customer = customers[0];
+  const customer = await buscarCliente(req.tenantId as string, identidad);
+  if (!customer) { res.json({ found: false }); return; }
 
   const { rows: history } = await db.query(
     `SELECT a.id, a.status, a.scheduled_date, a.scheduled_time, a.price,
@@ -95,15 +97,18 @@ export async function getCustomerHistory(req: Request, res: Response): Promise<v
 // ─── POST /api/wa-bridge/book ─────────────────────────────────────────────────
 
 export async function bookAppointment(req: Request, res: Response): Promise<void> {
-  const { phone, customerName, plate, vehicleType, brand, model, color, serviceId, scheduledAt } =
+  const { customerName, plate, vehicleType, brand, model, color, serviceId, scheduledAt } =
     req.body as {
-      phone: string; customerName?: string; plate: string; vehicleType?: string;
+      customerName?: string; plate: string; vehicleType?: string;
       brand?: string; model?: string; color?: string;
       serviceId: string; scheduledAt: string;
     };
 
-  if (!phone || !plate || !serviceId || !scheduledAt) {
-    res.status(400).json({ error: 'phone, plate, serviceId, scheduledAt son requeridos' });
+  const identidad = leerIdentidad(req.body as Record<string, unknown>);
+  if (!tieneIdentidad(identidad) || !plate || !serviceId || !scheduledAt) {
+    res.status(400).json({
+      error: '(waLid o phone), plate, serviceId y scheduledAt son requeridos',
+    });
     return;
   }
 
@@ -139,22 +144,14 @@ export async function bookAppointment(req: Request, res: Response): Promise<void
     }
     const price = svc[0][`price_${type}`] ?? svc[0].price_sedan ?? 0;
 
-    // Upsert cliente
-    const { rows: existing } = await client.query<{ id: string }>(
-      `SELECT id FROM customers WHERE tenant_id = $1 AND phone = $2 AND deleted_at IS NULL LIMIT 1`,
-      [req.tenantId, phone],
+    // Busca por LID, luego por telefono, y crea si no existe. Enlaza el LID
+    // a un cliente que ya estuviera cargado con ese numero.
+    const customerId = await buscarOCrearCliente(
+      req.tenantId as string,
+      identidad,
+      customerName ?? null,
+      client.query.bind(client) as typeof db.query,
     );
-    let customerId: string;
-    if (existing[0]) {
-      customerId = existing[0].id;
-    } else {
-      const parts = (customerName ?? 'Cliente WA').trim().split(' ');
-      const { rows: newCust } = await client.query<{ id: string }>(
-        `INSERT INTO customers (tenant_id, phone, first_name, last_name) VALUES ($1, $2, $3, $4) RETURNING id`,
-        [req.tenantId, phone, parts[0], parts.slice(1).join(' ') || null],
-      );
-      customerId = newCust[0].id;
-    }
 
     // Upsert vehículo
     const { rows: existingVeh } = await client.query<{ id: string }>(
@@ -196,12 +193,15 @@ export async function bookAppointment(req: Request, res: Response): Promise<void
 type MessageDirection = 'inbound' | 'outbound' | 'system';
 
 export async function logMessage(req: Request, res: Response): Promise<void> {
-  const { phone, direction, content, flowStep, messageId } = req.body as {
-    phone: string; direction: string; content: string; flowStep?: string; messageId?: string;
+  const { direction, content, flowStep, messageId } = req.body as {
+    direction: string; content: string; flowStep?: string; messageId?: string;
   };
 
-  if (!phone || !direction || !content) {
-    res.status(400).json({ error: 'phone, direction y content son requeridos' });
+  const identidad = leerIdentidad(req.body as Record<string, unknown>);
+  if (!tieneIdentidad(identidad) || !direction || !content) {
+    res.status(400).json({
+      error: '(waLid o phone), direction y content son requeridos',
+    });
     return;
   }
 
@@ -212,7 +212,7 @@ export async function logMessage(req: Request, res: Response): Promise<void> {
   }
 
   // phone es VARCHAR(20): un valor más largo reventaría en la BD con un 500.
-  if (String(phone).length > 20) {
+  if (identidad.phone && identidad.phone.length > 20) {
     res.status(400).json({ error: 'phone excede 20 caracteres' });
     return;
   }
@@ -220,11 +220,12 @@ export async function logMessage(req: Request, res: Response): Promise<void> {
   // messageId va a external_id: permite rastrear la fila hasta el mensaje
   // concreto de WhatsApp. flow_step guarda el intent detectado.
   await db.query(
-    `INSERT INTO whatsapp_messages (tenant_id, phone, direction, message_type, content, flow_step, external_id)
-     VALUES ($1, $2, $3, 'text', $4, $5, $6)`,
+    `INSERT INTO whatsapp_messages (tenant_id, phone, wa_lid, direction, message_type, content, flow_step, external_id)
+     VALUES ($1, $2, $3, $4, 'text', $5, $6, $7)`,
     [
       req.tenantId,
-      phone,
+      identidad.phone,
+      identidad.waLid ? identidad.waLid.slice(0, 40) : null,
       direction,
       String(content).substring(0, 2_000),
       flowStep ? String(flowStep).substring(0, 50) : null,

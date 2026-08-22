@@ -10,6 +10,7 @@
 
 const db = require('../../../shared/db');
 const { getServicePrice, formatCOP } = require('../../../shared/utils/pricing');
+const { buscarOCrearCliente } = require('../wa-identity');
 const {
   getTenantToday,
   getTenantTimezone,
@@ -224,23 +225,15 @@ async function handle(ctx) {
     try {
       await client.query('BEGIN');
 
-      // Buscar si ya existe cliente por teléfono
-      let customerId;
-      const { rows: existing } = await client.query(
-        'SELECT id FROM customers WHERE phone = $1 AND tenant_id = $2 AND deleted_at IS NULL LIMIT 1',
-        [ctx.phone, tenant.id]
+      // Identificar por LID o telefono: WhatsApp no entrega el numero, asi
+      // que el LID es lo habitual. El helper enlaza el LID a un cliente que
+      // ya estuviera cargado con ese telefono en vez de duplicarlo.
+      const customerId = await buscarOCrearCliente(
+        tenant.id,
+        { phone: ctx.phone ?? null, waLid: ctx.waLid ?? null },
+        [data.firstName, data.lastName].filter(Boolean).join(' '),
+        client.query.bind(client)
       );
-
-      if (existing.length > 0) {
-        customerId = existing[0].id;
-      } else {
-        const { rows: newCust } = await client.query(
-          `INSERT INTO customers (tenant_id, first_name, last_name, phone)
-           VALUES ($1, $2, $3, $4) RETURNING id`,
-          [tenant.id, data.firstName, data.lastName, ctx.phone]
-        );
-        customerId = newCust[0].id;
-      }
 
       // Crear vehículo
       const { rows: newVeh } = await client.query(

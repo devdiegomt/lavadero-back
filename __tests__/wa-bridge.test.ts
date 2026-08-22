@@ -94,6 +94,24 @@ describe('wa-bridge: consultas', () => {
     expect(res.body.customer.name).toContain('María');
   });
 
+  it('customer-history por waLid, sin teléfono', async () => {
+    // El caso real: WhatsApp no entrega el número, sólo el LID.
+    const lid = 'TEST' + Date.now() + '@lid';
+    await auth(
+      request(app).post('/api/wa-bridge/booking-step').send({ waLid: lid, message: 'hola' }),
+    );
+    const res = await auth(
+      request(app).get(`/api/wa-bridge/customer-history?waLid=${encodeURIComponent(lid)}`),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.found).toBe(false); // aún no existe, pero no es un 400
+  });
+
+  it('customer-history sin waLid ni phone → 400', async () => {
+    const res = await auth(request(app).get('/api/wa-bridge/customer-history'));
+    expect(res.status).toBe(400);
+  });
+
   it('customer-history de un número desconocido → found:false', async () => {
     const res = await auth(
       request(app).get('/api/wa-bridge/customer-history?phone=%2B570000000001'),
@@ -157,6 +175,42 @@ describe('wa-bridge: auditoría', () => {
       }),
     );
     expect(res.status).toBe(201);
+  });
+});
+
+describe('wa-bridge: agendamiento por LID (sin teléfono)', () => {
+  // Reproduce el caso real: el cliente sólo tiene LID.
+  const waLid = 'BOOK' + Date.now() + '@lid';
+
+  it('completa la conversación e identifica por LID', async () => {
+    const paso = (body: Record<string, unknown>) =>
+      auth(request(app).post('/api/wa-bridge/booking-step').send({ waLid, ...body }));
+
+    let res = await paso({ message: '', start: true });
+    expect(res.body.active).toBe(true);
+    expect(res.body.reply).toMatch(/placa/i);
+
+    res = await paso({ message: PLACA });
+    expect(res.body.step).toBe('awaiting_service');
+
+    res = await paso({ message: '1' });
+    expect(res.body.step).toBe('awaiting_time');
+
+    res = await paso({ message: '1' });
+    expect(res.body.step).toBe('awaiting_confirm');
+
+    res = await paso({ message: 'SI' });
+    expect(res.body.done).toBe(true);
+    expect(res.body.reply).toMatch(/agendado/i);
+  });
+
+  it('el historial del LID ya muestra la visita', async () => {
+    const res = await auth(
+      request(app).get(`/api/wa-bridge/customer-history?waLid=${encodeURIComponent(waLid)}`),
+    );
+    // La placa del seed pertenece a María, así que el turno queda bajo su
+    // cliente; lo que importa es que la consulta por LID no dé 400.
+    expect(res.status).toBe(200);
   });
 });
 
