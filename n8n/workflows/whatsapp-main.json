@@ -700,7 +700,7 @@
         680
       ],
       "parameters": {
-        "jsCode": "const data = $input.item.json;\n\n// Sin ninguna identidad no se puede guardar la sesion del cliente.\nconst ctx = $('Parsear Intencion').item.json;\nif (!ctx.clientLid && !ctx.clientPhone) {\n  return { reply: '📅 Para agendarte necesito identificarte.\\n\\nEscríbeme la *placa* de tu vehículo y seguimos por ahí. 🚗' };\n}\n\nif (!data.reply) {\n  return { reply: 'No pude iniciar el agendamiento en este momento. ¿Lo intentamos de nuevo? 🙏' };\n}\n\nreturn { reply: data.reply };"
+        "jsCode": "const data = $input.item.json;\nconst ctx = $('Parsear Intencion').item.json;\n\n// Sin ninguna identidad no se puede guardar la sesion del cliente.\nif (!ctx.clientLid && !ctx.clientPhone) {\n  return { reply: '📅 Para agendarte necesito identificarte.\\n\\nEscríbeme la *placa* de tu vehículo y seguimos por ahí. 🚗' };\n}\n\nif (!data.reply) {\n  // Dejar el motivo en el log: al cliente no se le puede mostrar, pero sin\n  // esto hay que adivinar por que fallo el agendamiento.\n  console.log('[agendamiento] el backend no devolvio reply:', JSON.stringify(data).slice(0, 400));\n  return { reply: 'No pude iniciar el agendamiento en este momento. ¿Lo intentamos de nuevo? 🙏' };\n}\n\nreturn { reply: data.reply };\n"
       }
     }
   ],
