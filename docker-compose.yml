@@ -71,8 +71,15 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
+      STRICT_RATE_LIMIT_MAX: ${STRICT_RATE_LIMIT_MAX:-5}
+      # config.ts las exige sin default: si faltan, el contenedor no arranca
+      # y n8n se queda sin poder resolver "backend".
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD}
       N8N_API_KEY: ${N8N_API_KEY}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      SENTRY_DSN: ${SENTRY_DSN:-}
     ports:
       - "3000:3000"
     depends_on:
