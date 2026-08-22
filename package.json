@@ -21,7 +21,13 @@
     "db:rotate-key": "ts-node --transpile-only -r dotenv/config src/shared/db/rotate-encryption-key.ts",
     "encrypt": "ts-node --transpile-only -r dotenv/config src/shared/db/encrypt-value.ts",
     "test": "jest",
-    "test:watch": "jest --watch --detectOpenHandles"
+    "test:watch": "jest --watch --detectOpenHandles",
+    "db:migrate:prod": "node dist/src/shared/db/migrate.js",
+    "db:migrate-billing:prod": "node dist/src/shared/db/migrate-billing.js",
+    "db:migrate-mt:prod": "node dist/src/shared/db/migrate-multitenant.js",
+    "db:migrate-all:prod": "npm run db:migrate:prod && npm run db:migrate-billing:prod && npm run db:migrate-mt:prod",
+    "db:seed:prod": "node dist/src/shared/db/seed.js",
+    "db:seed-superadmin:prod": "node dist/src/shared/db/seed-superadmin.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

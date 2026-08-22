@@ -12,7 +12,7 @@
  * Es un chequeo estático: no levanta Docker ni importa config.ts (que llama
  * a process.exit cuando el entorno no valida).
  */
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 const RAIZ = join(__dirname, '..');
@@ -96,5 +96,45 @@ describe('docker-compose: entorno del backend', () => {
     );
     const sinDocumentar = varsObligatorias().filter((v) => !documentadas.has(v));
     expect({ sinDocumentar }).toEqual({ sinDocumentar: [] });
+  });
+});
+
+describe('Dockerfile: rutas que copia', () => {
+  // Un COPY cuyo glob no matchea ningún archivo rompe el build de BuildKit.
+  // Pasó al migrar src/shared/db a TypeScript: el Dockerfile seguía copiando
+  // *.js y el build sólo funcionaba mientras Docker reusara la capa cacheada.
+  const dockerfiles = [
+    ['backend', 'Dockerfile', RAIZ],
+    ['bot-wa', join('bot-wa', 'Dockerfile'), join(RAIZ, 'bot-wa')],
+  ] as const;
+
+  it.each(dockerfiles)('%s: cada COPY del contexto matchea algo', (_n, ruta, contexto) => {
+    const contenido = readFileSync(join(RAIZ, ruta), 'utf8');
+    const sinCoincidencias: string[] = [];
+
+    for (const linea of contenido.split('\n')) {
+      const t = linea.trim();
+      if (!t.startsWith('COPY ') || t.includes('--from=')) continue;
+
+      // COPY <origen...> <destino>: el último token es el destino.
+      const partes = t.slice(5).trim().split(/\s+/);
+      for (const origen of partes.slice(0, -1)) {
+        // Los que terminan en * son opcionales por convención (package-lock.json*)
+        if (origen.endsWith('*')) continue;
+        const glob = origen.replace(/\/$/, '');
+        if (glob.includes('*')) {
+          const dir = join(contexto, glob.slice(0, glob.lastIndexOf('/')));
+          const patron = glob.slice(glob.lastIndexOf('/') + 1).replace('*', '');
+          let hay = false;
+          try {
+            hay = readdirSync(dir).some((f) => f.endsWith(patron));
+          } catch { hay = false; }
+          if (!hay) sinCoincidencias.push(origen);
+        } else if (!existsSync(join(contexto, glob))) {
+          sinCoincidencias.push(origen);
+        }
+      }
+    }
+    expect({ sinCoincidencias }).toEqual({ sinCoincidencias: [] });
   });
 });
