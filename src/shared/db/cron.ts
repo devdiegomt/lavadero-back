@@ -11,6 +11,7 @@
 
 import * as db from './index';
 import logger from '../utils/logger';
+import { sendAppointmentReminders } from '../../modules/whatsapp/notifications';
 
 /**
  * Limpia refresh tokens expirados o revocados (> 1 día).
@@ -75,6 +76,12 @@ export function initCronJobs(): void {
   setInterval(cleanExpiredTokens,      6 * 60 * 60 * 1_000);    // cada 6h
   setInterval(refreshDailySummary,     15 * 60 * 1_000);         // cada 15 min
   setInterval(cleanOldBillingErrors,   24 * 60 * 60 * 1_000);    // cada 24h
+
+  // Recordatorios de turno. La consulta busca los que caen entre 25 y 35
+  // minutos por delante, asi que hay que pasar por esa ventana: cada 5 min
+  // la cubre con margen. Sin esto la funcion existia pero nunca se ejecutaba,
+  // y el bot prometia un aviso que no llegaba nunca.
+  setInterval(() => { void sendAppointmentReminders(); }, 5 * 60 * 1_000);
 
   // Ejecutar limpieza al inicio
   cleanExpiredTokens();

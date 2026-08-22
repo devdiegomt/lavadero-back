@@ -78,6 +78,10 @@ services:
       SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL}
       SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD}
       N8N_API_KEY: ${N8N_API_KEY}
+      # Para los mensajes que inicia el backend (recordatorios): la sesion de
+      # WhatsApp vive en bot-wa, asi que se le pide a el que envie.
+      BOT_WA_URL: http://bot-wa:3001
+      BOT_WA_SEND_TOKEN: ${BOT_WA_SEND_TOKEN}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SENTRY_DSN: ${SENTRY_DSN:-}
     ports:
@@ -111,6 +115,9 @@ services:
       N8N_WEBHOOK_URL: http://n8n:5678/webhook/whatsapp
       N8N_AUTH_TOKEN: ${N8N_AUTH_TOKEN:-}
       AUTH_DIR: /app/auth
+      # Sin este token el endpoint de envio queda deshabilitado, para que
+      # nadie que alcance el puerto pueda mandar desde el numero del lavadero.
+      BOT_WA_SEND_TOKEN: ${BOT_WA_SEND_TOKEN}
       RECONNECT_INTERVAL_MS: ${RECONNECT_INTERVAL_MS:-5000}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
