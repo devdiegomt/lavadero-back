@@ -232,8 +232,23 @@ async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
   const phone = resolveCustomerPhone(key);
 
   if (!phone) {
+    // Volcar que trae realmente la key: si WhatsApp manda el telefono bajo
+    // otro nombre, aca se ve. Sin esto solo sabemos que senderPn vino vacio,
+    // no si existe alguna otra via.
+    const camposKey: Record<string, unknown> = {};
+    for (const k of Object.keys(key)) {
+      const v = (key as Record<string, unknown>)[k];
+      if (v !== null && v !== undefined) camposKey[k] = v;
+    }
     logger.warn(
-      { jid, replyJid },
+      {
+        jid,
+        replyJid,
+        camposKey,
+        lidMapSize: lidToJid.size,
+        // pushName es lo unico que identifica al cliente cuando no hay telefono
+        pushName: msg.pushName ?? null,
+      },
       'No se pudo resolver el telefono real; las consultas por cliente se omitiran'
     );
   }

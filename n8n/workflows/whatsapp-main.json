@@ -251,24 +251,26 @@
       "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": false,
+            "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "loose"
+            "typeValidation": "loose",
+            "version": 2
           },
           "conditions": [
             {
               "id": "plate-check",
-              "leftValue": "={{ $json.entities && $json.entities.plate ? $json.entities.plate : '' }}",
+              "leftValue": "={{ $json.entities?.plate || '' }}",
               "rightValue": "",
               "operator": {
                 "type": "string",
-                "operation": "notEquals",
-                "name": "filter.operator.notEquals"
+                "operation": "notEmpty",
+                "singleValue": true
               }
             }
           ],
           "combinator": "and"
-        }
+        },
+        "options": {}
       }
     },
     {
@@ -382,9 +384,10 @@
       "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": false,
+            "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "loose"
+            "typeValidation": "loose",
+            "version": 2
           },
           "conditions": [
             {
@@ -393,13 +396,14 @@
               "rightValue": "",
               "operator": {
                 "type": "string",
-                "operation": "notEquals",
-                "name": "filter.operator.notEquals"
+                "operation": "notEmpty",
+                "singleValue": true
               }
             }
           ],
           "combinator": "and"
-        }
+        },
+        "options": {}
       }
     },
     {
@@ -601,24 +605,26 @@
       "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": false,
+            "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "loose"
+            "typeValidation": "loose",
+            "version": 2
           },
           "conditions": [
             {
               "id": "is-active",
-              "leftValue": "={{ $json.active === true && !!$json.reply }}",
-              "rightValue": true,
+              "leftValue": "={{ $json.active === true ? ($json.reply || '') : '' }}",
+              "rightValue": "",
               "operator": {
-                "type": "boolean",
-                "operation": "true",
+                "type": "string",
+                "operation": "notEmpty",
                 "singleValue": true
               }
             }
           ],
           "combinator": "and"
-        }
+        },
+        "options": {}
       }
     },
     {

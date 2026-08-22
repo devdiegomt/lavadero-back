@@ -95,10 +95,16 @@ function runIf(n, ctx) {
   const c = n.parameters.conditions.conditions[0];
   const left = evalExpr(c.leftValue, ctx);
   const op = c.operator;
-  if (op.type === 'boolean') return Boolean(left);
-  if (op.operation === 'notEquals') return left !== c.rightValue;
-  if (op.operation === 'equals') return left === c.rightValue;
-  throw new Error('Operador no soportado: ' + JSON.stringify(op));
+  switch (op.operation) {
+    case 'notEmpty': return left !== '' && left !== null && left !== undefined;
+    case 'empty':    return left === '' || left === null || left === undefined;
+    case 'notEquals': return left !== c.rightValue;
+    case 'equals':   return left === c.rightValue;
+    case 'true':     return Boolean(left);
+    case 'false':    return !left;
+    default:
+      throw new Error('Operador no soportado: ' + JSON.stringify(op));
+  }
 }
 
 function runSwitch(n, ctx) {
