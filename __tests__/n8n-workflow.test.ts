@@ -263,3 +263,56 @@ describe('workflow n8n: backend inalcanzable', () => {
     }
   });
 });
+
+describe('workflow n8n: Claude no disponible', () => {
+  // Lo que pasó de verdad: la cuenta se quedó sin crédito y la API devolvió
+  // 400. Antes eso mandaba TODO al menú de "no entendí", que le hace creer al
+  // cliente que escribió mal cuando en realidad el servicio está caído.
+  const sinCredito = {
+    error: {
+      status: 400,
+      message: '400 - {"type":"error","error":{"type":"invalid_request_error",' +
+        '"message":"Your credit balance is too low to access the Anthropic API."}}',
+    },
+  };
+
+  it('sigue clasificando por palabras clave', async () => {
+    const r: WFResult = await runWorkflow(msg('hola buenas'), sinCredito);
+    expect(r.reply).toMatch(/Bienvenido/);      // greeting, no el menú de unknown
+    expect(r.reply).not.toMatch(/No entend/);
+  });
+
+  it('reconoce precios sin la IA', async () => {
+    const r: WFResult = await runWorkflow(msg('cuanto cuesta un lavado?'), sinCredito);
+    expect(r.reply).toMatch(/servicios/i);
+  });
+
+  it('reconoce al asesor sin la IA', async () => {
+    const r: WFResult = await runWorkflow(msg('quiero hablar con un asesor'), sinCredito);
+    expect(r.reply).toMatch(/asesor/i);
+  });
+
+  it('una placa suelta se toma como consulta de estado', async () => {
+    const r: WFResult = await runWorkflow(msg('ABC123'), sinCredito);
+    const st = backendCalls(r).find((c) => c.url.includes('appointment-status'));
+    expect(st?.url).toContain('plate=ABC123');
+  });
+
+  it('lo que no matchea sí cae en el menú', async () => {
+    const r: WFResult = await runWorkflow(msg('xyzzy qwerty'), sinCredito);
+    expect(r.reply).toMatch(/No entend/);
+  });
+
+  it('la auditoría marca el modo degradado con el prefijo kw:', async () => {
+    const messageId = 'KW-' + Date.now();
+    await runWorkflow(msg('hola', { messageId }), sinCredito);
+
+    const { rows } = await db.query<{ flow_step: string }>(
+      `SELECT DISTINCT flow_step FROM whatsapp_messages WHERE external_id = $1`,
+      [messageId],
+    );
+    expect(rows).toHaveLength(1);
+    // Permite detectar desde la BD que la IA estuvo caída.
+    expect(rows[0].flow_step).toBe('kw:greeting');
+  });
+});
