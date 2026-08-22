@@ -315,15 +315,23 @@ async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
   await sendMessage(replyJid, FALLBACK_REPLY);
 }
 
-export async function sendMessage(jid: string, text: string): Promise<void> {
+/**
+ * Envia un mensaje. Devuelve si salio o no.
+ *
+ * El resultado importa para los mensajes que inicia el backend: si tragara el
+ * error, un recordatorio que nunca llego se reportaria como enviado.
+ */
+export async function sendMessage(jid: string, text: string): Promise<boolean> {
   if (!sock) {
     logger.error('Socket no inicializado');
-    return;
+    return false;
   }
   try {
     await sock.sendMessage(jid, { text });
     logger.info({ to: jid }, 'Mensaje enviado');
+    return true;
   } catch (err) {
     logger.error({ err, jid }, 'Error enviando mensaje');
+    return false;
   }
 }

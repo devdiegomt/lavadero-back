@@ -6,6 +6,7 @@
  */
 
 import * as db from '../../shared/db';
+import { enviarWhatsApp } from './bot-wa.client';
 import { formatCOP } from '../../shared/utils/pricing';
 
 // Interfaz mínima del sender (se actualizará cuando sender.js migre)
@@ -71,11 +72,15 @@ type ReminderRow = AppointmentNotifyRow & {
 
 export async function sendAppointmentReminders(): Promise<void> {
   try {
-    const { rows: appointments } = await db.query<ReminderRow>(
+    // Se envía por bot-wa (Baileys), no por el sender de Twilio: la sesión de
+    // WhatsApp vive en ese proceso. Y se identifica al cliente por wa_lid,
+    // porque WhatsApp no entrega el teléfono y c.phone es NULL para quien
+    // llegó por este canal.
+    const { rows: appointments } = await db.query<ReminderRow & { wa_lid: string | null }>(
       `SELECT a.id, a.scheduled_time, a.tenant_id,
-              c.first_name, c.phone AS customer_phone,
+              c.first_name, c.phone AS customer_phone, c.wa_lid,
               v.plate, s.name AS service_name,
-              t.name AS tenant_name, t.whatsapp_enabled, t.whatsapp_provider, t.whatsapp_phone,
+              t.name AS tenant_name,
               NULL::numeric AS total_amount, NULL AS brand, NULL AS model
        FROM appointments a
        JOIN customers c ON c.id = a.customer_id
@@ -85,46 +90,70 @@ export async function sendAppointmentReminders(): Promise<void> {
        WHERE a.scheduled_date = CURRENT_DATE
          AND a.status = 'pending' AND a.source = 'whatsapp'
          AND a.scheduled_time IS NOT NULL AND t.whatsapp_enabled = true
+         AND (c.wa_lid IS NOT NULL OR c.phone IS NOT NULL)
          AND a.scheduled_time BETWEEN
            (NOW() AT TIME ZONE t.timezone + INTERVAL '25 minutes')::time
            AND (NOW() AT TIME ZONE t.timezone + INTERVAL '35 minutes')::time
+         -- Un solo recordatorio por turno: el cron corre cada pocos minutos y
+         -- la ventana de 10 min lo devolveria varias veces.
          AND NOT EXISTS (
            SELECT 1 FROM whatsapp_messages wm
-           WHERE wm.tenant_id = a.tenant_id AND wm.phone = c.phone
-             AND wm.flow_step = 'notification:reminder' AND wm.created_at > NOW() - INTERVAL '1 hour'
+           WHERE wm.tenant_id = a.tenant_id
+             AND wm.flow_step = 'notification:reminder'
+             AND wm.external_id = 'reminder:' || a.id::text
          )`,
     );
 
+    let enviados = 0;
     for (const appt of appointments) {
-      if (!appt.customer_phone) continue;
+      const destino = appt.wa_lid ?? appt.customer_phone;
+      if (!destino) continue;
+
       const [h, m] = appt.scheduled_time.substring(0, 5).split(':').map(Number);
-      const ampm   = h >= 12 ? 'PM' : 'AM';
-      const h12    = h > 12 ? h - 12 : h === 0 ? 12 : h;
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
       const timeStr = `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
 
       const message =
-        `📋 *Recordatorio de tu cita*\n\n` +
-        `Hola ${appt.first_name}, tienes una cita en *${appt.tenant_name}* hoy a las *${timeStr}*.\n\n` +
+        `⏰ *Recordatorio de tu turno*\n\n` +
+        `Hola ${appt.first_name}, tu turno en *${appt.tenant_name}* es hoy a las *${timeStr}*.\n\n` +
         `Servicio: ${appt.service_name}\nVehículo: ${appt.plate}\n\n` +
-        `Si necesitas cancelar, escribe CANCELAR.\n¡Te esperamos! 🙌`;
+        `¡Te esperamos! 🚗`;
 
-      try {
-        const sender = await createSenderForTenant(appt as unknown as Record<string, unknown>);
-        await sender.sendText(appt.customer_phone, message, appt.tenant_id, 'notification:reminder');
-      } catch (err) {
-        console.error(`[WhatsApp Notifications] Error enviando reminder:`, (err as Error).message);
+      const res = await enviarWhatsApp(destino, message);
+
+      if (!res.enviado) {
+        // No se registra: sin la fila, el proximo ciclo reintenta. Marcarlo
+        // aca daria por notificado algo que nunca llego.
+        console.error(
+          `[Recordatorios] No se pudo avisar del turno ${appt.id}: ${res.motivo}`,
+        );
+        continue;
       }
+
+      // external_id ancla el registro al turno, que es lo que evita duplicados.
+      await db.query(
+        `INSERT INTO whatsapp_messages
+           (tenant_id, phone, wa_lid, direction, message_type, content, flow_step, external_id)
+         VALUES ($1, $2, $3, 'outbound', 'text', $4, 'notification:reminder', $5)`,
+        [
+          appt.tenant_id,
+          appt.customer_phone,
+          appt.wa_lid,
+          message,
+          `reminder:${appt.id}`,
+        ],
+      );
+      enviados++;
     }
 
-    if (appointments.length > 0) {
-      console.log(`[WhatsApp Notifications] Enviados ${appointments.length} recordatorios`);
+    if (enviados > 0) {
+      console.log(`[Recordatorios] Enviados ${enviados} de ${appointments.length}`);
     }
   } catch (err) {
-    console.error('[WhatsApp Notifications] Error en sendAppointmentReminders:', (err as Error).message);
+    console.error('[Recordatorios] Error:', (err as Error).message);
   }
 }
-
-// ─── sendWelcomeMessage ───────────────────────────────────────────────────────
 
 export async function sendWelcomeMessage(phone: string, firstName: string, tenantId: string): Promise<void> {
   try {
