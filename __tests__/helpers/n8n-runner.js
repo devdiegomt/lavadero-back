@@ -79,7 +79,21 @@ async function runHttp(n, ctx) {
     return { __stub: 'claude', ...ctx.claudeStub };
   }
 
-  const res = await fetch(url, { method: n.parameters.method, headers, body });
+  // Un fallo de red (DNS, conexion rechazada, timeout) es un error de nodo en
+  // n8n, igual que un status !=2xx: con onError continueRegularOutput deja
+  // pasar un item de error, y sin el corta el workflow. Modelar solo el status
+  // fue lo que dejo pasar el bug del DNS.
+  let res;
+  try {
+    res = await fetch(url, { method: n.parameters.method, headers, body });
+  } catch (err) {
+    ctx.calls[ctx.calls.length - 1].status = 'ERR';
+    if (n.onError !== 'continueRegularOutput') {
+      throw new Error(`${n.name}: ${err.message}`);
+    }
+    return { error: { message: err.message, name: 'NodeApiError' } };
+  }
+
   const text = await res.text();
   let json;
   try { json = JSON.parse(text); } catch { json = { raw: text }; }

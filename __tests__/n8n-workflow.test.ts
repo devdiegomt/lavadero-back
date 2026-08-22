@@ -203,3 +203,63 @@ describe('workflow n8n: auditoría', () => {
     expect(rows[0].flow_step).toBe('booking');
   });
 });
+
+describe('workflow n8n: backend inalcanzable', () => {
+  // Reproduce el fallo real: n8n no resolvia el DNS del backend y los nodos
+  // de consulta, al no tener onError, mataban el workflow antes de responder.
+  // El cliente no recibia nada.
+  const sinBackend = async (fn: () => Promise<WFResult>): Promise<WFResult> => {
+    const previo = process.env.WF_BACKEND_URL;
+    process.env.WF_BACKEND_URL = 'http://host-que-no-existe.invalid:3000';
+    try {
+      return await fn();
+    } finally {
+      process.env.WF_BACKEND_URL = previo;
+    }
+  };
+
+  it('check_status responde aunque el backend no resuelva', async () => {
+    const r = await sinBackend(() =>
+      runWorkflow(msg('como va ABC123?'), claude('check_status', { plate: 'ABC123' })),
+    );
+    expect(r.reply).toBeTruthy();
+    expect(r.reply).toMatch(/no pude consultar/i);
+  });
+
+  it('list_services responde aunque el backend no resuelva', async () => {
+    const r = await sinBackend(() =>
+      runWorkflow(msg('precios'), claude('list_services')),
+    );
+    expect(r.reply).toBeTruthy();
+    expect(r.reply).toMatch(/no pude consultar/i);
+  });
+
+  it('customer_history responde aunque el backend no resuelva', async () => {
+    const r = await sinBackend(() =>
+      runWorkflow(msg('mis visitas'), claude('customer_history')),
+    );
+    expect(r.reply).toBeTruthy();
+    expect(r.reply).toMatch(/no pude consultar/i);
+  });
+
+  it('ninguna rama deja al cliente sin respuesta', async () => {
+    const intents: [string, string][] = [
+      ['greeting', 'hola'],
+      ['check_status', 'estado ABC123'],
+      ['list_services', 'precios'],
+      ['customer_history', 'mis visitas'],
+      ['book_appointment', 'agendar'],
+      ['human_help', 'asesor'],
+      ['unknown', 'asdf'],
+    ];
+    for (const [intent, texto] of intents) {
+      const r = await sinBackend(() =>
+        runWorkflow(msg(texto), claude(intent, intent === 'check_status' ? { plate: 'ABC123' } : {})),
+      );
+      // Lo que importa no es el texto sino que exista: un reply vacio es
+      // silencio del lado del cliente.
+      expect({ intent, reply: r.reply }).toEqual({ intent, reply: expect.any(String) });
+      expect(r.reply.length).toBeGreaterThan(0);
+    }
+  });
+});
