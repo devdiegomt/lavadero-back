@@ -12,6 +12,6 @@ router.get('/',                   asyncHandler(ctrl.list));
 router.post('/',  authorize('admin'), planLimit('operators'), validate(schemas.userCreate), asyncHandler(ctrl.create));
 router.patch('/:id',              authorize('admin'), asyncHandler(ctrl.update));
 router.patch('/:id/toggle',       authorize('admin'), asyncHandler(ctrl.toggle));
-router.patch('/:id/password',     asyncHandler(ctrl.changePassword));
+router.patch('/:id/password',     validate(schemas.changePassword), asyncHandler(ctrl.changePassword));
 
 export default router;

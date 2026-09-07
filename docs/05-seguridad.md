@@ -9,17 +9,20 @@ la §5 y la §6.
 
 ### Contraseñas
 
-`bcrypt` con **10 rondas** (`users.controller.ts`). Sólo se guarda el hash, en
-`users.password_hash`.
+`bcrypt` con **12 rondas**, el valor recomendado por OWASP. Sólo se guarda el
+hash, en `users.password_hash`.
 
-> ⚠️ 10 rondas está por debajo de lo recomendado hoy (12+). Subirlo es barato
-> y no rompe nada: bcrypt guarda el costo en el propio hash, así que los
-> existentes siguen validando y se re-hashean al próximo cambio de contraseña.
-> Ver §7.
+El costo vive en `shared/utils/password.ts`, no repetido en cada llamada:
+estaba escrito a mano en cinco archivos, y subirlo implicaba encontrarlos
+todos. Un test verifica que no vuelva a dispersarse.
 
-**No hay política de contraseñas** — ni longitud mínima, ni complejidad, ni
-verificación contra listas de contraseñas filtradas. Un usuario puede poner
-`123`.
+Subirlo no invalidó nada: bcrypt guarda el costo dentro del hash, así que los
+de 10 rondas siguen validando. `necesitaRehash()` permite rehashear al vuelo
+cuando alguien inicia sesión con un hash viejo.
+
+**Política de contraseñas:** mínimo 8 caracteres, aplicado en los tres caminos
+que fijan una contraseña — alta de usuario, registro self-service y cambio de
+contraseña. No hay verificación contra listas de contraseñas filtradas.
 
 ### Tokens
 
@@ -59,13 +62,20 @@ router.post('/', authenticate, requireTenant, authorize('admin'), crearServicio)
 | Body limit | 1 MB | Contra cargas grandes |
 | Validación | Zod, en 8 de 14 módulos | Ver brecha en §7 |
 
-### ⚠️ El login no tiene límite propio
+### Límite específico del login
 
-`STRICT_RATE_LIMIT_MAX` está definido en `config.ts` **y nunca se aplica**.
-`POST /api/auth/login` sólo cae bajo el límite global de 100/15min, que es
-holgado para fuerza bruta contra una cuenta conocida.
+`POST /api/auth/login` tiene su propio limitador, además del global:
 
-Es la brecha más concreta de este documento y la más barata de cerrar (§7).
+| Parámetro | Valor | Por qué |
+|---|---|---|
+| Máximo | `STRICT_RATE_LIMIT_MAX` (5 por defecto) | Mucho más estricto que el global |
+| Ventana | `RATE_LIMIT_WINDOW_MS` (15 min) | |
+| Clave | `email\|IP` | Un atacante no evade cambiando de cuenta, ni bloquea a un usuario legítimo desde otra IP |
+| `skipSuccessfulRequests` | `true` | Un login exitoso no consume cupo |
+
+La clave compuesta es la parte que más importa: limitar sólo por IP permitiría
+recorrer cuentas desde una misma dirección, y limitar sólo por email dejaría
+bloquear a cualquiera a voluntad.
 
 ## 3. Aislamiento multi-tenant
 
@@ -199,38 +209,50 @@ trazabilidad se perdería. Vale evaluar si conviene guardar una copia.
 Ordenadas por relación entre riesgo y esfuerzo. Las tres primeras son de una
 tarde.
 
+> **Corrección (2026-09).** Las tres primeras entradas de la versión anterior
+> de esta tabla estaban mal descritas, y conviene dejar constancia:
+>
+> - *"Login sin rate limit propio"* era **falso**. El limitador existía desde
+>   la migración a TypeScript. El error fue de inferencia: se verificó que
+>   `STRICT_RATE_LIMIT_MAX` no se usaba —cierto— y se concluyó que el login
+>   estaba desprotegido, sin abrir `auth.routes.ts`.
+> - *"Sin política de contraseñas"* era **impreciso**. El mínimo de 8
+>   caracteres existía en los esquemas; lo que faltaba era aplicarlo en la ruta
+>   de cambio de contraseña, que no llamaba a `validate`.
+> - *"bcrypt con 10 rondas"* era correcto.
+>
+> Las tres quedaron resueltas. La lección quedó anotada en la
+> [metodología §2](07-metodologia.md): verificar antes de concluir.
+
 | # | Brecha | Riesgo | Esfuerzo |
 |---|---|---|---|
-| 1 | **Login sin rate limit propio** — `STRICT_RATE_LIMIT_MAX` definido y nunca aplicado | Fuerza bruta contra cuentas conocidas | Muy bajo |
-| 2 | **Sin política de contraseñas** — se acepta `123` | Cuentas triviales de adivinar | Muy bajo |
-| 3 | **bcrypt con 10 rondas** | Menor resistencia offline si se filtra la base | Muy bajo |
-| 4 | **Cifrado de credenciales no forzado** — `decryptIfNeeded` acepta texto plano y nada cifra al guardar | Credenciales de facturación en claro sin que nadie lo note | Bajo |
-| 5 | **Validación Zod ausente** en `billing`, `history`, `reports`, `superadmin`, `tenants`, `whatsapp` | Entrada no validada hacia la base | Medio |
-| 6 | **Sin autorización de tratamiento** (Ley 1581) | Incumplimiento legal | Bajo |
-| 7 | **Sin política de retención** | Incumplimiento + crecimiento sin techo | Bajo |
-| 8 | **Tokens en `localStorage`** (frontend) | Un XSS expone la sesión | Alto (implica cookies httpOnly y CSRF) |
-| 9 | **Sin auditoría de acciones** — sólo hay `appointment_status_log` | No se puede reconstruir quién cambió qué | Medio |
-| 10 | **Sin RLS en PostgreSQL** | Una consulta mal escrita cruza tenants | Alto |
-| 11 | **Sin derecho de supresión** (Ley 1581) | Incumplimiento legal | Medio |
+| 1 | **Cifrado de credenciales no forzado** — `decryptIfNeeded` acepta texto plano y nada cifra al guardar | Credenciales de facturación en claro sin que nadie lo note | Bajo |
+| 2 | **Validación Zod ausente** en `billing`, `history`, `reports`, `superadmin`, `tenants`, `whatsapp` | Entrada no validada hacia la base | Medio |
+| 3 | **Sin autorización de tratamiento** (Ley 1581) | Incumplimiento legal | Bajo |
+| 4 | **Sin política de retención** | Incumplimiento + crecimiento sin techo | Bajo |
+| 5 | **Tokens en `localStorage`** (frontend) | Un XSS expone la sesión | Alto (implica cookies httpOnly y CSRF) |
+| 6 | **Sin auditoría de acciones** — sólo hay `appointment_status_log` | No se puede reconstruir quién cambió qué | Medio |
+| 7 | **Sin RLS en PostgreSQL** | Una consulta mal escrita cruza tenants | Alto |
+| 8 | **Sin derecho de supresión** (Ley 1581) | Incumplimiento legal | Medio |
 
 ### Notas sobre algunas
 
-**#4 — cifrado no forzado.** La corrección tiene dos partes: cifrar al
+**#1 — cifrado no forzado.** La corrección tiene dos partes: cifrar al
 escribir (hoy no hay dónde, porque la clave se carga por SQL) y dejar de
 aceptar texto plano en la lectura. Lo segundo es de una línea, pero rompe
 cualquier credencial que hoy esté en claro — conviene migrarlas primero con
 `npm run db:encrypt-billing-keys`.
 
-**#5 — validación.** Los seis módulos sin Zod reciben parámetros que llegan
+**#2 — validación.** Los seis módulos sin Zod reciben parámetros que llegan
 directo a las consultas. Las consultas están parametrizadas, así que no hay
 inyección SQL, pero sí entra basura: fechas inválidas, IDs con formato
 incorrecto, campos ausentes que producen 500 en vez de 400.
 
-**#8 — localStorage.** Es la brecha de mayor riesgo teórico y también la más
+**#5 — localStorage.** Es la brecha de mayor riesgo teórico y también la más
 cara: implica pasar a cookies `httpOnly` + `SameSite`, lo que a su vez obliga a
 protección CSRF. No se recomienda atacarla antes que la 1 a la 6.
 
-**#10 — RLS.** Row Level Security de PostgreSQL convertiría el aislamiento en
+**#7 — RLS.** Row Level Security de PostgreSQL convertiría el aislamiento en
 una garantía del motor en vez de una convención. Es la mitigación correcta a
 largo plazo, pero implica revisar las 78 rutas.
 

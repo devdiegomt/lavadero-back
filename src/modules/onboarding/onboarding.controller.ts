@@ -8,6 +8,7 @@ import { config } from '../../config';
 import type { OnboardingRegisterBody } from '../../shared/middleware/validate';
 import type { JwtPayload } from '../../types/api';
 import type { UserRole } from '../../types/entities';
+import { hashPassword } from '../../shared/utils/password';
 
 // ─── POST /api/onboarding/register (PÚBLICO) ─────────────────────────────────
 
@@ -64,7 +65,7 @@ export async function register(req: Request, res: Response): Promise<void> {
 
     type AdminRow = { id: string; email: string; first_name: string; last_name: string | null; role: UserRole };
 
-    const passwordHash = await bcrypt.hash(adminPassword, 10);
+    const passwordHash = await hashPassword(adminPassword);
     const { rows: userRows } = await client.query<AdminRow>(
       `INSERT INTO users (tenant_id, email, password_hash, first_name, last_name, phone, role)
        VALUES ($1, $2, $3, $4, $5, $6, 'admin')

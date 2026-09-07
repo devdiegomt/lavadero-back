@@ -51,6 +51,10 @@ ciegas ante síntomas mal entendidos. Los casos concretos:
   antes de mirar la ejecución en n8n, que señalaba el nodo exacto.
 - El backend no arrancaba por variables faltantes. El síntoma visible era un
   error de DNS en n8n.
+- La auditoría de seguridad reportó dos brechas que no existían. Se verificó
+  que una variable de configuración no se usaba —cierto— y se concluyó que la
+  protección faltaba, sin abrir el archivo de rutas donde sí estaba
+  implementada. **Comprobar una parte no autoriza a inferir el resto.**
 
 **La regla que sale de ahí:** antes de cambiar código, conseguir el dato que
 distingue entre las causas posibles. Un log, una ejecución, una petición
@@ -76,7 +80,7 @@ El penúltimo punto es el que más se olvida. Documentación que se actualiza
 
 ```bash
 npm run db:reset          # base limpia
-npx jest                  # 85 tests
+npx jest                  # 96 tests
 npx tsc --noEmit          # backend
 cd bot-wa && npm run build # bot
 ```

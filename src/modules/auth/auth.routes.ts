@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import type { Request } from 'express';
+import { config } from '../../config';
 import * as authController from './auth.controller';
 import { authenticate } from '../../shared/middleware/auth';
 import { asyncHandler } from '../../shared/utils/asyncHandler';
@@ -8,9 +9,12 @@ import { validate, schemas } from '../../shared/middleware/validate';
 
 const router = Router();
 
+// El limite y la ventana salen de config para poder ajustarlos sin tocar
+// codigo. STRICT_RATE_LIMIT_MAX existia desde antes y no se usaba en ningun
+// lado: era configuracion muerta que sugeria una proteccion inexistente.
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1_000,
-  max: 10,
+  windowMs: config.RATE_LIMIT_WINDOW_MS,
+  max: config.STRICT_RATE_LIMIT_MAX,
   skipSuccessfulRequests: true,
   keyGenerator: (req: Request): string => {
     const email = (req.body?.email as string | undefined ?? '').toLowerCase().trim();
