@@ -40,6 +40,7 @@ Nomenclatura: `RF-<módulo>-<n>`.
 | RF-CLI-3 | Se busca un vehículo por placa | `GET /api/vehicles/plate/:plate` |
 | RF-CLI-4 | Se consulta el historial de un vehículo o de un cliente | `/api/history/*` |
 | RF-CLI-5 | Un cliente se identifica por teléfono **o** por LID de WhatsApp; debe tener al menos uno | `chk_customers_identidad` |
+| RF-CLI-6 | Un cliente se puede anonimizar conservando sus turnos como historial de negocio | `anonimizarCliente()` |
 
 ### Servicios y precios
 
@@ -72,6 +73,8 @@ Nomenclatura: `RF-<módulo>-<n>`.
 | RF-WA-7 | Cada mensaje entrante y saliente queda auditado | `whatsapp_messages` |
 | RF-WA-8 | Se envía un recordatorio 30 minutos antes del turno | cron cada 5 min |
 | RF-WA-9 | Si la IA no está disponible, se clasifica por palabras clave | prefijo `kw:` |
+| RF-WA-10 | Antes de guardar datos de un cliente nuevo se le pide autorización, y sólo un sí explícito la concede | paso `awaiting_consent` |
+| RF-WA-11 | Si el cliente no autoriza, el flujo termina sin crear nada; se le sigue respondiendo precios y servicios | `consentimiento.ts` |
 
 ### Multi-tenancy
 
@@ -81,6 +84,16 @@ Nomenclatura: `RF-<módulo>-<n>`.
 | RF-MT-2 | Un tenant pertenece a un plan que define sus límites | `plans`, `planLimits.ts` |
 | RF-MT-3 | El super admin administra tenants y planes | `/api/superadmin/*` |
 | RF-MT-4 | Un lavadero se registra por sí mismo | `/api/onboarding/*` |
+
+### Datos personales
+
+| ID | Requerimiento | Dónde |
+|---|---|---|
+| RF-DAT-1 | Queda constancia de cuándo, con qué texto y por qué canal autorizó cada titular | `customers.consent_*` |
+| RF-DAT-2 | Las conversaciones se purgan al vencer el plazo configurado | `purgarMensajesViejos()`, cron 24h |
+| RF-DAT-3 | Los clientes sin actividad se anonimizan al vencer el plazo configurado | `anonimizarClientesInactivos()`, cron 24h |
+| RF-DAT-4 | Los plazos los define el responsable del tratamiento; `0` desactiva la tarea | `DATA_RETENTION_*_MONTHS` |
+| RF-DAT-5 | Se puede contar cuántos clientes quedaron sin autorización registrada | `clientesSinAutorizacion()` |
 
 ## 2. No funcionales
 
@@ -108,7 +121,8 @@ Escritos como criterios verificables. Donde no hay medición, se dice.
 
 Ver [05 · Seguridad](05-seguridad.md). En resumen: contraseñas con bcrypt,
 tokens de vida corta con rotación, aislamiento por tenant, cifrado disponible
-para credenciales de facturación, rate limiting global.
+para credenciales de facturación, rate limiting global, y autorización y
+retención de datos personales según la Ley 1581.
 
 ### Mantenibilidad
 
@@ -117,7 +131,7 @@ para credenciales de facturación, rate limiting global.
 | RNF-MAN-1 | Todo el backend en TypeScript con `strict` | ✅ |
 | RNF-MAN-2 | Los módulos siguen la misma estructura | ✅ 14 módulos, `controller` + `routes` |
 | RNF-MAN-3 | Las decisiones estructurales quedan en un ADR | ✅ Ver `adr/` |
-| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 96 tests |
+| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 115 tests |
 
 ### Compatibilidad
 
@@ -131,7 +145,7 @@ para credenciales de facturación, rate limiting global.
 
 | ID | Requerimiento | Estado |
 |---|---|---|
-| RNF-LEG-1 | Cumplir la Ley 1581 sobre datos personales | ⚠️ Parcial — ver [Seguridad §5](05-seguridad.md#5-datos-personales-ley-1581) |
+| RNF-LEG-1 | Cumplir la Ley 1581 sobre datos personales | ⚠️ Parcial — autorización y retención resueltas; falta exponer acceso y supresión al titular. Ver [Seguridad §5](05-seguridad.md#5-datos-personales-ley-1581) |
 | RNF-LEG-2 | Facturar según las reglas de la DIAN | ✅ Delegado en Alegra |
 | RNF-LEG-3 | Conservar facturas 5 años | ⚠️ Se guarda la referencia, no el documento |
 
@@ -143,6 +157,7 @@ un olvido:
 | Función | Por qué no está |
 |---|---|
 | Cancelar un turno desde WhatsApp | El flujo existe para agendar, no para cancelar. Requiere confirmar identidad antes de dejar cancelar |
+| Consultar y borrar los propios datos desde WhatsApp | Hoy el aviso deriva a *ASESOR* y lo atiende una persona; `anonimizarCliente()` existe pero no está expuesta al titular. Ver [Seguridad §7](05-seguridad.md#7-brechas-abiertas) brecha 11 |
 | Pagos en línea | Hoy se cobra en el local. Habilitarlo trae PCI al alcance |
 | Descuentos y promociones | No hay modelo de datos para reglas de precio |
 | Inventario de insumos | Otro dominio; el sistema es de turnos, no de stock |

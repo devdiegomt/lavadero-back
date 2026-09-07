@@ -87,6 +87,10 @@ services:
       BOT_WA_SEND_TOKEN: ${BOT_WA_SEND_TOKEN}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # Retencion de datos personales (Ley 1581). Los plazos los decide el
+      # responsable del tratamiento; 0 desactiva la tarea.
+      DATA_RETENTION_MESSAGES_MONTHS: ${DATA_RETENTION_MESSAGES_MONTHS:-12}
+      DATA_RETENTION_CUSTOMERS_MONTHS: ${DATA_RETENTION_CUSTOMERS_MONTHS:-0}
     ports:
       - "3000:3000"
     depends_on:

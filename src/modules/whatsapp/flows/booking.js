@@ -5,12 +5,20 @@
  *   init → awaiting_plate → awaiting_service → awaiting_time → awaiting_confirm → done
  * 
  * Sub-flujo si la placa no existe:
- *   awaiting_plate → awaiting_name → awaiting_vehicle_type → (continúa con awaiting_service)
+ *   awaiting_plate → awaiting_name → awaiting_consent → awaiting_vehicle_type
+ *   → (continúa con awaiting_service)
  */
 
 const db = require('../../../shared/db');
 const { getServicePrice, formatCOP } = require('../../../shared/utils/pricing');
 const { buscarOCrearCliente } = require('../wa-identity');
+const {
+  textoAutorizacion,
+  interpretarRespuesta,
+  autorizacionDe,
+  TEXTO_RECHAZO,
+  TEXTO_REPREGUNTA,
+} = require('../consentimiento');
 const {
   getTenantToday,
   getTenantTimezone,
@@ -195,13 +203,52 @@ async function handle(ctx) {
     const firstName = parts[0];
     const lastName = parts.slice(1).join(' ') || null;
 
+    // Autorizacion antes de guardar nada: la Ley 1581 la exige previa, y el
+    // alta del cliente ocurre en el paso siguiente.
     return {
       messages: [
-        `👋 Gracias, *${firstName}*.\n\n¿Qué tipo de vehículo es?\n\n1️⃣ Sedán / Auto\n2️⃣ SUV / Camioneta\n3️⃣ Pickup\n4️⃣ Moto`,
+        `👋 Gracias, *${firstName}*.`,
+        textoAutorizacion(tenant.name),
+      ],
+      nextFlow: 'booking',
+      nextStep: 'awaiting_consent',
+      data: { ...data, firstName, lastName },
+    };
+  }
+
+  // ─── AWAITING CONSENT (nuevo cliente) ───
+  // Sólo un sí explícito autoriza. La ley pide que sea expresa, así que seguir
+  // conversando no cuenta como aceptación.
+  if (step === 'awaiting_consent') {
+    const respuesta = interpretarRespuesta(text);
+
+    if (respuesta === 'rechaza') {
+      return {
+        messages: [TEXTO_RECHAZO],
+        nextFlow: null,
+        nextStep: null,
+        data: {},
+      };
+    }
+
+    if (respuesta === 'ambiguo') {
+      return {
+        messages: [TEXTO_REPREGUNTA],
+        nextFlow: 'booking',
+        nextStep: 'awaiting_consent',
+        data,
+        retry: true,
+      };
+    }
+
+    return {
+      messages: [
+        `✅ Gracias. Ahora, ¿qué tipo de vehículo es?\n\n1️⃣ Sedán / Auto\n2️⃣ SUV / Camioneta\n3️⃣ Pickup\n4️⃣ Moto`,
       ],
       nextFlow: 'booking',
       nextStep: 'awaiting_vehicle_type',
-      data: { ...data, firstName, lastName },
+      // La constancia viaja en la sesión hasta el alta, un paso más adelante.
+      data: { ...data, autorizacion: autorizacionDe('whatsapp') },
     };
   }
 
@@ -232,7 +279,8 @@ async function handle(ctx) {
         tenant.id,
         { phone: ctx.phone ?? null, waLid: ctx.waLid ?? null },
         [data.firstName, data.lastName].filter(Boolean).join(' '),
-        client.query.bind(client)
+        client.query.bind(client),
+        data.autorizacion
       );
 
       // Crear vehículo

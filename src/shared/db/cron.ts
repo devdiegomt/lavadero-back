@@ -12,6 +12,11 @@
 import * as db from './index';
 import logger from '../utils/logger';
 import { sendAppointmentReminders } from '../../modules/whatsapp/notifications';
+import {
+  purgarMensajesViejos,
+  anonimizarClientesInactivos,
+  politicaRetencion,
+} from './retencion';
 
 /**
  * Limpia refresh tokens expirados o revocados (> 1 día).
@@ -83,8 +88,29 @@ export function initCronJobs(): void {
   // y el bot prometia un aviso que no llegaba nunca.
   setInterval(() => { void sendAppointmentReminders(); }, 5 * 60 * 1_000);
 
+  // Retención de datos personales (Ley 1581). Cada 24h alcanza: los plazos se
+  // miden en meses, así que un día de holgura no cambia nada, y correrlo más
+  // seguido sólo agrega DELETEs que no borran nada.
+  setInterval(() => { void purgarMensajesViejos(); },        24 * 60 * 60 * 1_000);
+  setInterval(() => { void anonimizarClientesInactivos(); }, 24 * 60 * 60 * 1_000);
+
   // Ejecutar limpieza al inicio
   cleanExpiredTokens();
+
+  // Se registra al arrancar para que la política vigente quede en el log: si
+  // alguien pregunta cuánto tiempo se guardan las conversaciones, la respuesta
+  // no depende de adivinar qué valor tenía el .env ese día.
+  logger.info(
+    {
+      mensajes: politicaRetencion.mesesMensajes
+        ? `${politicaRetencion.mesesMensajes} meses`
+        : 'sin purga',
+      clientes: politicaRetencion.mesesClientes
+        ? `${politicaRetencion.mesesClientes} meses`
+        : 'sin anonimización automática',
+    },
+    'Política de retención de datos personales',
+  );
 
   logger.info('Cron jobs inicializados');
 }

@@ -10,6 +10,7 @@
  * un cliente cargado desde el panel tiene teléfono pero no LID.
  */
 import * as db from '../../shared/db';
+import type { Autorizacion } from './consentimiento';
 
 export interface IdentidadWa {
   phone: string | null;
@@ -97,6 +98,7 @@ export async function buscarOCrearCliente(
   id: IdentidadWa,
   nombre: string | null,
   ejecutar: typeof db.query = db.query,
+  autorizacion?: Autorizacion,
 ): Promise<string> {
   if (!tieneIdentidad(id)) {
     throw new Error('Se necesita phone o waLid para identificar al cliente');
@@ -129,10 +131,16 @@ export async function buscarOCrearCliente(
     }
   }
 
+  // Alta. Si viene autorizacion se deja constancia de cuando y con que texto:
+  // la Ley 1581 pide poder demostrar que el titular autorizo, no solo
+  // afirmarlo. Sin autorizacion las columnas quedan NULL, y esos clientes son
+  // los que aparecen en el reporte de `clientesSinAutorizacion()`.
   const partes = (nombre ?? 'Cliente WhatsApp').trim().split(/\s+/);
   const { rows } = await ejecutar<{ id: string }>(
-    `INSERT INTO customers (tenant_id, phone, wa_lid, first_name, last_name)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO customers
+       (tenant_id, phone, wa_lid, first_name, last_name,
+        consent_at, consent_version, consent_source)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING id`,
     [
       tenantId,
@@ -140,6 +148,9 @@ export async function buscarOCrearCliente(
       id.waLid,
       partes[0].slice(0, 80),
       partes.slice(1).join(' ').slice(0, 80) || null,
+      autorizacion?.consentAt ?? null,
+      autorizacion?.consentVersion ?? null,
+      autorizacion?.consentSource ?? null,
     ],
   );
   return rows[0].id;
