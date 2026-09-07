@@ -4,6 +4,7 @@ import * as db from '../../shared/db';
 import { AppError } from '../../shared/middleware/errorHandler';
 import type { UserRow } from '../../types/entities';
 import type { UserCreateBody } from '../../shared/middleware/validate';
+import { hashPassword } from '../../shared/utils/password';
 
 type UserPublicRow = Pick<UserRow,
   'id' | 'email' | 'first_name' | 'last_name' | 'phone' | 'role' | 'is_active' | 'last_login_at' | 'created_at'
@@ -38,7 +39,7 @@ export async function create(req: Request, res: Response): Promise<void> {
   const { email, password, firstName, lastName, phone, role } =
     req.body as UserCreateBody;
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await hashPassword(password);
 
   const { rows } = await db.query<UserPublicRow>(
     `INSERT INTO users (tenant_id, email, password_hash, first_name, last_name, phone, role)
@@ -135,7 +136,7 @@ export async function changePassword(req: Request, res: Response): Promise<void>
     if (!valid) throw new AppError('La contraseña actual es incorrecta', 400);
   }
 
-  const passwordHash = await bcrypt.hash(newPassword, 10);
+  const passwordHash = await hashPassword(newPassword);
   await db.query(
     'UPDATE users SET password_hash = $1 WHERE id = $2 AND tenant_id = $3',
     [passwordHash, targetId, req.tenantId],

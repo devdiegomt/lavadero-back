@@ -77,6 +77,9 @@ services:
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL}
       SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD}
+      # Costo de bcrypt. 12 es la recomendacion de OWASP; sólo se baja en
+      # entornos de prueba, donde se nota al crear usuarios.
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
       N8N_API_KEY: ${N8N_API_KEY}
       # Para los mensajes que inicia el backend (recordatorios): la sesion de
       # WhatsApp vive en bot-wa, asi que se le pide a el que envie.

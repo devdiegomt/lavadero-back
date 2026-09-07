@@ -8,6 +8,7 @@
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import { pool } from './index';
+import { hashPassword } from '../utils/password';
 
 async function seedSuperAdmin() {
   const email = process.env.SUPER_ADMIN_EMAIL || 'superadmin@carwash-saas.com';
@@ -27,7 +28,7 @@ async function seedSuperAdmin() {
       return;
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await hashPassword(password);
 
     await pool.query(
       `INSERT INTO users (tenant_id, email, password_hash, first_name, last_name, role)

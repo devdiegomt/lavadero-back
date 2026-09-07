@@ -5,6 +5,7 @@
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import { pool } from './index';
+import { hashPassword } from '../utils/password';
 
 async function seed() {
   console.log('🌱 Insertando datos de prueba...');
@@ -47,7 +48,7 @@ async function seed() {
     ]);
 
     // Usuarios
-    const passwordHash = await bcrypt.hash('admin123', 10);
+    const passwordHash = await hashPassword('admin123');
 
     await pool.query(`
       INSERT INTO users (id, tenant_id, email, password_hash, first_name, last_name, phone, role)
