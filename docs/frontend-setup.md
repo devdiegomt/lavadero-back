@@ -1,4 +1,9 @@
-# Carwash SaaS — Frontend
+# Guía de setup del frontend
+
+> Este archivo documenta el repositorio **lavadero-front**, no el backend.
+> Vivía como `docs/OPS.md`, un nombre que sugería operaciones. Se conserva acá
+> porque es la única copia; lo correcto sería moverlo al repo del frontend.
+
 
 PWA para gestión operativa de lavaderos de autos en Colombia. Diseñado mobile-first para que los operadores la usen desde un celular sin instalación.
 

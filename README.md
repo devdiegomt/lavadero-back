@@ -6,6 +6,9 @@ API REST multi-tenant para gestión de lavaderos de autos en Colombia. Incluye f
 
 ---
 
+> **¿Buscás documentación de arquitectura, seguridad o estándares?**
+> Está en [`docs/`](docs/). Este README cubre el setup y la operación.
+
 ## Índice
 
 1. [Arquitectura](#arquitectura)
@@ -46,7 +49,11 @@ API REST multi-tenant para gestión de lavaderos de autos en Colombia. Incluye f
                        └───────────┘
 ```
 
-**Módulos** (`src/modules/`): `auth`, `tenants`, `customers`, `vehicles`, `services`, `appointments`, `payments`, `billing`, `reports`, `history`, `users`, `onboarding`, `superadmin`, `whatsapp`. Cada uno con `*.controller.js` + `*.routes.js`.
+**Módulos** (`src/modules/`): `auth`, `tenants`, `customers`, `vehicles`, `services`, `appointments`, `payments`, `billing`, `reports`, `history`, `users`, `onboarding`, `superadmin`, `whatsapp`. Cada uno con `*.controller.ts` + `*.routes.ts`.
+
+Para el detalle —por qué es un monolito modular, cómo se reparte el trabajo
+entre las piezas y qué decisiones se tomaron— ver
+[docs/01-arquitectura.md](docs/01-arquitectura.md).
 
 **Multi-tenancy**: cada query incluye `WHERE tenant_id = $1`. El middleware `requireTenant` inyecta `req.tenantId` desde el JWT. El `super_admin` no tiene `tenant_id` y opera vía endpoints `/superadmin/*`.
 
