@@ -132,10 +132,12 @@ Ver `.env.example` para la lista completa. Las críticas:
 ```bash
 npm run dev                       # Servidor con auto-reload
 npm run start                     # Servidor en producción
-npm run db:migrate-all            # Corre las 3 migraciones (base + billing + multitenant)
+npm run db:migrate-all            # Corre todas las migraciones, en orden
 npm run db:migrate                # Solo migración base
 npm run db:migrate-billing        # Solo migración billing
 npm run db:migrate-mt             # Solo migración multi-tenant
+npm run db:migrate-wa-lid         # Solo identidad por LID de WhatsApp
+npm run db:migrate-consent        # Solo consentimiento y retención (Ley 1581)
 npm run db:seed                   # Datos demo
 npm run db:seed-superadmin        # Crea el super_admin global
 npm run db:demo                   # Seed + datos de demo más amplios

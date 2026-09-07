@@ -74,14 +74,15 @@ ver [ADR-0007](adr/0007-zona-horaria-del-tenant.md).
 `whatsapp_phone` es lo que usa el bridge para resolver el tenant. Tiene que
 coincidir exactamente con el `TENANT_PHONE` de bot-wa.
 
-### `customers` — 15 columnas
+### `customers` — 19 columnas
 
 El cliente del lavadero.
 
 ```sql
 phone           VARCHAR(20)      -- puede ser NULL
 wa_lid          VARCHAR(40)      -- puede ser NULL
-CHECK (phone IS NOT NULL OR wa_lid IS NOT NULL)
+anonymized_at   TIMESTAMPTZ      -- puede ser NULL
+CHECK (phone IS NOT NULL OR wa_lid IS NOT NULL OR anonymized_at IS NOT NULL)
 ```
 
 **Dos identificadores, al menos uno obligatorio.** Es la consecuencia de que
@@ -90,11 +91,29 @@ tiene `wa_lid` y no tiene `phone`; uno cargado desde el panel, al revés. Cuando
 se encuentra a alguien por teléfono que todavía no tiene LID, se le completa —
 así no se duplica. Ver [ADR-0005](adr/0005-identidad-por-lid.md).
 
-`visit_count` y `last_visit_at` son denormalizaciones para no contar turnos en
-cada consulta.
+La tercera rama del `CHECK` es lo que hace posible anonimizar: un cliente
+anonimizado no tiene ni teléfono ni LID, y sin esa salida la restricción lo
+prohibiría. Ver [Seguridad §5](05-seguridad.md#retención).
 
-`deleted_at` es **borrado lógico**: la fila permanece. Relevante para el
-derecho de supresión de la Ley 1581.
+`visit_count` y `last_visit_at` son denormalizaciones para no contar turnos en
+cada consulta. `last_visit_at` es además lo que mide la inactividad para la
+retención.
+
+**Autorización de tratamiento** (Ley 1581):
+
+```sql
+consent_at      TIMESTAMPTZ      -- cuándo autorizó
+consent_version VARCHAR(20)      -- qué texto aceptó
+consent_source  VARCHAR(20)      -- whatsapp | panel | onboarding
+```
+
+Tres columnas y no un booleano porque la obligación no es que el titular haya
+autorizado, sino poder **demostrar qué** autorizó. `NULL` significa sin
+autorización registrada, no autorización negada.
+
+`deleted_at` es **borrado lógico**: la fila permanece con todos sus datos. No
+sirve como supresión — para eso está `anonymized_at`, que sí vacía los campos
+personales.
 
 ### `appointments` — 19 columnas
 

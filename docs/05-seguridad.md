@@ -161,28 +161,92 @@ sensible, porque el cliente puede escribir cualquier cosa ahí.
 
 | Obligación | Estado |
 |---|---|
-| Autorización previa del titular | ⚠️ **No implementado** |
-| Aviso de privacidad accesible | ⚠️ **No implementado** |
-| Finalidad declarada | ⚠️ No documentada para el titular |
+| Autorización previa del titular | ✅ En WhatsApp — ver abajo |
+| Aviso de privacidad accesible | ✅ Parcial — se muestra en la conversación; falta publicarlo completo |
+| Finalidad declarada | ✅ En el texto del aviso, versionado |
 | Derecho de acceso | ⚠️ Parcial — el cliente ve su historial por WhatsApp, no todos sus datos |
 | Derecho de rectificación | ⚠️ Sólo el personal puede corregir |
-| Derecho de supresión | ⚠️ **No implementado** — `deleted_at` es borrado lógico, el dato sigue ahí |
+| Derecho de supresión | ✅ Parcial — `anonimizarCliente()` existe; falta exponerlo al titular |
+| Retención limitada | ✅ Tareas de cron con plazo configurable |
 | Registro de bases ante la SIC | ⚠️ Depende del tamaño del responsable; verificar |
 | Medidas de seguridad | ✅ Parcial — control de acceso y cifrado de credenciales |
 
-**El más urgente es la autorización.** Hoy, cuando un cliente escribe al bot por
-primera vez, se crea un registro con su nombre y su LID sin haberle pedido
-permiso ni haberle dicho para qué. Un primer mensaje que declare la finalidad y
-pida conformidad cierra la mayor parte de la brecha, y es barato.
+### La autorización
+
+La ley la exige **previa, expresa e informada**. Son tres condiciones distintas
+y `src/modules/whatsapp/consentimiento.ts` las trata como tales:
+
+- **Previa** — el paso `awaiting_consent` va después de pedir el nombre y
+  **antes** del `INSERT` en `customers`. Ese orden es el requisito: preguntar
+  después de guardar no sirve de nada.
+- **Expresa** — sólo un sí explícito (`si`, `acepto`, `autorizo`, `ok`…)
+  autoriza. Cualquier otra respuesta, incluido seguir conversando normalmente,
+  se trata como ambigua y se repregunta. El silencio nunca es un sí.
+- **Informada** — el aviso dice qué se guarda, para qué, que no se comparte con
+  terceros comerciales, y cómo ejercer los derechos: escribiendo *ASESOR*, que
+  es la palabra que el bot enruta de verdad (intent `human_help`, tanto por
+  Claude como por el fallback de palabras clave). El canal es humano, no
+  automático; la ley pide que exista, no que sea un endpoint.
+
+Poder *demostrarla* es parte de la obligación, no un extra. Por eso el alta
+guarda tres columnas y no un booleano:
+
+| Columna | Para qué |
+|---|---|
+| `consent_at` | Cuándo autorizó |
+| `consent_version` | **Qué texto** aceptó (`VERSION_AVISO`) |
+| `consent_source` | Por qué canal: `whatsapp` \| `panel` \| `onboarding` |
+
+Si mañana cambia la finalidad, cambia `VERSION_AVISO` y queda registro de a
+quién se le informó qué. Un `consent = true` no permitiría reconstruir eso.
+
+Si el titular no autoriza, el flujo termina: no se crea el cliente, no se
+agenda. Se le sigue pudiendo responder precios y servicios, que no requieren
+guardar nada.
+
+**Pasivo pendiente.** Los clientes creados antes de este paso tienen
+`consent_at IS NULL`. `clientesSinAutorizacion(tenantId)` los cuenta. La ley
+pide autorización de todos, no sólo de los nuevos: regularizarlos —pidiéndola
+en el próximo contacto— es trabajo pendiente del responsable.
 
 ### Retención
 
-No hay política. `whatsapp_messages` crece sin límite, guardando conversaciones
-indefinidamente. La Ley 1581 pide conservar los datos sólo mientras la finalidad
-lo justifique.
+`src/shared/db/retencion.ts`, dos tareas que corren cada 24 h:
 
-Sugerido: purgar `whatsapp_messages` a los 12 meses, y anonimizar clientes sin
-actividad en 24. Ambas son tareas de cron y no existen. Ver §7.
+| Tarea | Qué hace | Variable | Defecto |
+|---|---|---|---|
+| `purgarMensajesViejos` | Borra conversaciones más viejas que el plazo | `DATA_RETENTION_MESSAGES_MONTHS` | 12 meses |
+| `anonimizarClientesInactivos` | Anonimiza clientes sin visitas en el plazo | `DATA_RETENTION_CUSTOMERS_MONTHS` | `0` (desactivado) |
+
+**Los plazos son una decisión del responsable del tratamiento, no una constante
+técnica.** Por eso salen de configuración y `0` desactiva la tarea. Los valores
+por defecto son un punto de partida defendible, no asesoría legal.
+
+La anonimización de clientes viene desactivada a propósito: es irreversible y
+afecta la relación comercial del lavadero. Que la active quien decide sobre
+esos datos.
+
+**Anonimizar es un `UPDATE`, no un `DELETE`.** Los campos que identifican a una
+persona se ponen en `NULL` y se marca `anonymized_at`; la fila y sus turnos
+siguen existiendo. Un `DELETE` rompería la integridad referencial y perdería el
+historial de negocio, que no es dato personal. Por eso el `CHECK` de identidad
+de `customers` admite una tercera opción:
+
+```sql
+CHECK (phone IS NOT NULL OR wa_lid IS NOT NULL OR anonymized_at IS NOT NULL)
+```
+
+`anonimizarCliente(tenantId, customerId)` hace lo mismo para un titular
+concreto: es el derecho de supresión, que se atiende cuando lo piden y no
+cuando vence un plazo. Lleva `tenant_id` en el `WHERE` para que un lavadero no
+pueda borrar el cliente de otro. **Falta exponerlo**: hoy es una función, no un
+endpoint ni una opción del bot.
+
+> **Ninguna de las dos tareas toca datos de facturación.** `payments` y
+> `billing_sync` responden a la obligación de la DIAN de conservar 5 años
+> (§6), que es más larga y de otra naturaleza. Un plazo de retención de datos
+> personales no la sobreescribe: son obligaciones distintas sobre tablas
+> distintas, y confundirlas haría incumplir una para cumplir la otra.
 
 ## 6. Facturación electrónica (DIAN)
 
@@ -206,8 +270,7 @@ trazabilidad se perdería. Vale evaluar si conviene guardar una copia.
 
 ## 7. Brechas abiertas
 
-Ordenadas por relación entre riesgo y esfuerzo. Las tres primeras son de una
-tarde.
+Ordenadas por relación entre riesgo y esfuerzo.
 
 > **Corrección (2026-09).** Las tres primeras entradas de la versión anterior
 > de esta tabla estaban mal descritas, y conviene dejar constancia:
@@ -224,16 +287,21 @@ tarde.
 > Las tres quedaron resueltas. La lección quedó anotada en la
 > [metodología §2](07-metodologia.md): verificar antes de concluir.
 
+> **Cerradas después (2026-09).** *"Sin autorización de tratamiento"* y *"Sin
+> política de retención"* se resolvieron en la §5. La supresión quedó a medias
+> —la función existe, falta exponerla— y aparece reformulada como la brecha 6;
+> los clientes creados antes de la autorización son la 7, que es proceso y no
+> código.
+
 | # | Brecha | Riesgo | Esfuerzo |
 |---|---|---|---|
 | 1 | **Cifrado de credenciales no forzado** — `decryptIfNeeded` acepta texto plano y nada cifra al guardar | Credenciales de facturación en claro sin que nadie lo note | Bajo |
 | 2 | **Validación Zod ausente** en `billing`, `history`, `reports`, `superadmin`, `tenants`, `whatsapp` | Entrada no validada hacia la base | Medio |
-| 3 | **Sin autorización de tratamiento** (Ley 1581) | Incumplimiento legal | Bajo |
-| 4 | **Sin política de retención** | Incumplimiento + crecimiento sin techo | Bajo |
-| 5 | **Tokens en `localStorage`** (frontend) | Un XSS expone la sesión | Alto (implica cookies httpOnly y CSRF) |
-| 6 | **Sin auditoría de acciones** — sólo hay `appointment_status_log` | No se puede reconstruir quién cambió qué | Medio |
-| 7 | **Sin RLS en PostgreSQL** | Una consulta mal escrita cruza tenants | Alto |
-| 8 | **Sin derecho de supresión** (Ley 1581) | Incumplimiento legal | Medio |
+| 3 | **Tokens en `localStorage`** (frontend) | Un XSS expone la sesión | Alto (implica cookies httpOnly y CSRF) |
+| 4 | **Sin auditoría de acciones** — sólo hay `appointment_status_log` | No se puede reconstruir quién cambió qué | Medio |
+| 5 | **Sin RLS en PostgreSQL** | Una consulta mal escrita cruza tenants | Alto |
+| 6 | **Derecho de supresión no expuesto** (Ley 1581) — `anonimizarCliente()` existe, falta endpoint y opción en el bot | El titular no puede ejercerlo por sí mismo | Bajo |
+| 7 | **Clientes sin autorización registrada** — los creados antes de la §5 | Pasivo legal a regularizar | Bajo (proceso, no código) |
 
 ### Notas sobre algunas
 
@@ -248,11 +316,11 @@ directo a las consultas. Las consultas están parametrizadas, así que no hay
 inyección SQL, pero sí entra basura: fechas inválidas, IDs con formato
 incorrecto, campos ausentes que producen 500 en vez de 400.
 
-**#5 — localStorage.** Es la brecha de mayor riesgo teórico y también la más
+**#3 — localStorage.** Es la brecha de mayor riesgo teórico y también la más
 cara: implica pasar a cookies `httpOnly` + `SameSite`, lo que a su vez obliga a
-protección CSRF. No se recomienda atacarla antes que la 1 a la 6.
+protección CSRF. No se recomienda atacarla antes que las demás.
 
-**#7 — RLS.** Row Level Security de PostgreSQL convertiría el aislamiento en
+**#5 — RLS.** Row Level Security de PostgreSQL convertiría el aislamiento en
 una garantía del motor en vez de una convención. Es la mitigación correcta a
 largo plazo, pero implica revisar las 78 rutas.
 

@@ -111,6 +111,13 @@ const envSchema = z.object({
   SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.1),
   SENTRY_RELEASE: z.string().optional(),
 
+  // ── Retención de datos personales (Ley 1581) ─────────────────────────────
+  // Los plazos son una decisión del responsable del tratamiento, no una
+  // constante técnica. Por eso son configurables, y `0` desactiva la tarea.
+  // Ver src/shared/db/retencion.ts y docs/05-seguridad.md §5.
+  DATA_RETENTION_MESSAGES_MONTHS: z.coerce.number().int().min(0).default(12),
+  DATA_RETENTION_CUSTOMERS_MONTHS: z.coerce.number().int().min(0).default(0),
+
   // ── Misc ─────────────────────────────────────────────────────────────────
   TIMEZONE: z.string().default('America/Bogota'),
 });
