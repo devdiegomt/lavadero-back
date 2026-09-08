@@ -55,6 +55,11 @@ ciegas ante síntomas mal entendidos. Los casos concretos:
   que una variable de configuración no se usaba —cierto— y se concluyó que la
   protección faltaba, sin abrir el archivo de rutas donde sí estaba
   implementada. **Comprobar una parte no autoriza a inferir el resto.**
+- Se probó si WhatsApp renderiza selectores nativos enviados por Baileys. Los
+  tres formatos devolvieron `ok: true` — el servidor los aceptó — y ninguno se
+  vio: llegaron como *«Esperando mensaje»*. **Que una operación no falle no
+  prueba que haya hecho lo que se esperaba.** El acuse de recibo de un sistema
+  ajeno mide lo que ese sistema aceptó, no lo que el usuario final obtiene.
 
 **La regla que sale de ahí:** antes de cambiar código, conseguir el dato que
 distingue entre las causas posibles. Un log, una ejecución, una petición

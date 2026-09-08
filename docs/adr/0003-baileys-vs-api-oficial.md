@@ -53,9 +53,56 @@ Las mitigaciones implementadas: el bot detecta la desvinculación, limpia las
 credenciales y genera un QR nuevo sin intervención; `/health` reporta el estado
 del vínculo.
 
+## Comprobado: los selectores nativos no funcionan (2026-09)
+
+Surgió la pregunta de si se podía reemplazar el menú numerado —«escribe 1, 2,
+3…»— por el selector nativo de WhatsApp, ese que aparece como una lista
+tocable. **Se probó contra un teléfono real y la respuesta es no.**
+
+Qué se envió, con Baileys 6.7.24, armando el mensaje a mano con
+`generateWAMessageFromContent` + `relayMessage`:
+
+| Formato | ¿WhatsApp aceptó el envío? | ¿Qué vio el destinatario? |
+|---|---|---|
+| `listMessage` | ✅ `ok: true` | *«Esperando mensaje. Esto puede tomar tiempo.»* |
+| `buttonsMessage` | ✅ `ok: true` | *«Esperando mensaje. Esto puede tomar tiempo.»* |
+| `interactiveMessage` (native flow) | ✅ `ok: true` | No llegó ni como marcador |
+
+**La lección de método importa tanto como el resultado.** Los tres envíos
+devolvieron éxito: el servidor de WhatsApp los aceptó sin protestar. Guiarse
+por eso habría llevado a dar la función por buena. Lo que decide es lo que
+renderiza la app de quien recibe, y eso sólo se ve mirando la pantalla.
+
+No degradan a texto plano, que sería tolerable. Llegan **rotos**: el cliente ve
+un mensaje fantasma que nunca se resuelve. En una conversación real es peor que
+un menú numerado, porque parece que el negocio escribió algo ilegible.
+
+Detalles que quedan documentados por si alguien reabre esto:
+
+- El proto de Baileys **sí** trae los tres formatos; el problema no es la
+  librería.
+- Pero no los trata como algo de primera clase: en el generador de mensajes
+  salientes, `buttonsMessage` sólo aparece al *leer* entrantes. Es un camino
+  tolerado, no soportado.
+- Si el selector llegara a renderizar, **el bot todavía ignoraría la
+  respuesta**: `processMessage` sólo lee `conversation` y
+  `extendedTextMessage`, y un toque llega como `listResponseMessage`. Habría
+  que interpretarlo además de enviarlo.
+- Enviar interactivos desde un cliente no oficial es de lo que más llama la
+  atención de WhatsApp. Aunque funcionara, hay que pesar el riesgo sobre la
+  línea del lavadero.
+
+**Los selectores nativos son terreno de la API oficial**, donde List Messages y
+Reply Buttons están documentados y soportados. Querer selects es, por tanto, un
+argumento para migrar — no para forzar Baileys.
+
+El código del experimento se borró: era desechable, la conclusión no.
+
 ## Cuándo reconsiderar
 
 - Si el volumen justifica el costo por conversación de la API oficial
+- **Si los selectores nativos pasan a ser un requisito** — hoy no se pueden
+  hacer con Baileys, comprobado arriba
 - Si WhatsApp bloquea el número, aunque sea una vez
 - Si el cliente exige garantía contractual de disponibilidad
 - Si el producto se vende a lavaderos más grandes, donde el costo pesa menos
