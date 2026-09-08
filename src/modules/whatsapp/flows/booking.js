@@ -12,6 +12,7 @@
 const db = require('../../../shared/db');
 const { getServicePrice, formatCOP } = require('../../../shared/utils/pricing');
 const { buscarOCrearCliente } = require('../wa-identity');
+const { elegirTipoVehiculo, elegirOpcion } = require('../menu');
 const {
   textoAutorizacion,
   interpretarRespuesta,
@@ -255,12 +256,12 @@ async function handle(ctx) {
 
   // ─── AWAITING VEHICLE TYPE (nuevo cliente) ───
   if (step === 'awaiting_vehicle_type') {
-    const typeMap = { '1': 'sedan', '2': 'suv', '3': 'pickup', '4': 'moto' };
-    const vehicleType = typeMap[text.trim()];
+    // Numero o palabra: el cliente escribe lo que ve en el menu. Ver menu.ts.
+    const vehicleType = elegirTipoVehiculo(text);
 
     if (!vehicleType) {
       return {
-        messages: [`Escribe un número del 1 al 4.`],
+        messages: [`No reconocí esa opción. Escribe el *número* (1 al 4) o el tipo: *sedán*, *SUV*, *pickup* o *moto*.`],
         nextFlow: 'booking',
         nextStep: 'awaiting_vehicle_type',
         data,
@@ -333,11 +334,14 @@ async function handle(ctx) {
 
   // ─── AWAITING SERVICE ───
   if (step === 'awaiting_service') {
-    const idx = parseInt(text.trim()) - 1;
+    // El nombre del servicio esta a la vista en el mensaje anterior: aceptarlo
+    // escrito cuesta lo mismo que exigir el numero.
+    const servicios = data.services ?? [];
+    const idx = elegirOpcion(text, servicios.map((s) => ({ claves: [s.name] })));
 
-    if (isNaN(idx) || idx < 0 || idx >= (data.services?.length || 0)) {
+    if (idx === null) {
       return {
-        messages: [`❌ Opción no válida. Escribe un número del 1 al ${data.services?.length || 4}.`],
+        messages: [`❌ No reconocí esa opción. Escribe el *número* del servicio (1 al ${servicios.length || 4}) o su nombre.`],
         nextFlow: 'booking',
         nextStep: 'awaiting_service',
         data,
