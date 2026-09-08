@@ -32,8 +32,20 @@ export async function getTenantTimezone(tenantId: string): Promise<string> {
 
   const tz = rows[0]?.timezone ?? 'America/Bogota';
   tzCache.set(tenantId, tz);
-  setTimeout(() => tzCache.delete(tenantId), 10 * 60 * 1_000);
+  setTimeout(() => tzCache.delete(tenantId), 10 * 60 * 1_000).unref?.();
   return tz;
+}
+
+/**
+ * Descarta la timezone cacheada de un tenant, o de todos si no se indica.
+ *
+ * La cache dura 10 minutos, así que sin esto un cambio de zona no se ve hasta
+ * que vence — y una prueba que la cambia estaría comprobando la zona anterior
+ * sin enterarse. También sirve si un tenant cambia su zona desde el panel.
+ */
+export function olvidarTimezone(tenantId?: string): void {
+  if (tenantId) tzCache.delete(tenantId);
+  else tzCache.clear();
 }
 
 /**
@@ -55,6 +67,27 @@ export function getDateInTimezone(timezone: string): string {
     now.setHours(now.getHours() - 5);
     return now.toISOString().split('T')[0];
   }
+}
+
+/**
+ * Suma días a una fecha `YYYY-MM-DD` y devuelve otra `YYYY-MM-DD`.
+ *
+ * Existe para no calcular "mañana" con `new Date()`, que da el día del
+ * servidor —UTC— y no el del lavadero. Entre la medianoche UTC y la local, las
+ * dos fechas difieren, y el turno terminaba guardado un día corrido.
+ *
+ * Opera sobre la cadena, no sobre el reloj: la entrada ya viene resuelta en la
+ * zona del tenant por `getTenantToday`, así que aquí no hay ninguna zona que
+ * volver a considerar. El mediodía UTC evita que un cambio de horario de
+ * verano mueva el resultado al día vecino.
+ */
+export function sumarDias(fecha: string, dias: number): string {
+  const d = new Date(`${fecha}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) {
+    throw new Error(`Fecha inválida: ${fecha} (se esperaba YYYY-MM-DD)`);
+  }
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.toISOString().split('T')[0];
 }
 
 /**

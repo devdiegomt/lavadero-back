@@ -22,6 +22,7 @@ const {
 const {
   getTenantToday,
   getTenantTimezone,
+  sumarDias,
   getDateInTimezone,
   getMinutesOfDayInTimezone,
 } = require('../../../shared/utils/dateUtils');
@@ -349,25 +350,35 @@ async function handle(ctx) {
     const slots = await getAvailableSlots(tenant.id, todayDate, service.minutes);
 
     if (slots.length === 0) {
+      // Se queda en awaiting_time, no vuelve a awaiting_service: es el unico
+      // paso que entiende la M, y quedarse sin cupo hoy es exactamente cuando
+      // ofrecer mañana sirve de algo. Antes el cliente solo podia cambiar de
+      // servicio o irse.
       return {
         messages: [
-          `😔 Lo sentimos, no hay horarios disponibles para hoy.\n\n¿Quieres intentar con otro servicio? Escribe el número.\nO escribe *0* para volver al menú.`,
+          `😔 No quedan horarios para hoy.\n\nEscribe *M* para ver los de mañana, o *0* para volver al menú.`,
         ],
         nextFlow: 'booking',
-        nextStep: 'awaiting_service',
-        data,
+        nextStep: 'awaiting_time',
+        data: { ...data, selectedService: service, availableSlots: [], bookingDate: todayDate },
       };
     }
 
     const slotList = slots.map((s, i) => `${i + 1}️⃣ ${formatTime(s)}`).join('\n');
 
+    // La opcion M existia desde siempre y no se anunciaba en ningun mensaje:
+    // una funcion que nadie podia descubrir. Un cliente pregunto si solo se
+    // podia agendar para hoy.
     return {
       messages: [
-        `⏰ *Horarios disponibles para hoy:*\n\n${slotList}\n\nEscribe el *número* del horario.`,
+        `⏰ *Horarios disponibles para hoy:*\n\n${slotList}\n\nEscribe el *número* del horario, o *M* para ver los de mañana.`,
       ],
       nextFlow: 'booking',
       nextStep: 'awaiting_time',
-      data: { ...data, selectedService: service, availableSlots: slots },
+      // La fecha viaja explicita desde aca. Antes se dejaba sin definir y cada
+      // paso posterior la recalculaba con el reloj del servidor, que corre en
+      // UTC y no coincide con el dia del lavadero.
+      data: { ...data, selectedService: service, availableSlots: slots, bookingDate: todayDate },
     };
   }
 
@@ -375,9 +386,8 @@ async function handle(ctx) {
   if (step === 'awaiting_time') {
     // Soporte para "M" = mañana
     if (text.trim().toLowerCase() === 'm') {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowDate = tomorrow.toISOString().split('T')[0];
+      // Mañana es el dia siguiente al del lavadero, no al del servidor.
+      const tomorrowDate = sumarDias(await getTenantToday(tenant.id), 1);
       const slots = await getAvailableSlots(tenant.id, tomorrowDate, data.selectedService.minutes);
 
       if (slots.length === 0) {
@@ -401,6 +411,16 @@ async function handle(ctx) {
     const idx = parseInt(text.trim()) - 1;
     const slots = data.availableSlots || [];
 
+    if (slots.length === 0) {
+      return {
+        messages: [`Escribe *M* para ver los horarios de mañana, o *0* para volver al menú.`],
+        nextFlow: 'booking',
+        nextStep: 'awaiting_time',
+        data,
+        retry: true,
+      };
+    }
+
     if (isNaN(idx) || idx < 0 || idx >= slots.length) {
       return {
         messages: [`❌ Opción no válida. Escribe un número del 1 al ${slots.length}.`],
@@ -412,9 +432,9 @@ async function handle(ctx) {
     }
 
     const selectedTime = slots[idx];
-    const bookingDate = data.bookingDate || new Date().toISOString().split('T')[0];
-    const isToday = bookingDate === new Date().toISOString().split('T')[0];
-    const dateLabel = isToday ? 'Hoy' : 'Mañana';
+    const todayDate = await getTenantToday(tenant.id);
+    const bookingDate = data.bookingDate || todayDate;
+    const dateLabel = bookingDate === todayDate ? 'Hoy' : 'Mañana';
 
     return {
       messages: [
@@ -442,7 +462,7 @@ async function handle(ctx) {
           data.customerId,
           data.vehicleId,
           data.selectedService.id,
-          data.bookingDate || new Date().toISOString().split('T')[0],
+          data.bookingDate || (await getTenantToday(tenant.id)),
           data.selectedTime,
           data.selectedService.price,
         ]
