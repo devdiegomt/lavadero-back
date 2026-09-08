@@ -72,10 +72,34 @@ agendamiento sin funcionar — dos de las cinco funciones del bot.
 - El LID es opaco: no dice nada a un humano que lo lea
 - Si WhatsApp cambia el esquema de LIDs, hay que revisarlo
 
+## Nota de seguimiento (2026-09)
+
+**`senderPn` ya no viene siempre vacío**, contra lo que decía este ADR cuando
+se escribió. En una sesión de producción se observaron dos vías nuevas:
+
+- `key.senderPn` presente en algunos mensajes entrantes
+- una sincronización masiva de `contacts.upsert` que pobló el mapa LID→teléfono
+  con cientos de contactos de golpe
+
+**Pero no es fiable, y la decisión no cambia.** En la sesión siguiente, tras
+reiniciar el bot, los mensajes del mismo remitente volvieron a llegar con
+`lidMapSize: 0` y sin `senderPn`; la sincronización de contactos no se repitió.
+Es decir: el teléfono llega *a veces*, para *algunos* remitentes, y nunca de
+forma garantizada en el primer mensaje — que es justo cuando hace falta para
+identificar al cliente.
+
+Eso confirma el diseño en vez de desmentirlo: **el LID es el identificador, el
+teléfono es enriquecimiento oportunista.** Lo que cambia es que ahora hay más
+casos en los que el teléfono sí se puede completar, y conviene aprovecharlos.
+
+Los volcados del mapa pasaron a `debug` y con el número enmascarado: a nivel
+`info` dejaban cientos de teléfonos de terceros —contactos que no son clientes
+del lavadero— en claro en los logs.
+
 ## Cuándo reconsiderar
 
-- Si WhatsApp vuelve a entregar el teléfono (revisar `senderPn` en versiones
-  nuevas de Baileys)
+- Si `senderPn` pasa a llegar de forma consistente en el **primer** mensaje de
+  cada remitente, y no sólo a veces (ver la nota de seguimiento)
 - Si aparece un requisito de contactar al cliente por fuera de WhatsApp — ahí
   hay que pedirle el número explícitamente
 - Si se migra a la API oficial, que sí entrega el número
