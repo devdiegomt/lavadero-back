@@ -165,5 +165,6 @@ un olvido:
 | Inventario de insumos | Otro dominio; el sistema es de turnos, no de stock |
 | Notificaciones al personal | El tablero se consulta, no avisa |
 | App móvil nativa | El panel es responsive; no se justifica todavía |
+| Selectores nativos de WhatsApp (menús tocables) | **No se pueden con Baileys**, comprobado contra un teléfono real: los tres formatos llegan como «Esperando mensaje». Ver [ADR-0003](adr/0003-baileys-vs-api-oficial.md). Son terreno de la API oficial |
 
 Cuando alguna se implemente, se mueve a la §1 con su ID y se borra de acá.
