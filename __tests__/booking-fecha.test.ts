@@ -115,6 +115,17 @@ beforeAll(async () => {
 afterAll(async () => {
   await db.query(`UPDATE tenants SET timezone = $1 WHERE id = $2`, [tzOriginal, tenant.id]);
   olvidarTimezone(tenant.id);
+
+  // Los pasos que dan de alta crean cliente y vehiculo de verdad. Sin esto la
+  // segunda corrida choca contra la placa unica por tenant.
+  await db.query(
+    `DELETE FROM vehicles WHERE tenant_id = $1 AND plate LIKE 'PAL%'`,
+    [tenant.id],
+  );
+  await db.query(
+    `DELETE FROM customers WHERE tenant_id = $1 AND wa_lid LIKE '999000444%'`,
+    [tenant.id],
+  );
   await db.pool.end();
 });
 
@@ -178,6 +189,66 @@ describe('la fecha, cuando el lavadero y UTC están en días distintos', () => {
       expect(r.data.bookingDate).toBe(sumarDias(hoyLavadero, 1));
     }
     expect(r.messages.join('\n')).toContain('mañana');
+  });
+});
+
+describe('el flujo acepta la opción escrita, no sólo el número', () => {
+  it('«Sedan» avanza igual que «1»', async () => {
+    // El caso literal de la prueba en producción: el cliente respondió con la
+    // palabra que el menú acababa de mostrarle y el bot le pidió un número.
+    // Placas distintas: el paso da de alta el vehiculo y la placa es unica por
+    // tenant, asi que repetirla haria fallar el segundo alta y la prueba
+    // acusaria al codigo de algo que es del montaje.
+    const sesion = (text: string, plate: string, lid: string) => ({
+      tenant,
+      waLid: lid,
+      text,
+      session: {
+        step: 'awaiting_vehicle_type',
+        data: { plate, firstName: 'Ana', lastName: 'Palabra' },
+      },
+    });
+
+    const conPalabra = await booking.handle(sesion('Sedan', 'PAL001', '99900044400001@lid'));
+    const conNumero = await booking.handle(sesion('1', 'PAL011', '99900044400011@lid'));
+
+    // Ambos pasan del tipo de vehículo a elegir servicio.
+    expect(conPalabra.nextStep).toBe('awaiting_service');
+    expect(conNumero.nextStep).toBe('awaiting_service');
+  });
+
+  it('lo que no se entiende sigue repreguntando, y dice cómo responder', async () => {
+    const r = await booking.handle({
+      tenant,
+      waLid: '99900044400002@lid',
+      text: 'lo de siempre',
+      session: {
+        step: 'awaiting_vehicle_type',
+        data: { plate: 'PAL002', firstName: 'Ana', lastName: 'Palabra' },
+      },
+    });
+
+    expect(r.nextStep).toBe('awaiting_vehicle_type');
+    expect(r.retry).toBe(true);
+    // El mensaje de error ahora ofrece las dos formas.
+    expect(r.messages.join('\n')).toMatch(/sedán/i);
+  });
+
+  it('el servicio se elige por su nombre', async () => {
+    await ponerLavaderoALasHoras(9);
+    const servicios = [
+      { id: servicio.id, name: 'Lavado Express', price: 2_500_000, minutes: 30 },
+      { id: servicio.id, name: 'Detailing', price: 12_000_000, minutes: 90 },
+    ];
+
+    const r = await booking.handle({
+      tenant,
+      waLid: '99900044400003@lid',
+      text: 'Detailing',
+      session: { step: 'awaiting_service', data: { plate: 'PAL003', services: servicios } },
+    });
+
+    expect(r.data.selectedService.name).toBe('Detailing');
   });
 });
 
