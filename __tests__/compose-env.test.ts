@@ -97,6 +97,24 @@ describe('docker-compose: entorno del backend', () => {
     const sinDocumentar = varsObligatorias().filter((v) => !documentadas.has(v));
     expect({ sinDocumentar }).toEqual({ sinDocumentar: [] });
   });
+
+  it('.env.example apunta al puerto que el compose expone al host', () => {
+    // El compose mueve Postgres a 5433 para no chocar con una instalación
+    // local, frecuente en Windows y macOS. Cuando .env.example decía 5432
+    // mandaba las migraciones a esa otra base, y el síntoma era un
+    // "password authentication failed" que parecía un problema de
+    // credenciales cuando en realidad era la base equivocada.
+    const yml = readFileSync(join(RAIZ, 'docker-compose.yml'), 'utf8');
+    const mapeo = yml.match(/"(\d+):5432"/);
+    expect(mapeo).not.toBeNull();
+    const puertoHost = mapeo![1];
+
+    const ejemplo = readFileSync(join(RAIZ, '.env.example'), 'utf8');
+    const url = ejemplo.match(/^DATABASE_URL=(.+)$/m)?.[1];
+    expect(url).toBeDefined();
+
+    expect(url).toContain(`:${puertoHost}/`);
+  });
 });
 
 describe('Dockerfile: rutas que copia', () => {
