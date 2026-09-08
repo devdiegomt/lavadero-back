@@ -228,7 +228,17 @@ El backend está pensado para correr en Railway, Fly.io o cualquier PaaS con Pos
 3. Add → Redis → copiar `REDIS_URL`
 4. Variables → pegar todas las del `.env.example` con valores reales (regenerar `JWT_SECRET` y `ENCRYPTION_KEY`)
 5. Variables → `NODE_ENV=production`
-6. Settings → Custom start command: `npm run db:migrate-all && npm start`
+6. Settings → Custom start command: `npm run db:migrate-all:prod && npm start`
+
+> **`:prod`, no la variante sin sufijo.** `db:migrate-all` corre las migraciones
+> con `ts-node`, que es una devDependency: con `NODE_ENV=production` el PaaS
+> poda las devDependencies y el despliegue muere con
+> `'ts-node' is not recognized`. Los scripts `:prod` ejecutan el JavaScript ya
+> compilado en `dist/`, que es lo que existe en producción.
+>
+> Al revés también aplica: `db:migrate-*:prod` sólo funciona después de
+> `npm run build`. Desde tu máquina, para el desarrollo diario, usa la variante
+> sin sufijo.
 
 Para WhatsApp y n8n, requieren persistent volumes y typicamente se despliegan aparte (un VPS pequeño con `docker compose` es suficiente).
 
@@ -236,7 +246,19 @@ Para WhatsApp y n8n, requieren persistent volumes y typicamente se despliegan ap
 
 ## Operación en producción
 
-Ver [`docs/OPS.md`](docs/OPS.md) para el runbook completo: monitoreo, backups, rotación de keys, incident response.
+**No hay runbook de operación todavía.** Este README prometía un `docs/OPS.md`
+con monitoreo, backups, rotación de claves e incident response; ese archivo no
+existe — el que llevaba ese nombre resultó ser una guía de arranque del
+frontend, y quedó como [`docs/frontend-setup.md`](docs/frontend-setup.md).
+
+Lo que sí está documentado, mientras tanto:
+
+- **Secretos y rotación** — [Seguridad §8](docs/05-seguridad.md#8-gestión-de-secretos),
+  incluido `npm run db:rotate-key` para `ENCRYPTION_KEY`.
+- **Retención de datos personales** — [Seguridad §5](docs/05-seguridad.md#5-datos-personales-ley-1581).
+- **Índice de la documentación** — [`docs/README.md`](docs/README.md).
+
+Backups, monitoreo y respuesta a incidentes siguen sin definir.
 
 Resumen rápido:
 
