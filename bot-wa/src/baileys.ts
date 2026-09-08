@@ -14,6 +14,7 @@ import { promises as fs } from 'fs';
 import qrcode from 'qrcode-terminal';
 import pino from 'pino';
 import { forwardToN8n } from './n8n-client';
+import { Deduplicador } from './dedupe';
 import type { BotState, IncomingMessage } from './types';
 
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
@@ -38,6 +39,20 @@ let clearedAuthAt: number | null = null;
  * que no corresponden al numero de telefono real.
  */
 const lidToJid = new Map<string, string>();
+
+/** Descarta los reenvios de WhatsApp. Ver dedupe.ts. */
+const dedupe = new Deduplicador();
+
+/**
+ * Deja un telefono reconocible sin escribirlo entero en el log.
+ * `573001234567@s.whatsapp.net` → `57300***4567`.
+ */
+function enmascarar(jid: string): string {
+  const n = jid.split('@')[0];
+  if (n.length < 8) return '***';
+  return `${n.slice(0, 5)}***${n.slice(-4)}`;
+}
+
 
 /**
  * Extrae el numero de telefono en formato E.164 (+digitos) de un JID.
@@ -109,9 +124,13 @@ export async function startBaileys(state: BotState): Promise<void> {
 
       if (phoneJid && lid) {
         lidToJid.set(lid, phoneJid);
-        logger.info({ lid, phoneJid }, 'Mapeado LID -> JID');
+        // debug y no info: WhatsApp sincroniza la agenda entera de golpe
+        // —cientos de contactos que no son clientes del lavadero— y a nivel
+        // info eso deja sus telefonos en claro en los logs para siempre.
+        logger.debug({ lid, phoneJid: enmascarar(phoneJid) }, 'Mapeado LID -> JID');
       }
     }
+    logger.info({ contactos: contacts.length, mapa: lidToJid.size }, 'Contactos sincronizados');
   });
 
   sock.ev.on('contacts.update', (updates) => {
@@ -120,7 +139,7 @@ export async function startBaileys(state: BotState): Promise<void> {
       const lid = (update as any).lid;
       if (phoneJid && lid) {
         lidToJid.set(lid, phoneJid);
-        logger.info({ lid, phoneJid }, 'Actualizado LID -> JID');
+        logger.debug({ lid, phoneJid: enmascarar(phoneJid) }, 'Actualizado LID -> JID');
       }
     }
   });
@@ -244,6 +263,15 @@ async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
   const jid = key.remoteJid || '';
   if (isJidBroadcast(jid)) return;
 
+  // Antes de cualquier otra cosa: un reenvio no es un mensaje nuevo. En una
+  // conversacion de agendamiento cada mensaje avanza un paso, asi que
+  // procesarlo dos veces no repite la respuesta — consume el paso siguiente
+  // con el texto anterior.
+  if (dedupe.yaVisto(key.id ?? '')) {
+    logger.debug({ messageId: key.id, jid }, 'Mensaje duplicado ignorado');
+    return;
+  }
+
   const isDirect = jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid');
   if (!isDirect) return;
 
@@ -251,7 +279,10 @@ async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
   // enriquecer el mapa y poder responder al JID de numero mas adelante.
   if (key.senderPn && jid.endsWith('@lid') && !lidToJid.has(jid)) {
     lidToJid.set(jid, key.senderPn);
-    logger.info({ lid: jid, phoneJid: key.senderPn }, 'Mapeado LID -> JID (senderPn)');
+    logger.debug(
+      { lid: jid, phoneJid: enmascarar(key.senderPn) },
+      'Mapeado LID -> JID (senderPn)'
+    );
   }
 
   // JID para responder (puede seguir siendo @lid: la entrega funciona igual)
