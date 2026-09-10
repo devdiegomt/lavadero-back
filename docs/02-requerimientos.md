@@ -98,6 +98,9 @@ Nomenclatura: `RF-<módulo>-<n>`.
 | RF-DAT-3 | Los clientes sin actividad se anonimizan al vencer el plazo configurado | `anonimizarClientesInactivos()`, cron 24h |
 | RF-DAT-4 | Los plazos los define el responsable del tratamiento; `0` desactiva la tarea | `DATA_RETENTION_*_MONTHS` |
 | RF-DAT-5 | Se puede contar cuántos clientes quedaron sin autorización registrada | `clientesSinAutorizacion()` |
+| RF-DAT-6 | El titular consulta sus datos escribiendo *MIS DATOS* | `datos-personales.ts` |
+| RF-DAT-7 | El titular pide la supresión y se le exige confirmación explícita antes de borrar | paso `awaiting_delete_confirm` |
+| RF-DAT-8 | El personal suprime los datos de un titular que lo pidió por otro canal | `POST /api/customers/:id/anonimizar` |
 
 ## 2. No funcionales
 
@@ -136,7 +139,7 @@ retención de datos personales según la Ley 1581.
 | RNF-MAN-1 | Todo el backend en TypeScript con `strict` | ✅ |
 | RNF-MAN-2 | Los módulos siguen la misma estructura | ✅ 14 módulos, `controller` + `routes` |
 | RNF-MAN-3 | Las decisiones estructurales quedan en un ADR | ✅ Ver `adr/` |
-| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 158 tests |
+| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 174 tests |
 
 ### Compatibilidad
 
@@ -162,7 +165,6 @@ un olvido:
 | Función | Por qué no está |
 |---|---|
 | Cancelar un turno desde WhatsApp | El flujo existe para agendar, no para cancelar. Requiere confirmar identidad antes de dejar cancelar |
-| Consultar y borrar los propios datos desde WhatsApp | Hoy el aviso deriva a *ASESOR* y lo atiende una persona; `anonimizarCliente()` existe pero no está expuesta al titular. Ver [Seguridad §7](05-seguridad.md#7-brechas-abiertas) brecha 11 |
 | Pagos en línea | Hoy se cobra en el local. Habilitarlo trae PCI al alcance |
 | Descuentos y promociones | No hay modelo de datos para reglas de precio |
 | Inventario de insumos | Otro dominio; el sistema es de turnos, no de stock |
