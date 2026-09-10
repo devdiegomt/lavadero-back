@@ -119,6 +119,7 @@ Escritos como criterios verificables. Donde no hay medición, se dice.
 | RNF-DIS-2 | Que el backend falle no deja al cliente sin respuesta | ✅ Mensaje de disculpa desde bot-wa |
 | RNF-DIS-3 | Que Alegra falle no pierde el pago | ✅ Se registra en `billing_errors` y se reintenta |
 | RNF-DIS-4 | bot-wa se reconecta solo si WhatsApp cierra la sesión | ✅ Limpia credenciales y pide QR nuevo |
+| RNF-DIS-6 | Un cliente que escribe de más no deja sin bot a los demás | ✅ Límite por cliente en `wa-bridge`, no por IP |
 | RNF-DIS-5 | Objetivo de disponibilidad | ⚠️ No definido |
 
 ### Seguridad
@@ -135,7 +136,7 @@ retención de datos personales según la Ley 1581.
 | RNF-MAN-1 | Todo el backend en TypeScript con `strict` | ✅ |
 | RNF-MAN-2 | Los módulos siguen la misma estructura | ✅ 14 módulos, `controller` + `routes` |
 | RNF-MAN-3 | Las decisiones estructurales quedan en un ADR | ✅ Ver `adr/` |
-| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 152 tests |
+| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 157 tests |
 
 ### Compatibilidad
 

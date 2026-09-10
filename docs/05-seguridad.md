@@ -58,7 +58,8 @@ router.post('/', authenticate, requireTenant, authorize('admin'), crearServicio)
 |---|---|---|
 | `helmet()` | Por defecto | Cabeceras de seguridad estándar |
 | CORS | Origen desde `CORS_ORIGIN`, `credentials: true` | Un solo origen, no comodín |
-| Rate limit | 100 peticiones / 15 min sobre `/api/` | Global, por IP |
+| Rate limit | 100 peticiones / 15 min sobre `/api/` | Global, por IP — **excepto `/api/wa-bridge`** |
+| Rate limit de `wa-bridge` | 120 / 15 min **por cliente de WhatsApp** | Ver abajo |
 | Body limit | 1 MB | Contra cargas grandes |
 | Validación | Zod, en 8 de 14 módulos | Ver brecha en §7 |
 
@@ -76,6 +77,23 @@ router.post('/', authenticate, requireTenant, authorize('admin'), crearServicio)
 La clave compuesta es la parte que más importa: limitar sólo por IP permitiría
 recorrer cuentas desde una misma dirección, y limitar sólo por email dejaría
 bloquear a cualquiera a voluntad.
+
+### Por qué `wa-bridge` no va por IP
+
+Todo el tráfico de `/api/wa-bridge` llega desde n8n, que es **una sola
+dirección**. Con el límite global, la cuota de 100 peticiones cada 15 minutos
+la compartían *todos* los clientes del lavadero: unos 20 mensajes la agotaban y
+el bot dejaba de responderle a cualquiera. Es una denegación de servicio que no
+necesita atacante — basta con que el negocio funcione.
+
+Ocurrió en producción, y **el síntoma no delataba la causa**: un 429 en
+`booking-step` hace que n8n crea que no hay conversación en curso y mande el
+mensaje a Claude, así que se veía como si el agendamiento estuviera roto.
+
+Ahora esas rutas llevan su propio limitador, contado por
+`tenant + (LID o teléfono)`. Va **después** de `n8nAuth`: quien llega ahí ya
+demostró conocer el secreto compartido, así que lo que queda por contener no es
+un atacante anónimo sino un cliente —o un bucle— hablando de más.
 
 ## 3. Aislamiento multi-tenant
 

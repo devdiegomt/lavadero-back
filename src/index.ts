@@ -42,7 +42,13 @@ app.use(
 app.use(express.json({ limit: '1mb' }));
 app.use(httpLogger());
 
-// Rate limiting global
+// Rate limiting global, por IP.
+//
+// NO cubre /api/wa-bridge: ese trafico llega todo desde n8n, que es una sola
+// direccion, asi que una cuota por IP la comparten todos los clientes del
+// lavadero y unos 20 mensajes la agotan. Esas rutas van autenticadas con
+// N8N_API_KEY y llevan su propio limitador por cliente de WhatsApp
+// (wa-bridge.routes.ts).
 const limiter = rateLimit({
   windowMs: process.env.RATE_LIMIT_WINDOW_MS
     ? parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10)
@@ -54,7 +60,9 @@ const limiter = rateLimit({
     error: 'Demasiadas solicitudes. Intenta de nuevo en unos minutos.',
   },
 });
-app.use('/api/', limiter);
+app.use('/api/', (req, res, next) =>
+  req.path.startsWith('/wa-bridge') ? next() : limiter(req, res, next),
+);
 
 // ---------------------------------------------------------------------------
 // Health Check
