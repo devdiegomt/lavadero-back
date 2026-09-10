@@ -192,45 +192,112 @@ export async function bookAppointment(req: Request, res: Response): Promise<void
 
 type MessageDirection = 'inbound' | 'outbound' | 'system';
 
-export async function logMessage(req: Request, res: Response): Promise<void> {
-  const { direction, content, flowStep, messageId } = req.body as {
-    direction: string; content: string; flowStep?: string; messageId?: string;
+/** Una entrada de auditoría, ya validada y recortada a lo que cabe en la BD. */
+interface EntradaAuditoria {
+  phone: string | null;
+  waLid: string | null;
+  direction: MessageDirection;
+  content: string;
+  flowStep: string | null;
+  messageId: string | null;
+}
+
+/**
+ * Valida una entrada. Devuelve el motivo si no sirve, o la entrada lista.
+ *
+ * Se valida entrada por entrada y no el lote entero: que un mensaje venga mal
+ * no es razón para perder los otros, y la auditoría es justamente lo que hay
+ * que conservar cuando algo va raro.
+ */
+function validarEntrada(raw: Record<string, unknown>): EntradaAuditoria | string {
+  const { direction, content, flowStep, messageId } = raw as {
+    direction?: string; content?: string; flowStep?: string; messageId?: string;
   };
 
-  const identidad = leerIdentidad(req.body as Record<string, unknown>);
+  const identidad = leerIdentidad(raw);
   if (!tieneIdentidad(identidad) || !direction || !content) {
-    res.status(400).json({
-      error: '(waLid o phone), direction y content son requeridos',
-    });
-    return;
+    return '(waLid o phone), direction y content son requeridos';
   }
 
   const validDirections: MessageDirection[] = ['inbound', 'outbound', 'system'];
   if (!validDirections.includes(direction as MessageDirection)) {
-    res.status(400).json({ error: 'direction invalido' });
-    return;
+    return 'direction invalido';
   }
 
   // phone es VARCHAR(20): un valor más largo reventaría en la BD con un 500.
   if (identidad.phone && identidad.phone.length > 20) {
-    res.status(400).json({ error: 'phone excede 20 caracteres' });
+    return 'phone excede 20 caracteres';
+  }
+
+  return {
+    phone: identidad.phone,
+    waLid: identidad.waLid ? identidad.waLid.slice(0, 40) : null,
+    direction: direction as MessageDirection,
+    content: String(content).substring(0, 2_000),
+    flowStep: flowStep ? String(flowStep).substring(0, 50) : null,
+    messageId: messageId ? String(messageId).substring(0, 100) : null,
+  };
+}
+
+/**
+ * Registra uno o varios mensajes en la auditoría.
+ *
+ * Acepta las dos formas:
+ *
+ * - `{ direction, content, ... }` — un mensaje, que es como llamaba n8n
+ * - `{ mensajes: [ {...}, {...} ] }` — un lote
+ *
+ * El lote existe porque cada mensaje de WhatsApp generaba varias llamadas —una
+ * por entrada de auditoría— y eso multiplicaba por cinco el consumo de cuota.
+ * Se mantiene la forma antigua para que un n8n sin actualizar siga
+ * funcionando: el workflow vive fuera del repositorio y no se despliega con él.
+ */
+export async function logMessage(req: Request, res: Response): Promise<void> {
+  const body = req.body as Record<string, unknown>;
+  const crudas = Array.isArray(body.mensajes)
+    ? (body.mensajes as Record<string, unknown>[])
+    : [body];
+
+  if (crudas.length === 0) {
+    res.status(400).json({ error: 'mensajes vacío' });
+    return;
+  }
+  if (crudas.length > 50) {
+    res.status(400).json({ error: 'máximo 50 mensajes por lote' });
     return;
   }
 
-  // messageId va a external_id: permite rastrear la fila hasta el mensaje
-  // concreto de WhatsApp. flow_step guarda el intent detectado.
+  const validas: EntradaAuditoria[] = [];
+  const rechazadas: { indice: number; motivo: string }[] = [];
+
+  crudas.forEach((raw, indice) => {
+    const r = validarEntrada(raw ?? {});
+    if (typeof r === 'string') rechazadas.push({ indice, motivo: r });
+    else validas.push(r);
+  });
+
+  // Ninguna válida: se responde error, como antes con un solo mensaje.
+  if (validas.length === 0) {
+    res.status(400).json({ error: rechazadas[0]?.motivo ?? 'entrada inválida', rechazadas });
+    return;
+  }
+
+  // Un solo INSERT con todas las filas.
+  const valores: (string | null | undefined)[] = [];
+  const filas = validas.map((e, i) => {
+    const b = i * 7;
+    valores.push(
+      req.tenantId, e.phone, e.waLid, e.direction, e.content, e.flowStep, e.messageId,
+    );
+    return `($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, 'text', $${b + 5}, $${b + 6}, $${b + 7})`;
+  });
+
   await db.query(
-    `INSERT INTO whatsapp_messages (tenant_id, phone, wa_lid, direction, message_type, content, flow_step, external_id)
-     VALUES ($1, $2, $3, $4, 'text', $5, $6, $7)`,
-    [
-      req.tenantId,
-      identidad.phone,
-      identidad.waLid ? identidad.waLid.slice(0, 40) : null,
-      direction,
-      String(content).substring(0, 2_000),
-      flowStep ? String(flowStep).substring(0, 50) : null,
-      messageId ? String(messageId).substring(0, 100) : null,
-    ],
+    `INSERT INTO whatsapp_messages
+       (tenant_id, phone, wa_lid, direction, message_type, content, flow_step, external_id)
+     VALUES ${filas.join(', ')}`,
+    valores,
   );
-  res.status(201).json({ ok: true });
+
+  res.status(201).json({ ok: true, registrados: validas.length, rechazadas });
 }

@@ -72,6 +72,9 @@ services:
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
       STRICT_RATE_LIMIT_MAX: ${STRICT_RATE_LIMIT_MAX:-5}
+      # Limite de /api/wa-bridge, por cliente de WhatsApp y no por IP: todo
+      # ese trafico llega desde n8n, que es una sola direccion.
+      WA_BRIDGE_RATE_LIMIT_MAX: ${WA_BRIDGE_RATE_LIMIT_MAX:-120}
       # config.ts las exige sin default: si faltan, el contenedor no arranca
       # y n8n se queda sin poder resolver "backend".
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}

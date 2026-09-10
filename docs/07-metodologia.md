@@ -61,6 +61,13 @@ ciegas ante síntomas mal entendidos. Los casos concretos:
   prueba que haya hecho lo que se esperaba.** El acuse de recibo de un sistema
   ajeno mide lo que ese sistema aceptó, no lo que el usuario final obtiene.
 
+- El bot dejó de agendar y se culpó al consentimiento, luego a Redis, luego a
+  la serialización de fechas. Las tres eran razonables y las tres falsas: era
+  un **429** del rate limit, visible en la primera línea de
+  `docker compose logs backend --tail`. Se llegó tarde por filtrar el log por
+  `"Redis"` y por `"wa-bridge"` — es decir, **buscando la confirmación de cada
+  hipótesis en vez de mirar lo que había.** Filtrar un log asume una respuesta.
+
 **La regla que sale de ahí:** antes de cambiar código, conseguir el dato que
 distingue entre las causas posibles. Un log, una ejecución, una petición
 reproducida. Si no se puede reproducir, el primer trabajo es hacerlo

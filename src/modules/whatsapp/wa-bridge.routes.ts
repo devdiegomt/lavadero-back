@@ -4,8 +4,10 @@
 
 import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
+import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import * as db from '../../shared/db';
+import { leerIdentidad } from './wa-identity';
 import { bookingStep } from './wa-bridge.booking';
 import * as ctrl from './wa-bridge.controller';
 
@@ -66,8 +68,51 @@ async function resolveTenant(req: Request, res: Response, next: NextFunction): P
   }
 }
 
+// ─── Middleware: límite por cliente de WhatsApp ──────────────────────────────
+
+/**
+ * Limita por **cliente de WhatsApp**, no por IP.
+ *
+ * Todo el tráfico de esta ruta llega desde n8n, que es una sola dirección. Con
+ * el limitador global —por IP— la cuota era compartida por todos los clientes
+ * del lavadero: unos 20 mensajes la agotaban y el bot dejaba de responderle a
+ * todo el mundo. Pasó en producción y el síntoma no delataba la causa; se veía
+ * como si el agendamiento estuviera roto, porque un 429 en `booking-step` hace
+ * que n8n crea que no hay conversación en curso y mande el mensaje a Claude.
+ *
+ * Va **después** de `n8nAuth`: quien llega hasta acá ya demostró conocer el
+ * secreto compartido, así que lo que queda por contener no es un atacante
+ * anónimo sino un cliente —o un bucle— hablando de más. Y va después de
+ * `resolveTenant` para que la clave incluya el lavadero: dos clientes de
+ * lavaderos distintos no se estorban entre sí.
+ */
+const limitePorCliente = rateLimit({
+  windowMs: process.env.RATE_LIMIT_WINDOW_MS
+    ? parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10)
+    : 15 * 60 * 1_000,
+  max: process.env.WA_BRIDGE_RATE_LIMIT_MAX
+    ? parseInt(process.env.WA_BRIDGE_RATE_LIMIT_MAX, 10)
+    : 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request): string => {
+    const id = leerIdentidad({
+      ...(req.body as Record<string, unknown>),
+      ...(req.query as Record<string, unknown>),
+    });
+    // Sin identidad —las consultas por placa no la traen— se agrupa por
+    // lavadero. Es menos fino, pero sigue sin ser una cuota global.
+    const cliente = id.waLid ?? id.phone ?? 'sin-identidad';
+    return `${req.tenantId ?? 'sin-tenant'}:${cliente}`;
+  },
+  message: {
+    error: 'Demasiados mensajes seguidos. Espera un momento e intenta de nuevo.',
+  },
+});
+
 router.use(n8nAuth);
 router.use(resolveTenant);
+router.use(limitePorCliente);
 
 router.get('/appointment-status', ctrl.getAppointmentStatus);
 router.get('/services',           ctrl.getServices);
