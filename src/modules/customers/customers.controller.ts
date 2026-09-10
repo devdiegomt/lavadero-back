@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import * as db from '../../shared/db';
 import { AppError } from '../../shared/middleware/errorHandler';
+import { anonimizarCliente } from '../../shared/db/retencion';
 import type { CustomerRow, VehicleRow } from '../../types/entities';
 import type { CustomerCreateBody } from '../../shared/middleware/validate';
 
@@ -131,6 +132,42 @@ export async function remove(req: Request, res: Response): Promise<void> {
 
   if (rows.length === 0) throw new AppError('Cliente no encontrado', 404);
   res.json({ message: 'Cliente eliminado' });
+}
+
+// ─── POST /api/customers/:id/anonimizar ──────────────────────────────────────
+
+/**
+ * Suprime los datos personales del cliente: el derecho de supresión de la
+ * Ley 1581, cuando el titular lo pide por un canal que no es WhatsApp.
+ *
+ * **No es lo mismo que DELETE /:id.** Ese hace borrado lógico: pone
+ * `deleted_at` y la fila conserva nombre, teléfono y cédula. Sirve para sacar
+ * a alguien del listado, no para cumplir la ley.
+ *
+ * Esto vacía los campos que identifican a una persona y marca `anonymized_at`.
+ * Los turnos siguen contando para las estadísticas del lavadero, porque son
+ * historial de negocio y ya no identifican a nadie. Ver shared/db/retencion.ts.
+ *
+ * Es irreversible, así que queda restringido a `admin`.
+ */
+export async function anonimizar(req: Request, res: Response): Promise<void> {
+  const hecho = await anonimizarCliente(req.tenantId as string, req.params.id);
+
+  if (!hecho) {
+    // Distinguir las dos causas ayuda a quien atiende la solicitud: no es lo
+    // mismo un id equivocado que un titular al que ya se le atendió.
+    const { rows } = await db.query<{ anonymized_at: Date | null }>(
+      `SELECT anonymized_at FROM customers WHERE id = $1 AND tenant_id = $2`,
+      [req.params.id, req.tenantId],
+    );
+    if (rows[0]?.anonymized_at) {
+      res.json({ message: 'Los datos de este cliente ya estaban suprimidos', anonimizado: false });
+      return;
+    }
+    throw new AppError('Cliente no encontrado', 404);
+  }
+
+  res.json({ message: 'Datos personales suprimidos', anonimizado: true });
 }
 
 // ─── GET /api/customers/:id/vehicles ─────────────────────────────────────────

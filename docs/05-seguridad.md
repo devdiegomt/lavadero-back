@@ -182,9 +182,9 @@ sensible, porque el cliente puede escribir cualquier cosa ahí.
 | Autorización previa del titular | ✅ En WhatsApp — ver abajo |
 | Aviso de privacidad accesible | ✅ Parcial — se muestra en la conversación; falta publicarlo completo |
 | Finalidad declarada | ✅ En el texto del aviso, versionado |
-| Derecho de acceso | ⚠️ Parcial — el cliente ve su historial por WhatsApp, no todos sus datos |
+| Derecho de acceso | ✅ *MIS DATOS* por WhatsApp; también hay endpoint en el panel |
 | Derecho de rectificación | ⚠️ Sólo el personal puede corregir |
-| Derecho de supresión | ✅ Parcial — `anonimizarCliente()` existe; falta exponerlo al titular |
+| Derecho de supresión | ✅ *BORRAR MIS DATOS* + confirmación, y `POST /api/customers/:id/anonimizar` |
 | Retención limitada | ✅ Tareas de cron con plazo configurable |
 | Registro de bases ante la SIC | ⚠️ Depende del tamaño del responsable; verificar |
 | Medidas de seguridad | ✅ Parcial — control de acceso y cifrado de credenciales |
@@ -254,11 +254,45 @@ de `customers` admite una tercera opción:
 CHECK (phone IS NOT NULL OR wa_lid IS NOT NULL OR anonymized_at IS NOT NULL)
 ```
 
-`anonimizarCliente(tenantId, customerId)` hace lo mismo para un titular
-concreto: es el derecho de supresión, que se atiende cuando lo piden y no
-cuando vence un plazo. Lleva `tenant_id` en el `WHERE` para que un lavadero no
-pueda borrar el cliente de otro. **Falta exponerlo**: hoy es una función, no un
-endpoint ni una opción del bot.
+### Cómo ejerce el titular sus derechos
+
+| Escribe por WhatsApp | Qué pasa |
+|---|---|
+| `MIS DATOS` | Le muestra qué se guarda de él y cómo borrarlo |
+| `BORRAR MIS DATOS` | **No borra**: avisa de lo irreversible y pide confirmación |
+| `CONFIRMO` | Ahí sí suprime |
+| `0` | Desiste, no se toca nada |
+
+Y desde el panel, para quien lo pide por otro canal:
+`POST /api/customers/:id/anonimizar`, restringido a `admin`.
+
+**Ojo con `DELETE /api/customers/:id`:** ése hace borrado *lógico* —pone
+`deleted_at` y la fila conserva nombre, teléfono y cédula—. Sirve para sacar a
+alguien del listado, **no para cumplir la ley**. El que suprime de verdad es
+`anonimizar`.
+
+#### Tres decisiones que importan
+
+**Palabras reservadas, no una intención de la IA.** Estas frases se
+interceptan antes que cualquier otra cosa y se comparan literalmente. Un
+derecho que la ley obliga a atender no puede depender de que un modelo acierte:
+si Claude está caído o sin crédito, el titular tiene que poder ejercerlo igual.
+Mismo criterio que el `0` que cancela el agendamiento. Ver
+[ADR-0006](adr/0006-ia-solo-para-clasificar.md).
+
+**Coincidencia exacta contra la frase completa, no por subcadena.** Quien
+escribe «no quiero que borren mis datos» no está pidiendo el borrado.
+Confundirlo destruiría datos de alguien que pidió justo lo contrario.
+
+**Confirmación en dos pasos.** Pedirlo no borra. Se avisa de lo que se pierde
+—incluido que un turno agendado sigue en pie pero deja de poder avisarse— y se
+espera un `CONFIRMO` explícito. Ante cualquier otra respuesta se repregunta:
+con algo irreversible de por medio, interpretar no es una opción.
+
+`anonimizarCliente(tenantId, customerId)` lleva el `tenant_id` en el `WHERE`,
+así que el borrado alcanza sólo al cliente de ese lavadero. En WhatsApp la
+identidad es el LID —o el teléfono— desde el que se escribe: es la cuenta del
+titular, y en este canal no hay prueba más fuerte disponible.
 
 > **Ninguna de las dos tareas toca datos de facturación.** `payments` y
 > `billing_sync` responden a la obligación de la DIAN de conservar 5 años
@@ -305,11 +339,10 @@ Ordenadas por relación entre riesgo y esfuerzo.
 > Las tres quedaron resueltas. La lección quedó anotada en la
 > [metodología §2](07-metodologia.md): verificar antes de concluir.
 
-> **Cerradas después (2026-09).** *"Sin autorización de tratamiento"* y *"Sin
-> política de retención"* se resolvieron en la §5. La supresión quedó a medias
-> —la función existe, falta exponerla— y aparece reformulada como la brecha 6;
-> los clientes creados antes de la autorización son la 7, que es proceso y no
-> código.
+> **Cerradas después (2026-09).** *"Sin autorización de tratamiento"*, *"Sin
+> política de retención"* y *"Derecho de supresión no expuesto"* se resolvieron
+> en la §5. Queda de esa tanda el pasivo de clientes creados antes de que
+> existiera la autorización, que es proceso y no código: hoy es la brecha 6.
 
 | # | Brecha | Riesgo | Esfuerzo |
 |---|---|---|---|
@@ -318,8 +351,7 @@ Ordenadas por relación entre riesgo y esfuerzo.
 | 3 | **Tokens en `localStorage`** (frontend) | Un XSS expone la sesión | Alto (implica cookies httpOnly y CSRF) |
 | 4 | **Sin auditoría de acciones** — sólo hay `appointment_status_log` | No se puede reconstruir quién cambió qué | Medio |
 | 5 | **Sin RLS en PostgreSQL** | Una consulta mal escrita cruza tenants | Alto |
-| 6 | **Derecho de supresión no expuesto** (Ley 1581) — `anonimizarCliente()` existe, falta endpoint y opción en el bot | El titular no puede ejercerlo por sí mismo | Bajo |
-| 7 | **Clientes sin autorización registrada** — los creados antes de la §5 | Pasivo legal a regularizar | Bajo (proceso, no código) |
+| 6 | **Clientes sin autorización registrada** — los creados antes de la §5 | Pasivo legal a regularizar | Bajo (proceso, no código) |
 
 ### Notas sobre algunas
 

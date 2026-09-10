@@ -32,12 +32,12 @@ export function textoAutorizacion(nombreLavadero: string): string {
     `de WhatsApp y los datos de tu vehículo.\n\n` +
     `Se usan únicamente para gestionar tus turnos y tu historial de servicios. ` +
     `No se comparten con terceros con fines comerciales.\n\n` +
-    // Se nombra ASESOR y no una palabra nueva a propósito: es la única que el
-    // bot enruta hoy (intent human_help, tanto por Claude como por el fallback
-    // de palabras clave). Prometer un comando que nadie atiende es peor que no
-    // prometerlo — ya pasó con el recordatorio de 30 minutos.
-    `Puedes pedir en cualquier momento que te mostremos, corrijamos o ` +
-    `eliminemos tus datos: escribe *ASESOR* y te atiende una persona.\n\n` +
+    // MIS DATOS y BORRAR MIS DATOS son palabras reservadas que el bot atiende
+    // el mismo, sin pasar por la IA: ver datos-personales.ts. Se prometieron
+    // una vez sin que existieran y hubo que quitarlas del aviso; ahora existen.
+    // Corregir sigue siendo humano, de ahi que ASESOR se mantenga.
+    `Escribe *MIS DATOS* cuando quieras para ver qué guardamos, o ` +
+    `*BORRAR MIS DATOS* para eliminarlos. Para corregir algo, *ASESOR*.\n\n` +
     `¿Autorizas el tratamiento de tus datos? Responde *SI* para continuar.`
   );
 }
