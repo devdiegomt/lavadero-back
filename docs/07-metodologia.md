@@ -68,6 +68,14 @@ ciegas ante síntomas mal entendidos. Los casos concretos:
   `"Redis"` y por `"wa-bridge"` — es decir, **buscando la confirmación de cada
   hipótesis en vez de mirar lo que había.** Filtrar un log asume una respuesta.
 
+- La auditoría de WhatsApp llevaba semanas sin registrar nada para los
+  clientes identificados sólo por LID —que son el caso normal— y **había
+  pruebas que la cubrían**. Pasaban porque el helper que arma el mensaje
+  siempre mandaba teléfono: cubrían el único caso que funcionaba. Se descubrió
+  contando filas en la base: 0 de 21 tenían `wa_lid`. **Una prueba en verde
+  sólo dice que el caso que probaste funciona** — la pregunta útil es cuál es
+  el caso que ocurre de verdad en producción.
+
 **La regla que sale de ahí:** antes de cambiar código, conseguir el dato que
 distingue entre las causas posibles. Un log, una ejecución, una petición
 reproducida. Si no se puede reproducir, el primer trabajo es hacerlo

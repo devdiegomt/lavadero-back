@@ -185,6 +185,32 @@ describe('workflow n8n: auditoría', () => {
     expect(rows.every((x) => x.flow_step === 'greeting')).toBe(true);
   });
 
+  it('registra al cliente identificado sólo por LID, sin teléfono', async () => {
+    // ESTE es el caso normal en producción: WhatsApp casi nunca entrega el
+    // teléfono (ADR-0005). El nodo de auditoría no enviaba `waLid`, así que
+    // /log respondía 400 y NO SE REGISTRABA NADA — con onError ocultando el
+    // fallo y maxTries duplicándolo. Se descubrió en la base: 0 de 21 filas
+    // tenían wa_lid.
+    //
+    // Las pruebas anteriores no lo veían porque el helper `msg` siempre manda
+    // teléfono: cubrían el único caso que funcionaba.
+    const messageId = 'AUDIT-LID-' + Date.now();
+    const waLid = '99922233344455@lid';
+
+    await runWorkflow(
+      { ...msg('hola', { messageId, waLid }), phone: null },
+      claude('greeting'),
+    );
+
+    const { rows } = await db.query<{ wa_lid: string | null; phone: string | null }>(
+      `SELECT wa_lid, phone FROM whatsapp_messages WHERE external_id = $1`, [messageId],
+    );
+
+    expect(rows).toHaveLength(2);
+    expect(rows.every((x) => x.wa_lid === waLid)).toBe(true);
+    expect(rows.every((x) => x.phone === null)).toBe(true);
+  });
+
   it('en la rama de agendamiento registra flow_step booking', async () => {
     const messageId = 'AUDIT-BK-' + Date.now();
     const phone = '+573991112200';
