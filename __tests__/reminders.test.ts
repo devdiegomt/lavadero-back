@@ -75,6 +75,43 @@ beforeEach(async () => {
   jest.restoreAllMocks();
 });
 
+describe('la fecha se compara contra el día del lavadero', () => {
+  // La consulta usaba CURRENT_DATE —el día del servidor, en UTC— mientras que
+  // el turno se guarda con la fecha local del lavadero. Entre la medianoche
+  // UTC y la local las dos no coinciden y no devolvía nada: los recordatorios
+  // dejaban de salir en silencio.
+  //
+  // Se descubrió porque un cambio de orden de las suites dejó al tenant en
+  // otra zona y estos tests empezaron a fallar sin relación aparente.
+  afterEach(async () => {
+    await db.query(
+      `UPDATE tenants SET timezone = 'America/Bogota' WHERE id = $1`, [tenantId],
+    );
+  });
+
+  it('avisa aunque el lavadero esté en otro día que el servidor', async () => {
+    // Zona elegida para caer al otro lado de la medianoche respecto de UTC.
+    const utcHour = new Date().getUTCHours();
+    const offset = utcHour < 12 ? -1 - utcHour : 25 - utcHour;
+    const tz = offset >= 0 ? `Etc/GMT-${offset}` : `Etc/GMT+${-offset}`;
+    await db.query(`UPDATE tenants SET timezone = $1 WHERE id = $2`, [tz, tenantId]);
+
+    const { rows } = await db.query<{ distintos: boolean }>(
+      `SELECT CURRENT_DATE <> (NOW() AT TIME ZONE timezone)::date AS distintos
+       FROM tenants WHERE id = $1`, [tenantId],
+    );
+    // Guardia: si las fechas coincidieran, la prueba no probaría nada.
+    expect(rows[0].distintos).toBe(true);
+
+    await crearTurno(30);
+    const enviar = jest.spyOn(botWa, 'enviarWhatsApp').mockResolvedValue({ enviado: true });
+
+    await sendAppointmentReminders();
+
+    expect(enviar).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('recordatorios de turno', () => {
   it('avisa al cliente identificado sólo por LID', async () => {
     await crearTurno(30);

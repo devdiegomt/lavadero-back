@@ -87,7 +87,14 @@ export async function sendAppointmentReminders(): Promise<void> {
        JOIN vehicles  v ON v.id = a.vehicle_id
        JOIN services  s ON s.id = a.service_id
        JOIN tenants   t ON t.id = a.tenant_id
-       WHERE a.scheduled_date = CURRENT_DATE
+       -- La fecha se compara contra el dia DEL LAVADERO, no contra
+       -- CURRENT_DATE, que es el del servidor y corre en UTC. El turno se
+       -- guarda con la fecha local del lavadero, asi que entre la medianoche
+       -- UTC y la local las dos no coinciden y la consulta no devolvia nada:
+       -- los recordatorios dejaban de salir sin ningun error. Es el mismo
+       -- error de mezclar relojes que ya se corrigio en getAvailableSlots y en
+       -- el paso de confirmacion del agendamiento.
+       WHERE a.scheduled_date = (NOW() AT TIME ZONE t.timezone)::date
          AND a.status = 'pending' AND a.source = 'whatsapp'
          AND a.scheduled_time IS NOT NULL AND t.whatsapp_enabled = true
          AND (c.wa_lid IS NOT NULL OR c.phone IS NOT NULL)

@@ -76,6 +76,18 @@ ciegas ante síntomas mal entendidos. Los casos concretos:
   sólo dice que el caso que probaste funciona** — la pregunta útil es cuál es
   el caso que ocurre de verdad en producción.
 
+- Una brecha se clasificó como «proceso, no código» sin abrir la consulta que
+  la tocaba. Al abrirla, resultó que el flujo **volvía a incurrir en ella en
+  cada visita** del cliente. **Clasificar un problema también es una
+  afirmación** y merece la misma comprobación que un diagnóstico.
+
+- Un cambio hizo fallar ocho pruebas ajenas. Cuatro eran fixtures desfasadas,
+  pero las otras cuatro destapaban un **bug real de producción** que llevaba
+  ahí desde antes: los recordatorios comparaban la fecha contra el reloj del
+  servidor. Sólo se vio porque el archivo nuevo cambió el orden de las suites
+  y una dejó al tenant en otra zona. **Cuando un cambio rompe pruebas ajenas,
+  la primera pregunta es qué están señalando** — no cómo hacerlas pasar.
+
 **La regla que sale de ahí:** antes de cambiar código, conseguir el dato que
 distingue entre las causas posibles. Un log, una ejecución, una petición
 reproducida. Si no se puede reproducir, el primer trabajo es hacerlo

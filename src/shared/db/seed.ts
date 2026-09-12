@@ -3,6 +3,7 @@
  * Ejecutar: npm run db:seed
  */
 import 'dotenv/config';
+import { VERSION_AVISO } from '../../modules/whatsapp/consentimiento';
 import bcrypt from 'bcryptjs';
 import { pool } from './index';
 import { hashPassword } from '../utils/password';
@@ -71,14 +72,19 @@ async function seed() {
 
     // Clientes
     await pool.query(`
-      INSERT INTO customers (id, tenant_id, first_name, last_name, phone, email, document_type, document_number)
+      INSERT INTO customers (id, tenant_id, first_name, last_name, phone, email, document_type, document_number,
+                             consent_at, consent_version, consent_source)
       VALUES
-        ('c0000000-0000-0000-0000-000000000001', $1, 'María', 'García', '+573101112233', 'maria.garcia@gmail.com', 'CC', '52345678'),
-        ('c0000000-0000-0000-0000-000000000002', $1, 'Pedro', 'Martínez', '+573204445566', NULL, 'CC', '80123456'),
-        ('c0000000-0000-0000-0000-000000000003', $1, 'Laura', 'Sánchez', '+573157778899', 'laura.sanchez@outlook.com', 'CC', '1098765432'),
-        ('c0000000-0000-0000-0000-000000000004', $1, 'Andrés', 'Ramírez', '+573118889900', NULL, 'CC', '79876543'),
-        ('c0000000-0000-0000-0000-000000000005', $1, 'Camila', 'Herrera', '+573176665544', 'camila.h@gmail.com', 'CC', '1045678901')
-    `, [tenantId]);
+        ('c0000000-0000-0000-0000-000000000001', $1, 'María', 'García', '+573101112233', 'maria.garcia@gmail.com', 'CC', '52345678', NOW(), $2, 'panel'),
+        ('c0000000-0000-0000-0000-000000000002', $1, 'Pedro', 'Martínez', '+573204445566', NULL, 'CC', '80123456', NOW(), $2, 'panel'),
+        ('c0000000-0000-0000-0000-000000000003', $1, 'Laura', 'Sánchez', '+573157778899', 'laura.sanchez@outlook.com', 'CC', '1098765432', NOW(), $2, 'panel'),
+        ('c0000000-0000-0000-0000-000000000004', $1, 'Andrés', 'Ramírez', '+573118889900', NULL, 'CC', '79876543', NOW(), $2, 'panel'),
+        -- Camila queda a proposito SIN autorizacion: representa a los clientes
+        -- cargados antes de que el flujo la pidiera. Sirve para probar a mano
+        -- el paso que se la pide al volver, y para que
+        -- clientesSinAutorizacion() tenga algo que reportar en una demo.
+        ('c0000000-0000-0000-0000-000000000005', $1, 'Camila', 'Herrera', '+573176665544', 'camila.h@gmail.com', 'CC', '1045678901', NULL, NULL, NULL)
+    `, [tenantId, VERSION_AVISO]);
 
     // Vehículos
     await pool.query(`
