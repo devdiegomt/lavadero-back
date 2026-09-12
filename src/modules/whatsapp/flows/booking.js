@@ -11,7 +11,7 @@
 
 const db = require('../../../shared/db');
 const { getServicePrice, formatCOP } = require('../../../shared/utils/pricing');
-const { buscarOCrearCliente } = require('../wa-identity');
+const { buscarOCrearCliente, registrarAutorizacion } = require('../wa-identity');
 const { elegirTipoVehiculo, elegirOpcion } = require('../menu');
 const {
   textoAutorizacion,
@@ -138,7 +138,8 @@ async function handle(ctx) {
 
     // Buscar vehículo existente
     const { rows: vehicles } = await db.query(
-      `SELECT v.*, c.first_name, c.last_name, c.phone, c.id as customer_id
+      `SELECT v.*, c.first_name, c.last_name, c.phone, c.id as customer_id,
+              c.consent_at
        FROM vehicles v
        JOIN customers c ON c.id = v.customer_id
        WHERE UPPER(v.plate) = $1 AND v.tenant_id = $2 AND v.deleted_at IS NULL
@@ -159,6 +160,32 @@ async function handle(ctx) {
       const serviceList = services.map((s, i) =>
         `${i + 1}️⃣ ${s.name} — ${formatCOP(getServicePrice(s, v.vehicle_type))}`
       ).join('\n');
+
+      const datosCliente = {
+        plate,
+        vehicleId: v.id,
+        vehicleType: v.vehicle_type,
+        customerId: v.customer_id,
+        customerName: v.first_name,
+        services: services.map(s => ({ id: s.id, name: s.name, price: getServicePrice(s, v.vehicle_type), minutes: s.estimated_minutes })),
+        serviceList,
+      };
+
+      // Cliente conocido pero sin autorizacion registrada: son los creados
+      // antes de que existiera este paso. Sin esto el flujo los reconocia por
+      // la placa y agendaba igual, asi que la falta se repetia en cada visita
+      // en vez de resolverse. Se pide una sola vez.
+      if (!v.consent_at) {
+        return {
+          messages: [
+            `🚗 Encontramos tu vehículo: *${plate}*${vehicleInfo ? ` — ${vehicleInfo}` : ''}`,
+            textoAutorizacion(tenant.name),
+          ],
+          nextFlow: 'booking',
+          nextStep: 'awaiting_consent_existente',
+          data: datosCliente,
+        };
+      }
 
       return {
         messages: [
@@ -215,6 +242,47 @@ async function handle(ctx) {
       nextFlow: 'booking',
       nextStep: 'awaiting_consent',
       data: { ...data, firstName, lastName },
+    };
+  }
+
+  // ─── AWAITING CONSENT (cliente que ya existia, sin autorizacion) ───
+  // Mismo criterio que con un cliente nuevo: solo un si explicito autoriza. La
+  // diferencia es que aca el cliente ya esta en la base, asi que la
+  // autorizacion se registra sobre su ficha en vez de en el alta.
+  if (step === 'awaiting_consent_existente') {
+    const respuesta = interpretarRespuesta(text);
+
+    if (respuesta === 'rechaza') {
+      return {
+        messages: [TEXTO_RECHAZO],
+        nextFlow: null,
+        nextStep: null,
+        data: {},
+      };
+    }
+
+    if (respuesta === 'ambiguo') {
+      return {
+        messages: [TEXTO_REPREGUNTA],
+        nextFlow: 'booking',
+        nextStep: 'awaiting_consent_existente',
+        data,
+        retry: true,
+      };
+    }
+
+    // Se escribe ya, no al final: si el cliente abandona la conversacion
+    // despues de autorizar, la autorizacion sigue siendo valida y no hay que
+    // volver a pedirsela la proxima vez.
+    await registrarAutorizacion(tenant.id, data.customerId, autorizacionDe('whatsapp'));
+
+    return {
+      messages: [
+        `✅ Gracias. Ahora elige el servicio:\n\n${data.serviceList}\n\nEscribe el *número* del servicio.`,
+      ],
+      nextFlow: 'booking',
+      nextStep: 'awaiting_service',
+      data,
     };
   }
 

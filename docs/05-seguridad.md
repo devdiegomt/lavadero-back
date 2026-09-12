@@ -179,7 +179,7 @@ sensible, porque el cliente puede escribir cualquier cosa ahí.
 
 | Obligación | Estado |
 |---|---|
-| Autorización previa del titular | ✅ En WhatsApp — ver abajo |
+| Autorización previa del titular | ✅ En WhatsApp, a clientes nuevos y a los que ya existían |
 | Aviso de privacidad accesible | ✅ Parcial — se muestra en la conversación; falta publicarlo completo |
 | Finalidad declarada | ✅ En el texto del aviso, versionado |
 | Derecho de acceso | ✅ *MIS DATOS* por WhatsApp; también hay endpoint en el panel |
@@ -222,10 +222,24 @@ Si el titular no autoriza, el flujo termina: no se crea el cliente, no se
 agenda. Se le sigue pudiendo responder precios y servicios, que no requieren
 guardar nada.
 
-**Pasivo pendiente.** Los clientes creados antes de este paso tienen
-`consent_at IS NULL`. `clientesSinAutorizacion(tenantId)` los cuenta. La ley
-pide autorización de todos, no sólo de los nuevos: regularizarlos —pidiéndola
-en el próximo contacto— es trabajo pendiente del responsable.
+### Los clientes que ya existían
+
+Los creados antes de que existiera este paso quedaron con `consent_at IS NULL`.
+Durante un tiempo esto se anotó como «pasivo a regularizar, proceso y no
+código», y esa lectura era **incompleta**: la consulta que busca el vehículo ni
+siquiera miraba `consent_at`, así que al volver, el flujo los reconocía por la
+placa y **agendaba de nuevo sin pedírsela nunca**. No era un pasivo quieto — se
+volvía a ejercer en cada visita.
+
+Ahora, cuando un cliente conocido sin autorización da su placa, se le pide una
+sola vez antes de dejarle agendar. Si acepta, queda en su ficha; si no, no se
+agenda. `registrarAutorizacion()` **no pisa una autorización anterior**: la
+fecha y la versión originales son la prueba de qué se le informó y cuándo.
+
+Así el pasivo se vacía solo a medida que la gente vuelve.
+`clientesSinAutorizacion(tenantId)` sigue contando los que quedan — los que no
+han vuelto—, y para esos sí hace falta una decisión del responsable: contactarlos,
+o dejar que la retención los anonimice al vencer el plazo.
 
 ### Retención
 
@@ -351,7 +365,7 @@ Ordenadas por relación entre riesgo y esfuerzo.
 | 3 | **Tokens en `localStorage`** (frontend) | Un XSS expone la sesión | Alto (implica cookies httpOnly y CSRF) |
 | 4 | **Sin auditoría de acciones** — sólo hay `appointment_status_log` | No se puede reconstruir quién cambió qué | Medio |
 | 5 | **Sin RLS en PostgreSQL** | Una consulta mal escrita cruza tenants | Alto |
-| 6 | **Clientes sin autorización registrada** — los creados antes de la §5 | Pasivo legal a regularizar | Bajo (proceso, no código) |
+| 6 | **Clientes sin autorización que no han vuelto** — a los que vuelven ya se les pide (§5) | Pasivo decreciente | Bajo (decisión del responsable) |
 
 ### Notas sobre algunas
 

@@ -155,3 +155,38 @@ export async function buscarOCrearCliente(
   );
   return rows[0].id;
 }
+
+/**
+ * Deja constancia de la autorización de un cliente que **ya existía**.
+ *
+ * Los clientes creados antes de que el flujo pidiera autorización quedaron con
+ * `consent_at` en NULL. Eso no era sólo un pasivo dormido: al volver, el flujo
+ * los reconocía por la placa y agendaba de nuevo **sin pedírsela nunca**, así
+ * que la falta se repetía en cada visita.
+ *
+ * Se escribe sólo si todavía no había ninguna. Una autorización previa no se
+ * pisa: la fecha y la versión originales son la prueba de qué se le informó y
+ * cuándo, y sobrescribirlas destruiría justamente lo que hay que poder mostrar.
+ *
+ * @returns true si esta llamada fue la que la registró.
+ */
+export async function registrarAutorizacion(
+  tenantId: string,
+  customerId: string,
+  autorizacion: Autorizacion,
+  ejecutar: typeof db.query = db.query,
+): Promise<boolean> {
+  const { rowCount } = await ejecutar(
+    `UPDATE customers
+     SET consent_at = $3, consent_version = $4, consent_source = $5, updated_at = NOW()
+     WHERE tenant_id = $1 AND id = $2 AND consent_at IS NULL`,
+    [
+      tenantId,
+      customerId,
+      autorizacion.consentAt,
+      autorizacion.consentVersion,
+      autorizacion.consentSource,
+    ],
+  );
+  return (rowCount ?? 0) > 0;
+}

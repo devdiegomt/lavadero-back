@@ -20,7 +20,7 @@ import Redis from 'ioredis';
 import app from '../src/index';
 import * as db from '../src/shared/db';
 import { initBooking } from '../src/modules/whatsapp/wa-bridge.booking';
-import { fijarHoraDelTenantEnLaManana } from './helpers/tenant-clock';
+import { fijarHoraDelTenantEnLaManana, restaurarHoraDelTenant } from './helpers/tenant-clock';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { runWorkflow, claude } = require('./helpers/n8n-runner');
@@ -66,6 +66,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Devolver la zona: lo que deja una suite lo encuentra la siguiente.
+  await restaurarHoraDelTenant();
   await new Promise<void>((ok) => server.close(() => ok()));
   await redis.quit();
   await db.pool.end();
