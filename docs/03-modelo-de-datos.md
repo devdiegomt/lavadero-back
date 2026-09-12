@@ -54,7 +54,7 @@ Las cuatro que no lo tienen:
 
 ## 3. Tablas principales
 
-### `tenants` — 27 columnas
+### `tenants` — 29 columnas
 
 El lavadero. Es la raíz de casi todo.
 
@@ -62,7 +62,7 @@ Grupos de columnas que conviene distinguir:
 
 - **Identidad**: `name`, `slug`, `nit`, `owner_name`
 - **Contacto**: `phone`, `email`, `address`, `city`
-- **Operación**: `opening_time`, `closing_time`, `bays_count`, `timezone`
+- **Operación**: `opening_time`, `closing_time`, `closed_weekdays`, `booking_days_ahead`, `bays_count`, `timezone`
 - **WhatsApp**: `whatsapp_phone`, `whatsapp_enabled`, `whatsapp_provider`
 - **Facturación**: `billing_provider`, `billing_api_key` (ver [Seguridad §4](05-seguridad.md#4-datos-en-reposo))
 - **Comercial**: `plan_id`, `is_active`
@@ -73,6 +73,23 @@ ver [ADR-0007](adr/0007-zona-horaria-del-tenant.md).
 
 `whatsapp_phone` es lo que usa el bridge para resolver el tenant. Tiene que
 coincidir exactamente con el `TENANT_PHONE` de bot-wa.
+
+**Cuándo atiende el lavadero:**
+
+```sql
+opening_time       TIME     -- 07:00
+closing_time       TIME     -- 19:00
+closed_weekdays    SMALLINT[]  -- {0} = cerrado los domingos
+booking_days_ahead SMALLINT    -- 7 = hasta una semana de anticipación
+```
+
+`closed_weekdays` usa la numeración de PostgreSQL (`EXTRACT(DOW)`), que
+coincide con la de JavaScript (`Date.getDay()`): 0 = domingo. Coincidir evita
+una conversión que sería fácil equivocar entre la consulta y el código.
+
+Son columnas del tenant y no constantes porque cada lavadero decide: uno puede
+abrir domingo y cerrar lunes, que en Colombia es común. Los valores por defecto
+—cerrado domingos, siete días de ventana— son los de un lavadero típico.
 
 ### `customers` — 19 columnas
 

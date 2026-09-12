@@ -195,10 +195,13 @@ describe('wa-bridge: agendamiento por LID (sin teléfono)', () => {
     res = await paso({ message: PLACA });
     expect(res.body.step).toBe('awaiting_service');
 
-    res = await paso({ message: '1' });
+    res = await paso({ message: '1' });   // servicio
+    expect(res.body.step).toBe('awaiting_date');
+
+    res = await paso({ message: '1' });   // día
     expect(res.body.step).toBe('awaiting_time');
 
-    res = await paso({ message: '1' });
+    res = await paso({ message: '1' });   // horario
     expect(res.body.step).toBe('awaiting_confirm');
 
     res = await paso({ message: 'SI' });
@@ -242,20 +245,27 @@ describe('wa-bridge: agendamiento conversacional', () => {
     expect(res.body.reply).toContain(PLACA);
     expect(res.body.step).toBe('awaiting_service');
 
-    // 3. servicio
+    // 3. servicio → ahora pregunta por el día antes que por la hora
+    res = await auth(
+      request(app).post('/api/wa-bridge/booking-step').send({ phone, message: '1' }),
+    );
+    expect(res.body.step).toBe('awaiting_date');
+    expect(res.body.reply).toMatch(/qué día/i);
+
+    // 4. día
     res = await auth(
       request(app).post('/api/wa-bridge/booking-step').send({ phone, message: '1' }),
     );
     expect(res.body.step).toBe('awaiting_time');
 
-    // 4. horario
+    // 5. horario
     res = await auth(
       request(app).post('/api/wa-bridge/booking-step').send({ phone, message: '1' }),
     );
     expect(res.body.step).toBe('awaiting_confirm');
     expect(res.body.reply).toMatch(/confirm/i);
 
-    // 5. confirmar
+    // 6. confirmar
     res = await auth(
       request(app).post('/api/wa-bridge/booking-step').send({ phone, message: 'SI' }),
     );
