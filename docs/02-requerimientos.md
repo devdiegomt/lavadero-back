@@ -105,7 +105,7 @@ Nomenclatura: `RF-<módulo>-<n>`.
 | RF-DAT-2 | Las conversaciones se purgan al vencer el plazo configurado | `purgarMensajesViejos()`, cron 24h |
 | RF-DAT-3 | Los clientes sin actividad se anonimizan al vencer el plazo configurado | `anonimizarClientesInactivos()`, cron 24h |
 | RF-DAT-4 | Los plazos los define el responsable del tratamiento; `0` desactiva la tarea | `DATA_RETENTION_*_MONTHS` |
-| RF-DAT-5 | Se puede contar cuántos clientes quedaron sin autorización registrada | `clientesSinAutorizacion()` |
+| RF-DAT-5 | Se puede contar cuántos clientes quedaron sin autorización registrada, y simular a cuántos alcanzaría anonimizar | `npm run db:consentimiento [meses]` |
 | RF-DAT-6 | El titular consulta sus datos escribiendo *MIS DATOS* | `datos-personales.ts` |
 | RF-DAT-7 | El titular pide la supresión y se le exige confirmación explícita antes de borrar | paso `awaiting_delete_confirm` |
 | RF-DAT-9 | El titular corrige su nombre escribiendo *CORREGIR MIS DATOS*, sin depender de que alguien conteste | paso `awaiting_name_fix` |

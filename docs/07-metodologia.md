@@ -155,6 +155,14 @@ ciegas ante síntomas mal entendidos. Los casos concretos:
   estaba adentro. **Un total alto de pruebas dice cuánto se ejercita, no qué
   queda afuera**, y lo segundo es lo que hay que preguntar.
 
+- La brecha #6 llevaba meses clasificada como *"decisión del responsable"*, y la
+  decisión no se podía tomar: la función que cuenta el pasivo existía, estaba
+  probada, y **no la llamaba nadie fuera de las pruebas**. RF-DAT-5 decía «se
+  puede contar» y era cierto sobre el código y falso sobre lo que alguien podía
+  hacer. **Una capacidad a la que no se llega desde ningún lado no es una
+  capacidad** — es la misma forma del acceso a «Mi cuenta» que existía y no se
+  veía, y de `validateId` puesto en una sola ruta.
+
 **La regla que sale de ahí:** antes de cambiar código, conseguir el dato que
 distingue entre las causas posibles. Un log, una ejecución, una petición
 reproducida. Si no se puede reproducir, el primer trabajo es hacerlo
