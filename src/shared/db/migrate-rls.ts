@@ -16,9 +16,16 @@
  * plano — leyendo el código parecía resuelto.
  *
  * Así que esta migración crea `carwash_app`: `NOSUPERUSER`, `NOBYPASSRLS`, con
- * permisos de datos y ninguno de esquema. **Hay que apuntarle `DATABASE_URL`**;
- * mientras no se haga, las políticas quedan inertes y el servidor avisa al
- * arrancar (ver `shared/db/rls.ts`).
+ * permisos de datos y ninguno de esquema, y **hay que apuntarle `DATABASE_URL`**
+ * si el rol actual se saltea las políticas.
+ *
+ * **Pero no siempre hace falta**, y este archivo afirmaba que sí. En una base
+ * administrada —Render, Neon, RDS— nunca se conecta como superusuario: el
+ * usuario es *dueño* de las tablas, y `FORCE ROW LEVEL SECURITY` sí alcanza al
+ * dueño. Ahí RLS queda activo en cuanto se crean las políticas, sin cambiar de
+ * rol. El mensaje final de la migración lo pregunta en vez de suponerlo, porque
+ * decir "falta un paso" cuando ya está hecho es el mismo engaño que todo esto
+ * viene a evitar, sólo que al revés.
  *
  * ## Cómo sabe el motor de qué tenant se trata
  *
@@ -49,6 +56,7 @@
  */
 import 'dotenv/config';
 import { pool } from './index';
+import { estadoRls } from './rls';
 
 /**
  * Tablas aisladas por `tenant_id`, **descubiertas**, no enumeradas.
@@ -265,11 +273,30 @@ async function migrate(): Promise<void> {
 
     console.log('✅ Migración completada');
     console.log('');
-    console.log('   ⚠️  FALTA EL PASO QUE LO ACTIVA: apuntar DATABASE_URL a ' + ROL + '.');
-    console.log('      Mientras siga conectando como un superusuario, las políticas');
-    console.log('      están ahí y no hacen nada — PostgreSQL no aplica RLS a');
-    console.log('      superusuarios ni a roles con BYPASSRLS. El servidor lo avisa al');
-    console.log('      arrancar.');
+
+    // Este mensaje era fijo y decía siempre "falta el paso que lo activa,
+    // mientras sigas conectando como superusuario". En una base administrada
+    // —Render, Neon, RDS— **nunca** se conecta como superusuario: el usuario es
+    // dueño de las tablas y no superusuario, y `FORCE ROW LEVEL SECURITY` sí
+    // alcanza al dueño. O sea que ahí RLS queda activo en cuanto se crean las
+    // políticas, y el mensaje afirmaba lo contrario.
+    //
+    // Decir "falta un paso" cuando ya está hecho es el mismo error que esto
+    // mismo viene a evitar, al revés. Así que se pregunta en vez de suponer.
+    const estado = await estadoRls();
+
+    if (estado.activo) {
+      console.log(`   ✅ RLS ESTÁ ACTIVO: el rol "${estado.rol}" no se saltea las políticas.`);
+      console.log('      No falta ningún paso. Conviene comprobar que la aplicación');
+      console.log('      sigue andando: entrar al panel y abrir una pantalla con datos.');
+    } else {
+      const motivo = estado.esSuperusuario ? 'es superusuario' : 'tiene BYPASSRLS';
+      console.log(`   ⚠️  LAS POLÍTICAS ESTÁN INERTES: el rol "${estado.rol}" ${motivo},`);
+      console.log('      así que PostgreSQL no se las aplica. El esquema afirma una');
+      console.log('      protección que en ejecución no existe.');
+      console.log(`      Para activarla: apuntar DATABASE_URL al rol ${ROL} (hace falta`);
+      console.log('      DB_APP_PASSWORD). El servidor también lo avisa al arrancar.');
+    }
   } catch (err) {
     console.error('❌ Error:', (err as Error).message);
     process.exit(1);
