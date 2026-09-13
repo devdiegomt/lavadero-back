@@ -30,6 +30,8 @@ const TENANT = '+573223772019';
 const CLIENTE = '+573101112233'; // María García, del seed
 
 let server: Server;
+/** El whatsapp_phone que tenía el tenant antes de esta suite. */
+let telefonoOriginal: string | null = null;
 let redis: Redis;
 
 interface WFResult {
@@ -56,6 +58,16 @@ beforeAll(async () => {
   redis = new Redis(process.env.REDIS_URL as string, { maxRetriesPerRequest: 2 });
   initBooking(redis);
 
+  // Se guarda el valor original para devolverlo al terminar. Sin eso esta suite
+  // dejaba al tenant con OTRO número de WhatsApp, y la siguiente que resolviera
+  // el tenant por `TENANT_PHONE` recibía 404 en todo — sin ninguna relación
+  // aparente con lo que estuviera probando. Es el mismo error que ya se cometió
+  // con la zona horaria, que sí se devuelve unas líneas más abajo.
+  const { rows: original } = await db.queryAdmin<{ whatsapp_phone: string | null }>(
+    `SELECT whatsapp_phone FROM tenants WHERE slug = 'el-brillante'`,
+  );
+  telefonoOriginal = original[0].whatsapp_phone;
+
   await db.queryAdmin(
     `UPDATE tenants SET whatsapp_phone = $1, is_active = true WHERE slug = 'el-brillante'`,
     [TENANT],
@@ -66,8 +78,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Devolver la zona: lo que deja una suite lo encuentra la siguiente.
+  // Devolver la zona y el teléfono: lo que deja una suite lo encuentra la
+  // siguiente.
   await restaurarHoraDelTenant();
+  await db.queryAdmin(
+    `UPDATE tenants SET whatsapp_phone = $1 WHERE slug = 'el-brillante'`,
+    [telefonoOriginal],
+  );
   await new Promise<void>((ok) => server.close(() => ok()));
   await redis.quit();
   await db.pool.end();

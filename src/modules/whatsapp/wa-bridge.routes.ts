@@ -9,6 +9,7 @@ import crypto from 'crypto';
 import * as db from '../../shared/db';
 import { leerIdentidad } from './wa-identity';
 import { normalizarTelefono } from '../../shared/utils/telefono';
+import { asyncHandler } from '../../shared/utils/asyncHandler';
 import { abrirContextoDeTenant, conBypassRlsFueraDePeticion } from '../../shared/middleware/rls';
 import { bookingStep } from './wa-bridge.booking';
 import * as ctrl from './wa-bridge.controller';
@@ -134,11 +135,21 @@ router.use(n8nAuth);
 router.use(resolveTenant);
 router.use(limitePorCliente);
 
-router.get('/appointment-status', ctrl.getAppointmentStatus);
-router.get('/services',           ctrl.getServices);
-router.get('/customer-history',   ctrl.getCustomerHistory);
-router.post('/book',              ctrl.bookAppointment);
-router.post('/booking-step',      bookingStep);
-router.post('/log',               ctrl.logMessage);
+// `asyncHandler` en todas, como en el resto de los módulos.
+//
+// Estaban sin él, y en Express 4 un `async` que rechaza **no** llega al
+// errorHandler: se va como unhandled rejection. Con Node 22 eso no cuelga la
+// petición, **termina el proceso**. O sea que un hipo de la base en cualquiera
+// de estas seis rutas tumbaba el backend entero, y el síntoma —el bot deja de
+// responder— no habría señalado nunca a este archivo.
+//
+// Comprobado haciendo fallar la consulta de `appointment-status`: el proceso
+// moría con el stack de Express, sin respuesta para n8n.
+router.get('/appointment-status', asyncHandler(ctrl.getAppointmentStatus));
+router.get('/services',           asyncHandler(ctrl.getServices));
+router.get('/customer-history',   asyncHandler(ctrl.getCustomerHistory));
+router.post('/book',              asyncHandler(ctrl.bookAppointment));
+router.post('/booking-step',      asyncHandler(bookingStep));
+router.post('/log',               asyncHandler(ctrl.logMessage));
 
 export default router;

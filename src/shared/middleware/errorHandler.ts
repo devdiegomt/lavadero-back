@@ -53,6 +53,8 @@ const ERRORES_DE_ENTRADA: Record<string, string> = {
   '22P02': 'Un valor no tiene el formato esperado.',
   // numeric field overflow
   '22003': 'Un número está fuera del rango permitido.',
+  // invalid datetime format: "invalid input syntax for type date"
+  '22007': 'Una fecha u hora no tiene el formato esperado.',
   // datetime field overflow
   '22008': 'Una fecha u hora no es válida.',
   // violates check constraint
@@ -79,6 +81,20 @@ const CHECKS_CONOCIDOS: Record<string, string> = {
     'El tipo de vehículo tiene que ser uno de: sedan, suv, camioneta, moto, pickup. ' +
     'De eso depende qué precio se cobra.',
 };
+
+/**
+ * ¿Este error de PostgreSQL significa "me mandaste mal los datos"?
+ *
+ * La usa un `catch` que necesita **dejar pasar** esos errores en vez de
+ * convertirlos en un 500 propio. Vive acá, junto a la tabla, para que las dos
+ * cosas no se desincronicen: agregar un código a `ERRORES_DE_ENTRADA` alcanza
+ * para que ese `catch` también lo reconozca.
+ */
+export function esErrorDeEntrada(err: unknown): boolean {
+  if (!err || typeof err !== 'object' || !('code' in err)) return false;
+  const codigo = (err as PgError).code;
+  return typeof codigo === 'string' && codigo in ERRORES_DE_ENTRADA;
+}
 
 /**
  * Middleware de manejo de errores global.

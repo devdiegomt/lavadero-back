@@ -95,6 +95,18 @@ ciegas ante síntomas mal entendidos. Los casos concretos:
   que devuelve el código, en vez de con el que teclea una persona, la vuelve
   una tautología.**
 
+- Se fue a cerrar *"validación a mano en el módulo `whatsapp`"* y, al sondearla,
+  la validación resultó **buena**: mensajes más útiles que un schema genérico.
+  Lo que apareció midiendo fue otra cosa y peor — las seis rutas no tenían
+  `asyncHandler`, así que un fallo de base **terminaba el proceso**. **La brecha
+  que se va a cerrar también es una afirmación**: conviene comprobarla antes de
+  gastar el día en lo que dice, y mirar qué más aparece mientras se mide.
+
+- Una prueba nueva concluyó que el endpoint de auditoría estaba roto. Estaba mal
+  la prueba: mandaba el lote como un array suelto y el contrato es
+  `{ mensajes: [...] }`. **Antes de reportar un bug a partir de una prueba
+  propia, verificar que la prueba habla el mismo idioma que el código.**
+
 **La regla que sale de ahí:** antes de cambiar código, conseguir el dato que
 distingue entre las causas posibles. Un log, una ejecución, una petición
 reproducida. Si no se puede reproducir, el primer trabajo es hacerlo
@@ -119,7 +131,8 @@ El penúltimo punto es el que más se olvida. Documentación que se actualiza
 
 ```bash
 npm run db:reset          # base limpia
-npx jest                  # 96 tests
+npx jest                  # 341 tests
+npm run test:rls          # los mismos, con RLS aplicándose
 npx tsc --noEmit          # backend
 cd bot-wa && npm run build # bot
 ```
@@ -128,6 +141,14 @@ Los cuatro tienen que pasar. Si alguno falla de forma intermitente, **eso es un
 bug**, no ruido: un test que falla 1 de cada 8 corridas enseña a ignorar el
 rojo. (Pasó — dos suites compartían base y se pisaban en paralelo. Se resolvió
 con `maxWorkers: 1`.)
+
+**Correrlo dos veces seguidas sin resetear la base.** El estado que una suite
+deja es el que la siguiente encuentra, y eso ya rompió cosas cuatro veces: una
+zona horaria ajena, un cliente del seed renombrado, la contraseña de un operador
+cambiada, y dos suites que le cambiaban el `whatsapp_phone` al tenant sin
+devolverlo —lo que hacía que cualquier suite posterior recibiera 404 en todo, sin
+ninguna relación aparente con lo que estuviera probando—. Una suite que sólo pasa
+sobre una base recién creada está escondiendo una fuga.
 
 ## 5. Decisiones de arquitectura
 
@@ -220,6 +241,7 @@ Un orden que evita perder tiempo:
 | El backend no arranca | `docker compose logs backend` — nombra la variable |
 | Dejó de responderle a un número | `docker compose logs bot-wa \| grep -i bucle` — si repitió el mismo texto tres veces está en silencio; con escribir otra cosa se reanuda |
 | Un cliente aparece dos veces | `npm run db:migrate-telefonos` lista los que comparten teléfono. No los fusiona: eso se decide a mano |
+| El bot deja de responder de golpe | Si el backend murió, mirar si fue un `unhandled rejection`. Toda ruta `async` va con `asyncHandler`: sin él, en Express 4 el rechazo no llega al errorHandler y Node 22 termina el proceso |
 | Una consulta devuelve vacío y debería traer filas | Puede ser RLS: la ruta no abrió el contexto de tenant. Se ve en el log de arranque si RLS está activo, y con `SELECT current_setting('app.tenant_id', true)` en la conexión |
 
 ## 9. Cuando el proyecto crezca
