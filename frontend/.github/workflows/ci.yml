@@ -1,0 +1,144 @@
+# Integración continua del panel.
+#
+# El trabajo real de este archivo es el segundo job: **correr las pruebas en
+# Firefox y en WebKit**, que es lo que no se pudo hacer en ninguna máquina hasta
+# ahora. Acá los binarios se descargan sin pelear con ninguna red.
+#
+# WebKit importa más que los otros dos: es el motor de Safari y el más
+# restrictivo con cookies. Toda la sesión del panel vive en una cookie
+# `httpOnly`, así que si algo se va a romper, se rompe ahí — y el dueño de un
+# lavadero mirando el tablero desde un iPhone es el caso normal, no el raro.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tipos:
+    name: Tipos y build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+
+  navegadores:
+    name: Pruebas en navegador
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: carwash_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/carwash_ci
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-solo-para-pruebas-no-sirve-en-ningun-otro-lado-0123456789
+      ENCRYPTION_KEY: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+      SUPER_ADMIN_EMAIL: superadmin@ci.local
+      SUPER_ADMIN_PASSWORD: ci-super-password
+      TENANT_PHONE: '+573001234567'
+      N8N_API_KEY: ci-n8n-key
+      BOT_WA_SEND_TOKEN: ci-bot-token
+      CORS_ORIGIN: http://localhost:5173
+
+    steps:
+      - name: El panel
+        uses: actions/checkout@v4
+
+      # Las pruebas necesitan un backend de verdad: la sesión en cookie no se
+      # puede probar contra un mock, que es la razón de que esta suite exista.
+      # Los dos repositorios son públicos, así que esto no necesita token.
+      - name: El backend
+        uses: actions/checkout@v4
+        with:
+          repository: devdiegomt/lavadero-back
+          path: backend
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Dependencias del backend
+        working-directory: backend
+        run: npm ci
+
+      - name: Migraciones y datos
+        working-directory: backend
+        env:
+          DB_APP_PASSWORD: ci_app_password
+        run: npm run db:reset
+
+      # `NODE_ENV=development` a propósito: con `test` el servidor **no abre el
+      # puerto** —`index.ts` lo saltea para que supertest use `app` directo— y
+      # las pruebas se quedarían esperando a algo que nunca escucha.
+      #
+      # Y los límites arriba: la prueba de la contraseña equivocada gasta un
+      # intento por navegador, y son cinco.
+      - name: Levantar el backend
+        working-directory: backend
+        env:
+          NODE_ENV: development
+          RATE_LIMIT_MAX: '100000'
+          STRICT_RATE_LIMIT_MAX: '1000'
+        run: |
+          npx ts-node --transpile-only src/index.ts > /tmp/backend.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -sf http://localhost:3000/api/health > /dev/null; then
+              echo "backend arriba"; exit 0
+            fi
+            sleep 2
+          done
+          echo "El backend no respondió en 80 s:"; cat /tmp/backend.log; exit 1
+
+      - name: Dependencias del panel
+        run: npm ci
+
+      # `--with-deps` instala las librerías de sistema que Firefox y WebKit
+      # necesitan en Ubuntu. Sin eso los binarios están y no arrancan.
+      - name: Navegadores
+        run: npx playwright install --with-deps
+
+      - name: Pruebas
+        run: npm run e2e
+
+      # El log del backend explica la mitad de los fallos: un 500 acá se ve como
+      # una pantalla vacía allá.
+      - name: Log del backend
+        if: failure()
+        run: cat /tmp/backend.log
+
+      - name: Informe
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
