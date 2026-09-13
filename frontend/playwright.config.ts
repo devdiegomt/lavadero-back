@@ -40,12 +40,46 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * `CHROMIUM_PATH` fuerza el binario. Sirve donde ya hay un Chromium instalado
  * y no se puede descargar el que Playwright pide (CI sin salida a internet).
- * En una máquina normal no hace falta: `npx playwright install chromium`.
+ * En una máquina normal no hace falta: `npx playwright install`.
+ *
+ * ## Aviso sobre Firefox y Safari
+ *
+ * Los proyectos de `firefox`, `safari` y `safari-móvil` **nunca se corrieron**
+ * en el entorno donde se escribieron: la política de red bloquea el CDN de
+ * Playwright y no se pudieron descargar los binarios. Están acá porque la
+ * configuración es correcta y porque esperar no los agrega nunca — pero la
+ * primera corrida de verdad es la primera vez que alguien haga
+ * `npx playwright install` y `npm run e2e`. **Que encuentren algo es el punto,
+ * no una señal de que estén mal configurados.**
  */
 const chromium = process.env.CHROMIUM_PATH;
-const launchOptions = chromium
-  ? { executablePath: chromium, args: ['--no-sandbox'] }
+/** Sólo para los proyectos de Chromium: Firefox y WebKit no entienden estas opciones. */
+const opcionesChromium = chromium
+  ? { launchOptions: { executablePath: chromium, args: ['--no-sandbox'] } }
   : {};
+
+/**
+ * Los cinco navegadores, y cómo correr menos.
+ *
+ * `NAVEGADORES` los filtra por nombre, separados por coma. Sirve para iterar
+ * rápido —`NAVEGADORES=escritorio npm run e2e`— y para máquinas donde falta
+ * algún binario.
+ *
+ * **Safari importa más que los otros**, y no por cuota de mercado: WebKit es el
+ * más restrictivo con cookies. Si el panel y la API terminan en sitios distintos
+ * —Vercel y Render, por ejemplo— es el navegador donde la sesión en cookie tiene
+ * más chance de romperse, incluso con `SameSite=None` bien puesto. Y el dueño de
+ * un lavadero mirando el tablero desde un iPhone es un caso normal, no raro.
+ *
+ * Playwright usa WebKit, que es el motor de Safari, no Safari. Coincide en lo
+ * que importa acá —cookies, CSS, layout— y no en todo.
+ */
+const TODOS = ['escritorio', 'móvil', 'firefox', 'safari', 'safari-móvil'] as const;
+const pedidos = (process.env.NAVEGADORES ?? '')
+  .split(',')
+  .map((n) => n.trim())
+  .filter(Boolean);
+const corre = (nombre: string): boolean => pedidos.length === 0 || pedidos.includes(nombre);
 
 export default defineConfig({
   testDir: './e2e',
@@ -59,15 +93,18 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:5173',
     trace: 'retain-on-failure',
-    launchOptions,
   },
 
   projects: [
-    { name: 'escritorio', use: { ...devices['Desktop Chrome'] } },
+    { name: 'escritorio', use: { ...devices['Desktop Chrome'], ...opcionesChromium } },
     // Un móvil de verdad, no una ventana angosta: cambia el user agent, el
     // viewport y los eventos táctiles.
-    { name: 'móvil', use: { ...devices['Pixel 5'] } },
-  ],
+    { name: 'móvil', use: { ...devices['Pixel 5'], ...opcionesChromium } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+    { name: 'safari', use: { ...devices['Desktop Safari'] } },
+    // El que más chance tiene de encontrar algo: WebKit en pantalla de teléfono.
+    { name: 'safari-móvil', use: { ...devices['iPhone 13'] } },
+  ].filter((p) => corre(p.name)),
 
   webServer: {
     command: 'npm run dev',

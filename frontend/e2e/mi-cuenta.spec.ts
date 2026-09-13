@@ -47,13 +47,26 @@ test.afterEach(async ({ page }) => {
 });
 
 test.describe('mi cuenta', () => {
-  test('se llega desde el panel sin pasar por Configuración', async ({ page }) => {
-    // Configuración es sólo de admins. Cambiar la contraseña propia lo tiene que
-    // poder hacer cualquiera, así que el acceso va en el marco del panel — y en
-    // móvil ese marco es otro que en escritorio.
+  test('hay un enlace que DICE «Mi cuenta», y lleva ahí', async ({ page }) => {
+    // Esta prueba ya existía y **pasaba con la interfaz rota**. Buscaba
+    // `/mi cuenta|admin/i`, y el bloque del usuario en la barra lateral tiene el
+    // rol escrito debajo del nombre — o sea que su nombre accesible contenía
+    // «admin» y el enlace matcheaba por ahí. La alternativa estaba puesta para
+    // el layout del superadministrador y terminó tapando justamente lo que había
+    // que comprobar.
+    //
+    // Mientras tanto, en el panel no decía «Mi cuenta» en ninguna parte: el
+    // acceso era un bloque clickeable que se veía igual que antes, y en móvil un
+    // círculo con la inicial. Lo encontró alguien buscándolo y no hallándolo.
+    //
+    // Ahora el nombre va solo y exacto: si el texto desaparece, esto se pone en
+    // rojo. Una función que no se encuentra es una función que no existe.
     await entrar(page);
 
-    await page.getByRole('link', { name: /mi cuenta|admin/i }).filter({ visible: true }).first().click();
+    const enlace = page.getByRole('link', { name: 'Mi cuenta', exact: true }).filter({ visible: true });
+    await expect(enlace, 'no hay ningún enlace visible que diga «Mi cuenta»').toHaveCount(1);
+
+    await enlace.click();
 
     await expect(page).toHaveURL(/\/cuenta/);
     await expect(page.locator('#actual')).toBeVisible();

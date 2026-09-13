@@ -72,25 +72,17 @@ export default function AppLayout() {
         </div>
 
         {/* User */}
-        <div className="p-4 border-t border-gray-100">
+        <div className="p-4 border-t border-gray-100 space-y-2">
           <div className="flex items-center gap-3">
-            {/* El bloque del usuario lleva a su cuenta. Va acá y no en el menú
-                porque en móvil el menú de abajo sólo tiene cinco lugares y
-                todos son de trabajo diario. */}
-            <NavLink
-              to="/cuenta"
-              className="flex items-center gap-3 flex-1 min-w-0 rounded-lg -m-1 p-1 hover:bg-gray-50 transition"
-            >
-              <div className="w-9 h-9 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-bold text-sm shrink-0">
-                {user?.firstName?.[0]}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {user?.firstName} {user?.lastName}
-                </p>
-                <p className="text-xs text-gray-500 truncate">{user?.role}</p>
-              </div>
-            </NavLink>
+            <div className="w-9 h-9 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-bold text-sm shrink-0">
+              {user?.firstName?.[0]}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900 truncate">
+                {user?.firstName} {user?.lastName}
+              </p>
+              <p className="text-xs text-gray-500 truncate">{user?.role}</p>
+            </div>
             {/* El contenido es un emoji, así que sin `aria-label` el nombre
                 accesible del botón es «🚪»: un lector de pantalla anuncia eso.
                 `title` no alcanza —sólo se usa cuando no hay contenido. */}
@@ -103,6 +95,27 @@ export default function AppLayout() {
               🚪
             </button>
           </div>
+
+          {/* Con su nombre. La primera versión hacía clickeable el bloque de
+              arriba y nada más: se veía exactamente igual que antes, así que
+              nadie podía adivinar que llevaba a algún lado. Una función que no
+              se encuentra es una función que no existe. */}
+          <NavLink
+            to="/cuenta"
+            // El emoji entra en el nombre accesible: sin esto un lector de
+            // pantalla anuncia «busto en silueta Mi cuenta». Es lo mismo que
+            // pasaba con el 🚪 de cerrar sesión, y también acá lo hizo evidente
+            // buscar el enlace por su nombre en vez de por su texto.
+            aria-label="Mi cuenta"
+            className={({ isActive }) =>
+              `flex items-center gap-2 px-2 py-2 rounded-lg text-sm font-medium transition ${
+                isActive ? 'bg-brand-50 text-brand-700' : 'text-gray-600 hover:bg-gray-50'
+              }`
+            }
+          >
+            <span aria-hidden="true">👤</span>
+            Mi cuenta
+          </NavLink>
         </div>
       </aside>
 
@@ -117,13 +130,14 @@ export default function AppLayout() {
           <div className="flex items-center gap-2">
             <PlateSearch />
             {/* En móvil la barra lateral no existe, así que el acceso a la
-                cuenta tiene que estar acá o no está en ningún lado. */}
+                cuenta tiene que estar acá o no está en ningún lado. Con texto:
+                antes era un círculo con la inicial y no se entendía que fuera
+                un acceso a nada. */}
             <NavLink
               to="/cuenta"
-              aria-label="Mi cuenta"
-              className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-bold text-xs shrink-0"
+              className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 rounded-lg hover:bg-gray-50 transition whitespace-nowrap"
             >
-              {user?.firstName?.[0]}
+              Mi cuenta
             </NavLink>
             <button
               onClick={logout}

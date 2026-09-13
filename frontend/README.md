@@ -132,6 +132,22 @@ podían ver, las dos introducidas por el cambio de sesión a cookie:
   consultas a la vez, todas sin access token, y cada una pedía su propia
   renovación. Ganaba una y las demás llegaban con un token ya revocado.
 
+### Los cinco navegadores
+
+`escritorio` y `móvil` son Chromium; `firefox`, `safari` y `safari-móvil` son los
+otros dos motores. `NAVEGADORES` los filtra:
+
+```bash
+NAVEGADORES=escritorio npm run e2e        # sólo uno, para iterar
+NAVEGADORES=safari,safari-móvil npm run e2e
+```
+
+> ⚠️ Los proyectos de Firefox y Safari **nunca se corrieron** donde se
+> escribieron: el entorno bloqueaba el CDN de Playwright. La configuración es
+> correcta, pero la primera corrida de verdad es la tuya. Que encuentren algo es
+> el punto — **WebKit es el más restrictivo con cookies**, y si el panel y la API
+> quedan en sitios distintos es donde la sesión tiene más chance de romperse.
+
 ### Cómo correrlas
 
 El dev server de Vite lo levanta Playwright. El backend no —vive en otro
@@ -144,7 +160,7 @@ npm run db:reset
 NODE_ENV=development RATE_LIMIT_MAX=100000 STRICT_RATE_LIMIT_MAX=100 npm run dev
 
 # Terminal 2: las pruebas
-npx playwright install chromium   # una sola vez
+npx playwright install            # una sola vez: los tres motores
 npm run e2e
 ```
 
@@ -159,8 +175,6 @@ apunta al binario y se saltea la descarga.
 
 ### Lo que no cubren
 
-- **Safari y Firefox.** Playwright los sabe manejar; agregarlos son tres líneas
-  en `playwright.config.ts` y descargar los binarios.
 - **`SameSite` de verdad.** `localhost:5173` y `localhost:3000` son orígenes
   distintos pero el *mismo sitio*, así que la cookie viaja igual. En producción
   el panel y la API sí están en sitios distintos: ver abajo.
