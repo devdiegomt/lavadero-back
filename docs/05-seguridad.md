@@ -138,7 +138,7 @@ Dos cosas que conviene saber:
 Tampoco está comprobado el caso que de verdad importa en producción:
 `localhost:5173` y `localhost:3000` son orígenes distintos pero el **mismo
 sitio**, así que `SameSite=Lax` no estorba. Con el panel en Vercel y la API en
-Railway son sitios distintos y la cookie no viajaría: hace falta
+Render son sitios distintos y la cookie no viajaría: hace falta
 `AUTH_COOKIE_SAMESITE=none` (y con eso, `Secure`, o sea HTTPS). Comprobarlo
 requiere desplegar en dos dominios.
 
