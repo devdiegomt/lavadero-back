@@ -19,6 +19,8 @@ const CLIENTE = '+573101112233'; // María García, del seed
 const PLACA = 'ABC123';
 
 let redis: Redis;
+/** El whatsapp_phone que tenía el tenant antes de esta suite. */
+let telefonoOriginal: string | null = null;
 
 const auth = (r: request.Test) =>
   r.set('x-api-key', API_KEY).set('x-tenant-phone', TENANT_PHONE);
@@ -27,6 +29,15 @@ beforeAll(async () => {
   // index.ts no inicializa Redis con NODE_ENV=test, así que se hace acá.
   redis = new Redis(process.env.REDIS_URL as string, { maxRetriesPerRequest: 2 });
   initBooking(redis);
+
+  // Se guarda el original para devolverlo al terminar, igual que la zona
+  // horaria. Sin eso esta suite dejaba al tenant con otro número de WhatsApp y
+  // la siguiente que resolviera el tenant recibía 404 en todo, sin relación
+  // aparente con lo que estuviera probando.
+  const { rows: original } = await db.queryAdmin<{ whatsapp_phone: string | null }>(
+    `SELECT whatsapp_phone FROM tenants WHERE slug = 'el-brillante'`,
+  );
+  telefonoOriginal = original[0].whatsapp_phone;
 
   await db.queryAdmin(
     `UPDATE tenants SET whatsapp_phone = $1, is_active = true
@@ -38,8 +49,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Devolver la zona: lo que deja una suite lo encuentra la siguiente.
+  // Devolver la zona y el teléfono: lo que deja una suite lo encuentra la
+  // siguiente.
   await restaurarHoraDelTenant();
+  await db.queryAdmin(
+    `UPDATE tenants SET whatsapp_phone = $1 WHERE slug = 'el-brillante'`,
+    [telefonoOriginal],
+  );
   await redis.quit();
   await db.pool.end();
 });

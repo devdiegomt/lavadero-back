@@ -208,8 +208,16 @@ describe('el registro de un lavadero nuevo', () => {
       .send({});
     expect(renovado.status).toBe(200);
 
-    await db.queryAdmin(`DELETE FROM tenants WHERE slug LIKE $1`, [`%${slug.slice(-8)}%`]);
+    // Por el usuario, no por el slug: el slug lo genera el onboarding a partir
+    // del nombre del negocio ("Lavadero Cookie" → "lavadero-cookie"), así que un
+    // LIKE contra mi variable no casaba nunca y los tenants se acumulaban.
+    const { rows: creado } = await db.queryAdmin<{ tenant_id: string }>(
+      `SELECT tenant_id FROM users WHERE email = $1`, [`${slug}@ejemplo.co`],
+    );
     await db.queryAdmin(`DELETE FROM users WHERE email = $1`, [`${slug}@ejemplo.co`]);
+    if (creado[0]?.tenant_id) {
+      await db.queryAdmin(`DELETE FROM tenants WHERE id = $1`, [creado[0].tenant_id]);
+    }
   });
 });
 

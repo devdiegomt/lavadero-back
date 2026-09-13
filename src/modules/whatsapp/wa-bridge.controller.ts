@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import * as db from '../../shared/db';
 import type { ServiceRow } from '../../types/entities';
+import { esErrorDeEntrada } from '../../shared/middleware/errorHandler';
 import {
   leerIdentidad,
   tieneIdentidad,
@@ -181,6 +182,17 @@ export async function bookAppointment(req: Request, res: Response): Promise<void
     res.status(201).json({ success: true, appointment: appt[0], customerId, vehicleId });
   } catch (err) {
     await client.query('ROLLBACK');
+
+    // Los errores que significan "me mandaste mal los datos" se dejan pasar al
+    // errorHandler, que los traduce a un 400 con un mensaje que sirve.
+    //
+    // Antes este catch los convertía todos en un 500 genérico, y con eso tapaba
+    // la traducción que ya existe: un `serviceId` que no es UUID, un
+    // `scheduledAt` que no es una fecha o un `waLid` más largo que la columna
+    // daban "Error al registrar el turno" — que dice "me rompí" cuando lo cierto
+    // es "me mandaste mal los datos", y encima entierra los 500 de verdad.
+    if (esErrorDeEntrada(err)) throw err;
+
     console.error('[wa-bridge] Error en bookAppointment:', (err as Error).message);
     res.status(500).json({ error: 'Error al registrar el turno' });
   } finally {

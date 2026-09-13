@@ -130,6 +130,7 @@ Escritos como criterios verificables. Donde no hay medición, se dice.
 | RNF-DIS-6 | Un cliente que escribe de más no deja sin bot a los demás | ✅ Límite por cliente en `wa-bridge`, no por IP |
 | RNF-DIS-7 | Una conversación que se repite sin avanzar se corta, avisando antes | ✅ `bucle.ts`; un texto distinto la reanuda |
 | RNF-DIS-8 | Un proveedor externo que no responde no deja una petición colgada | ✅ Alegra con corte a los 15 s (`ALEGRA_TIMEOUT_MS`) |
+| RNF-DIS-9 | Un fallo de base en una ruta del bot responde un error, no tumba el proceso | ✅ `asyncHandler` en todas las rutas |
 | RNF-DIS-5 | Objetivo de disponibilidad | ⚠️ No definido |
 
 ### Seguridad
@@ -146,7 +147,7 @@ WhatsApp, y autorización y retención de datos personales según la Ley 1581.
 | RNF-MAN-1 | Todo el backend en TypeScript con `strict` | ✅ |
 | RNF-MAN-2 | Los módulos siguen la misma estructura | ✅ 14 módulos, `controller` + `routes` |
 | RNF-MAN-3 | Las decisiones estructurales quedan en un ADR | ✅ Ver `adr/` |
-| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 332 tests, y `npm run test:rls` los corre con RLS aplicándose |
+| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 341 tests, y `npm run test:rls` los corre con RLS aplicándose |
 
 ### Compatibilidad
 

@@ -106,7 +106,7 @@ router.post('/', authenticate, requireTenant, authorize('admin'), crearServicio)
 | Rate limit | 100 peticiones / 15 min sobre `/api/` | Global, por IP — **excepto `/api/wa-bridge`** |
 | Rate limit de `wa-bridge` | 120 / 15 min **por cliente de WhatsApp** | Ver abajo |
 | Body limit | 1 MB | Contra cargas grandes |
-| Validación | Zod en altas, `PATCH` y query; `validarUuid` en todo `:id`; códigos de PostgreSQL traducidos a 400 | Ver brecha #2 en §7 |
+| Validación | Zod en altas, `PATCH` y query; `validarUuid` en todo `:id`; códigos de PostgreSQL traducidos a 400 | `wa-bridge` valida a mano, a propósito (§7) |
 
 ### Límite específico del login
 
@@ -514,6 +514,19 @@ Ordenadas por relación entre riesgo y esfuerzo.
 > guardar. Lo que queda de esa tanda es que el resto de los datos sigue sin
 > cifrar, que es decisión consciente y está dicho en la §4, no una brecha.
 
+> **Cerrada (2026-09).** *"Validación Zod ausente en `whatsapp`"* era lo último
+> que quedaba de la #2, y al medirla resultó **mal descrita otra vez**: la
+> validación a mano de ese módulo es buena — da mensajes más útiles que un schema
+> genérico, y rechaza entrada por entrada en los lotes de auditoría. No se
+> reemplazó.
+>
+> Lo que apareció sondeándola era otra cosa y peor: **las seis rutas no tenían
+> `asyncHandler`**. En Express 4 un `async` que rechaza no llega al
+> `errorHandler`; se va como unhandled rejection, y con Node 22 eso **termina el
+> proceso**. Un hipo de la base en cualquiera de ellas tumbaba el backend, y el
+> síntoma —el bot deja de responder— no habría señalado nunca a ese archivo.
+> Comprobado antes de arreglarlo.
+
 > **Cerrada (2026-09).** *"Tokens en `localStorage`"* era la #3, y estaba
 > estimada como la más cara. Resultó mucho menos: la §1 explica por qué dejar el
 > access token en un header evita tener que poner un token CSRF en las 80 rutas.
@@ -533,16 +546,9 @@ Ordenadas por relación entre riesgo y esfuerzo.
 
 | # | Brecha | Riesgo | Esfuerzo |
 |---|---|---|---|
-| 2 | **Validación Zod ausente en `whatsapp`** — el resto de los módulos ya valida alta, `PATCH` y query | Entrada no validada hacia la base, pero tras la clave compartida de n8n | Bajo |
 | 6 | **Clientes sin autorización que no han vuelto** — a los que vuelven ya se les pide (§5) | Pasivo decreciente | Bajo (decisión del responsable) |
 
 ### Notas sobre algunas
-
-**#2 — validación.** Lo que queda es el módulo `whatsapp`: `wa-bridge` y el
-webhook validan a mano, campo por campo. Baja prioridad y no por descuido —
-detrás de `n8nAuth`, quien llega ahí ya demostró conocer la clave compartida, así
-que no es entrada de un desconocido. Igual conviene: la validación a mano se
-olvida de un caso y el síntoma aparece lejos.
 
 > **Corrección (2026-09).** La entrada describía esto como "Zod ausente en seis
 > módulos", y al medirlo resultó impreciso en las dos direcciones:
