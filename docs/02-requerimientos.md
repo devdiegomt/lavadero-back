@@ -78,7 +78,7 @@ Nomenclatura: `RF-<módulo>-<n>`.
 | RF-WA-5 | El cliente puede pedir hablar con una persona | intent `human_help` |
 | RF-WA-6 | Escribir `0` cancela el agendamiento en cualquier paso | `flows/booking.js` |
 | RF-WA-7 | Cada mensaje entrante y saliente queda auditado | `whatsapp_messages` |
-| RF-WA-8 | Se envía un recordatorio 30 minutos antes del turno, comparando contra el día del lavadero | cron cada 5 min |
+| RF-WA-8 | Se envía un recordatorio 30 minutos antes del turno, aunque la ventana cruce la medianoche del lavadero | cron cada 5 min |
 | RF-WA-9 | Si la IA no está disponible, se clasifica por palabras clave | prefijo `kw:` |
 | RF-WA-10 | Antes de guardar datos de un cliente nuevo se le pide autorización, y sólo un sí explícito la concede | paso `awaiting_consent` |
 | RF-WA-16 | A un cliente conocido sin autorización registrada se le pide antes de dejarle agendar | paso `awaiting_consent_existente` |
@@ -145,7 +145,7 @@ WhatsApp, y autorización y retención de datos personales según la Ley 1581.
 | RNF-MAN-1 | Todo el backend en TypeScript con `strict` | ✅ |
 | RNF-MAN-2 | Los módulos siguen la misma estructura | ✅ 14 módulos, `controller` + `routes` |
 | RNF-MAN-3 | Las decisiones estructurales quedan en un ADR | ✅ Ver `adr/` |
-| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 235 tests |
+| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 239 tests |
 
 ### Compatibilidad
 
