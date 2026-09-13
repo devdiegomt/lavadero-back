@@ -1,0 +1,109 @@
+# Integración continua.
+#
+# Hasta ahora **nada verificaba un PR antes de mergearlo**: las 385 pruebas
+# existían y sólo corrían si alguien se acordaba de correrlas en su máquina. Un
+# PR podía llegar a `main` sin que nadie hubiera pasado un `jest`.
+#
+# Corre dos veces la suite, con los dos roles de base de datos, porque eso ya
+# encontró cosas: la corrida como `carwash_app` es la única que ve si RLS deja
+# algo sin funcionar, y la segunda corrida seguida es la que destapa el estado
+# que una suite le deja a la siguiente —pasó cuatro veces—.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pruebas:
+    name: Pruebas y tipos
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: carwash_ci
+        ports: ['5432:5432']
+        # Sin esto los pasos arrancan antes de que Postgres acepte conexiones y
+        # la migración falla con ECONNREFUSED, que parece un problema del código.
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/carwash_ci
+      # El rol que sí obedece las políticas de RLS. Lo crea `db:migrate-rls`.
+      DB_APP_PASSWORD: ci_app_password
+      DATABASE_URL_APP: postgresql://carwash_app:ci_app_password@localhost:5432/carwash_ci
+      REDIS_URL: redis://localhost:6379
+      # Valores de prueba. `config.ts` rechaza los placeholders del .env.example
+      # —cualquier cosa con "cambia-esto", "genera-un", "xxx"— así que no se
+      # pueden copiar de ahí.
+      JWT_SECRET: ci-solo-para-pruebas-no-sirve-en-ningun-otro-lado-0123456789
+      ENCRYPTION_KEY: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+      SUPER_ADMIN_EMAIL: superadmin@ci.local
+      SUPER_ADMIN_PASSWORD: ci-super-password
+      TENANT_PHONE: '+573001234567'
+      N8N_API_KEY: ci-n8n-key
+      BOT_WA_SEND_TOKEN: ci-bot-token
+      # `BCRYPT_ROUNDS` NO se baja acá, aunque tiente: la suite hace muchos
+      # logins y a 12 rondas tarda más. Pero hay una prueba que exige un mínimo
+      # de 12 —es un control de seguridad, no una preferencia— y bajarlo la
+      # rompe. Se descubrió reproduciendo este entorno antes de subirlo: poner
+      # 4 habría dejado el CI en verde con esa comprobación desactivada.
+      # Los límites reales rechazan la propia suite: la de superadmin sola hace
+      # más de cinco logins fallidos con el mismo email.
+      RATE_LIMIT_MAX: '100000'
+      STRICT_RATE_LIMIT_MAX: '1000'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Tipos
+        run: npx tsc --noEmit
+
+      - name: Tipos del bot
+        run: cd bot-wa && npm ci && npm run build
+
+      - name: Migraciones y datos
+        run: npm run db:reset
+
+      - name: Pruebas
+        run: npx jest --ci
+
+      # Sin resetear la base: si una suite deja estado, la segunda corrida se
+      # cae. Ya rompió cosas cuatro veces —una zona horaria ajena, un cliente
+      # renombrado, la contraseña de un operador, el teléfono de un tenant— y
+      # siempre con un síntoma que no señalaba al archivo culpable.
+      - name: Pruebas otra vez, sin resetear
+        run: npx jest --ci
+
+      # La corrida que de verdad ejercita el aislamiento. Como `postgres` las
+      # políticas están y no se aplican: pasaría igual con RLS roto.
+      - name: Pruebas con RLS aplicándose
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL_APP }}
+        run: npx jest --ci
