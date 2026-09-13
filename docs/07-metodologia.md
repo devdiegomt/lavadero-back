@@ -88,6 +88,13 @@ ciegas ante síntomas mal entendidos. Los casos concretos:
   y una dejó al tenant en otra zona. **Cuando un cambio rompe pruebas ajenas,
   la primera pregunta es qué están señalando** — no cómo hacerlas pasar.
 
+- Se añadió elegir el día por nombre y la prueba pasaba escribiendo la
+  etiqueta completa («Lunes 14»). En producción el cliente escribió «lunes» y
+  no funcionó: la comparación busca la clave *dentro* del texto, y ahí el
+  cliente escribe **menos** que la etiqueta. **Escribir la prueba con el valor
+  que devuelve el código, en vez de con el que teclea una persona, la vuelve
+  una tautología.**
+
 **La regla que sale de ahí:** antes de cambiar código, conseguir el dato que
 distingue entre las causas posibles. Un log, una ejecución, una petición
 reproducida. Si no se puede reproducir, el primer trabajo es hacerlo

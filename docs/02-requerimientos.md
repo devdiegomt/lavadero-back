@@ -70,6 +70,7 @@ Nomenclatura: `RF-<módulo>-<n>`.
 | RF-WA-4 | El cliente agenda un turno en una conversación de cuatro pasos | intent `book_appointment` |
 | RF-WA-12 | El cliente elige el día dentro de la ventana del lavadero, saltándose sus días de cierre | paso `awaiting_date` |
 | RF-WA-17 | Sólo se ofrecen días que tienen cupos; si sólo hay uno, no se pregunta | `diasParaAgendar()` |
+| RF-WA-18 | El día se elige por número, por etiqueta («Lunes 14») o por el nombre a secas («lunes») | paso `awaiting_date` |
 | RF-WA-13 | La fecha del turno se resuelve en la zona horaria del lavadero, no en la del servidor | `getTenantToday`, `sumarDias` |
 | RF-WA-14 | En los menús se acepta el número **o** la palabra que el menú mostró («Sedán», «Lavado Básico») | `menu.ts` |
 | RF-WA-15 | Ante una respuesta ambigua el bot repregunta en vez de elegir por el cliente | `elegirOpcion` |
@@ -141,7 +142,7 @@ retención de datos personales según la Ley 1581.
 | RNF-MAN-1 | Todo el backend en TypeScript con `strict` | ✅ |
 | RNF-MAN-2 | Los módulos siguen la misma estructura | ✅ 14 módulos, `controller` + `routes` |
 | RNF-MAN-3 | Las decisiones estructurales quedan en un ADR | ✅ Ver `adr/` |
-| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 189 tests |
+| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 190 tests |
 
 ### Compatibilidad
 

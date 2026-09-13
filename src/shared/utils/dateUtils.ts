@@ -127,6 +127,12 @@ export function diasAgendables(
   return dias;
 }
 
+/** Nombre del día de la semana de una fecha: «Lunes», «Martes»… */
+export function nombreDelDia(fecha: string): string {
+  const nombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  return nombres[diaDeLaSemana(fecha)];
+}
+
 /**
  * Cómo se le nombra un día al cliente: «Hoy», «Mañana», o «Viernes 19».
  *
@@ -138,9 +144,8 @@ export function etiquetaDeDia(fecha: string, hoy: string): string {
   if (fecha === hoy) return 'Hoy';
   if (fecha === sumarDias(hoy, 1)) return 'Mañana';
 
-  const nombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
   const dia = Number(fecha.split('-')[2]);
-  return `${nombres[diaDeLaSemana(fecha)]} ${dia}`;
+  return `${nombreDelDia(fecha)} ${dia}`;
 }
 
 /**
