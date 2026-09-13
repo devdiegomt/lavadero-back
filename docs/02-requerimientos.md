@@ -60,6 +60,7 @@ Nomenclatura: `RF-<módulo>-<n>`.
 | RF-PAG-3 | Se emite factura electrónica de un pago vía Alegra | `POST /api/billing/invoice/:paymentId` |
 | RF-PAG-4 | Un fallo de facturación se registra y se puede reintentar | `billing_errors`, `POST /retry/:paymentId` |
 | RF-PAG-5 | Se emite nota crédito de una factura | `POST /credit-note/:paymentId` |
+| RF-PAG-6 | De cada factura emitida queda copia propia, verificable por hash, que sobrevive a la cuenta de Alegra | `invoice_archive`, `GET /billing/archivo/:paymentId/:kind` |
 
 ### WhatsApp
 
@@ -163,7 +164,7 @@ WhatsApp, y autorización y retención de datos personales según la Ley 1581.
 |---|---|---|
 | RNF-LEG-1 | Cumplir la Ley 1581 sobre datos personales | ⚠️ Parcial — autorización, retención, acceso y supresión resueltos; falta publicar el aviso completo, la rectificación por el propio titular y el registro ante la SIC. Ver [Seguridad §5](05-seguridad.md#5-datos-personales-ley-1581) |
 | RNF-LEG-2 | Facturar según las reglas de la DIAN | ✅ Delegado en Alegra |
-| RNF-LEG-3 | Conservar facturas 5 años | ⚠️ Se guarda la referencia, no el documento |
+| RNF-LEG-3 | Conservar facturas 5 años | ⚠️ Parcial — se archiva copia propia del PDF y del registro, con hash verificable. Falta el XML firmado, que Alegra no expone por API. Ver [ADR-0009](adr/0009-archivo-de-facturas.md) |
 
 ## 3. Fuera de alcance (por ahora)
 

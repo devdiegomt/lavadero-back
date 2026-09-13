@@ -50,21 +50,28 @@
 import 'dotenv/config';
 import { pool } from './index';
 
-/** Tablas aisladas por `tenant_id`. */
-const POR_TENANT = [
-  'action_log',
-  'appointments',
-  'billing_errors',
-  'billing_sync',
-  'customers',
-  'onboarding_log',
-  'payments',
-  'services',
-  'tenant_usage',
-  'users',
-  'vehicles',
-  'whatsapp_messages',
-] as const;
+/**
+ * Tablas aisladas por `tenant_id`, **descubiertas**, no enumeradas.
+ *
+ * La primera versión llevaba una lista escrita a mano. Con eso, agregar una
+ * tabla con `tenant_id` en una migración futura la dejaba sin política y sin que
+ * nada avisara: un agujero de aislamiento creado por omisión, que es justamente
+ * la forma de fallo que RLS viene a evitar. Preguntarle al catálogo es lo mismo
+ * de escribir y no se olvida.
+ */
+async function tablasPorTenant(): Promise<string[]> {
+  const { rows } = await pool.query<{ table_name: string }>(
+    `SELECT c.table_name
+     FROM information_schema.columns c
+     JOIN information_schema.tables t
+       ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+     WHERE c.table_schema = 'public'
+       AND c.column_name = 'tenant_id'
+       AND t.table_type = 'BASE TABLE'
+     ORDER BY c.table_name`,
+  );
+  return rows.map((r) => r.table_name);
+}
 
 /**
  * El rol de la aplicación.
@@ -114,8 +121,8 @@ function literal(valor: string): string {
   return `'${valor.replace(/'/g, "''")}'`;
 }
 
-function sqlDePoliticas(): string {
-  const porTenant = POR_TENANT.map(
+function sqlDePoliticas(tablas: readonly string[]): string {
+  const porTenant = tablas.map(
     (tabla) => `
 ALTER TABLE ${tabla} ENABLE ROW LEVEL SECURITY;
 -- FORCE para que tampoco el dueño de la tabla se saltee las políticas. A un
@@ -200,8 +207,9 @@ async function migrate(): Promise<void> {
     await pool.query(sqlDelRol(password));
     console.log(`   👤 Rol ${ROL} (NOSUPERUSER, NOBYPASSRLS) con permisos de datos`);
 
-    await pool.query(sqlDePoliticas());
-    console.log(`   🔒 RLS en ${POR_TENANT.length + 2} tablas`);
+    const tablas = await tablasPorTenant();
+    await pool.query(sqlDePoliticas(tablas));
+    console.log(`   🔒 RLS en ${tablas.length + 2} tablas (${tablas.join(', ')})`);
 
     const { rows } = await pool.query<{ n: string }>(
       `SELECT count(*)::text AS n FROM pg_policies WHERE schemaname = 'public'`,
@@ -225,4 +233,4 @@ async function migrate(): Promise<void> {
 
 if (require.main === module) migrate();
 
-export { POR_TENANT, ROL };
+export { tablasPorTenant, ROL };
