@@ -17,6 +17,7 @@ import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
 import BillingPage from './pages/BillingPage';
 import SuperAdminPage from './pages/SuperAdminPage';
+import AccountPage from './pages/AccountPage';
 
 function AppRoutes() {
   const { isAuthenticated, user } = useAuth();
@@ -39,11 +40,17 @@ function AppRoutes() {
         <Route path="reports"      element={<ReportsPage />} />
         <Route path="history"      element={<HistoryPage />} />
         <Route path="settings"     element={<SettingsPage />} />
+        {/* Sin `adminOnly`: cambiar la contraseña propia lo tiene que poder
+            hacer cualquiera, no sólo un admin. */}
+        <Route path="cuenta"       element={<AccountPage />} />
       </Route>
 
       {/* Super admin */}
       <Route path="/admin" element={<SuperAdminRoute><SuperAdminLayout /></SuperAdminRoute>}>
         <Route index element={<SuperAdminPage />} />
+        {/* También acá: el superadministrador no pasa por AppLayout, y es
+            justamente la cuenta que más necesita poder rotar su contraseña. */}
+        <Route path="cuenta" element={<AccountPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

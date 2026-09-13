@@ -58,6 +58,7 @@ Credenciales demo (necesitas que el backend esté seedeado):
 e2e/                        # Pruebas en navegador (Playwright)
 ├── ayudas.ts               # Entrar al panel; comprobar que hay backend
 ├── sesion.spec.ts          # La cookie httpOnly, vista por un navegador
+├── mi-cuenta.spec.ts       # Cambiar la contraseña propia, y que cierre sesiones
 └── movil.spec.ts           # RNF-COM-3: que el panel quepa y se pueda tocar
 
 src/
@@ -79,6 +80,7 @@ src/
 │   ├── format.js           # formatCOP, formatDateTime
 │   └── sentry.jsx          # Init opcional de Sentry
 └── pages/
+    ├── AccountPage.tsx         # Mi cuenta: cambiar la contraseña propia
     ├── LoginPage.jsx
     ├── SignupPage.jsx          # Wizard de onboarding
     ├── DashboardPage.jsx       # Inicio

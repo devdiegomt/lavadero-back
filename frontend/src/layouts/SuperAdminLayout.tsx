@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom';
+import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
 export default function SuperAdminLayout() {
@@ -20,10 +20,16 @@ export default function SuperAdminLayout() {
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
-            <div className="hidden sm:block text-right">
+            {/* Lleva a /admin/cuenta. Esta es la cuenta que ve todos los
+                lavaderos: que pueda rotar su contraseña sin depender de correr
+                un script es justamente el punto. */}
+            <NavLink
+              to="/admin/cuenta"
+              className="text-right rounded-lg px-2 py-1 hover:bg-white/10 transition"
+            >
               <p className="text-xs font-medium truncate max-w-[160px]">{user?.firstName} {user?.lastName}</p>
               <p className="text-xs text-gray-400 truncate max-w-[160px]">{user?.email}</p>
-            </div>
+            </NavLink>
             <button
               onClick={logout}
               className="text-xs text-gray-300 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/10 transition"
