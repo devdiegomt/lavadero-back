@@ -290,7 +290,7 @@ sensible, porque el cliente puede escribir cualquier cosa ahí.
 | Aviso de privacidad accesible | ✅ Parcial — se muestra en la conversación; falta publicarlo completo |
 | Finalidad declarada | ✅ En el texto del aviso, versionado |
 | Derecho de acceso | ✅ *MIS DATOS* por WhatsApp; también hay endpoint en el panel |
-| Derecho de rectificación | ⚠️ Sólo el personal puede corregir |
+| Derecho de rectificación | ✅ Parcial — el nombre se corrige solo por WhatsApp; el resto, por asesor (canal atendido). Ver abajo |
 | Derecho de supresión | ✅ *BORRAR MIS DATOS* + confirmación, y `POST /api/customers/:id/anonimizar` |
 | Retención limitada | ✅ Tareas de cron con plazo configurable |
 | Registro de bases ante la SIC | ⚠️ Depende del tamaño del responsable; verificar |
@@ -379,13 +379,32 @@ CHECK (phone IS NOT NULL OR wa_lid IS NOT NULL OR anonymized_at IS NOT NULL)
 
 | Escribe por WhatsApp | Qué pasa |
 |---|---|
-| `MIS DATOS` | Le muestra qué se guarda de él y cómo borrarlo |
+| `MIS DATOS` | Le muestra qué se guarda de él, y cómo corregirlo o borrarlo |
+| `CORREGIR MIS DATOS` | Pregunta el nombre nuevo y lo guarda |
 | `BORRAR MIS DATOS` | **No borra**: avisa de lo irreversible y pide confirmación |
 | `CONFIRMO` | Ahí sí suprime |
 | `0` | Desiste, no se toca nada |
 
 Y desde el panel, para quien lo pide por otro canal:
 `POST /api/customers/:id/anonimizar`, restringido a `admin`.
+
+**Por qué la rectificación sólo alcanza al nombre.** Es el único dato personal
+que el bot capturó **del propio titular** y que puede estar mal sin consecuencias
+para nadie más. Lo demás se deriva a un asesor, y no por pereza:
+
+| Dato | Por qué no se corrige solo |
+|---|---|
+| Teléfono y LID | **Son la credencial.** En este canal la identidad *es* la cuenta de WhatsApp desde la que se escribe; dejar cambiarlos sería dejar que alguien reclame los datos de otro |
+| Tipo de vehículo | **Fija el precio.** `getServicePrice` cobra según él: poder cambiarlo a `moto` es poder pagar menos |
+| Placa | Es como el lavadero encuentra el carro, y podría chocar con la de otro cliente del mismo lavadero |
+
+Derivar esos casos a un asesor es un canal atendido, que es lo que la ley pide.
+Lo que no era aceptable era que **todo** dependiera de que alguien conteste.
+
+**La corrección no pide confirmación, el borrado sí.** La asimetría es
+deliberada: el borrado no se deshace, y una corrección de nombre sí —quien se
+equivoque vuelve a escribir `CORREGIR MIS DATOS`—. Pedir un `CONFIRMO` ahí sería
+fricción sin nada a cambio.
 
 **Ojo con `DELETE /api/customers/:id`:** ése hace borrado *lógico* —pone
 `deleted_at` y la fila conserva nombre, teléfono y cédula—. Sirve para sacar a

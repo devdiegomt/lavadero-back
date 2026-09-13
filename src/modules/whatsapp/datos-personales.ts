@@ -1,5 +1,6 @@
 /**
- * Derechos del titular sobre sus datos (Ley 1581 de 2012): acceso y supresión.
+ * Derechos del titular sobre sus datos (Ley 1581 de 2012): acceso, rectificación
+ * y supresión.
  *
  * La ley obliga a que el titular pueda **consultar y hacer suprimir** sus datos
  * personales. Hasta ahora existía `anonimizarCliente()` pero no había forma de
@@ -10,6 +11,10 @@
  *
  * Estas frases se interceptan **antes** que cualquier otra cosa, y se comparan
  * literalmente. No pasan por el clasificador.
+ *
+ * Eso tiene una consecuencia en el paso de corrección del nombre: quien escriba
+ * ahí una palabra reservada está pidiendo otra cosa, y el despacho la atiende
+ * antes de llegar al paso. `nombreValido` las rechaza igual, como segunda línea.
  *
  * Es deliberado y va en la línea del [ADR-0006](../../../docs/adr/0006-ia-solo-para-clasificar.md):
  * un derecho que la ley obliga a atender no puede depender de que un modelo
@@ -34,6 +39,16 @@ const FRASES_ACCESO = [
   'consultar mis datos',
 ];
 
+/** Lo que escribe para corregir un dato equivocado. */
+const FRASES_RECTIFICACION = [
+  'corregir mis datos',
+  'corregir mi nombre',
+  'cambiar mi nombre',
+  'mi nombre esta mal',
+  'mi nombre está mal',
+  'actualizar mis datos',
+];
+
 /** Lo que escribe para pedir la supresión. */
 const FRASES_SUPRESION = [
   'borrar mis datos',
@@ -47,7 +62,7 @@ const FRASES_SUPRESION = [
 /** La confirmación, que se pide aparte porque el borrado no se deshace. */
 const FRASES_CONFIRMACION = ['confirmo', 'confirmar', 'si confirmo', 'sí confirmo'];
 
-export type AccionDatos = 'acceso' | 'supresion' | 'confirmacion' | null;
+export type AccionDatos = 'acceso' | 'rectificacion' | 'supresion' | 'confirmacion' | null;
 
 /** Normaliza para comparar: sin tildes, sin mayúsculas, sin puntuación. */
 function normalizar(texto: string): string {
@@ -72,6 +87,7 @@ export function accionSolicitada(texto: string): AccionDatos {
   const t = normalizar(texto);
   if (!t) return null;
   if (FRASES_SUPRESION.map(normalizar).includes(t)) return 'supresion';
+  if (FRASES_RECTIFICACION.map(normalizar).includes(t)) return 'rectificacion';
   if (FRASES_ACCESO.map(normalizar).includes(t)) return 'acceso';
   if (FRASES_CONFIRMACION.map(normalizar).includes(t)) return 'confirmacion';
   return null;
@@ -109,7 +125,8 @@ export function textoAcceso(r: ResumenDatos): string {
     '',
     'También guardamos el historial de tus turnos y esta conversación.',
     '',
-    'Para corregir algo, escribe *ASESOR*.',
+    'Para corregir tu nombre, escribe *CORREGIR MIS DATOS*.',
+    'Para cualquier otra corrección, escribe *ASESOR*.',
     'Para eliminarlo todo, escribe *BORRAR MIS DATOS*.',
   );
 
@@ -167,3 +184,75 @@ export const TEXTO_CONFIRMACION_SIN_CONTEXTO =
 /** Paso de la sesión mientras se espera la confirmación del borrado. */
 export const FLUJO_DATOS = 'datos';
 export const PASO_CONFIRMAR_SUPRESION = 'awaiting_delete_confirm';
+/** Paso mientras se espera el nombre corregido. */
+export const PASO_CORREGIR_NOMBRE = 'awaiting_name_fix';
+
+// ─── Rectificación ────────────────────────────────────────────────────────────
+
+/**
+ * Por qué sólo el nombre se corrige solo.
+ *
+ * Es el único dato personal que el bot capturó **del propio titular** y que
+ * puede estar mal sin consecuencias para nadie más. El resto se deriva a un
+ * asesor, y no por pereza:
+ *
+ * - **El teléfono y el LID son la credencial.** En este canal la identidad *es*
+ *   la cuenta de WhatsApp desde la que se escribe. Dejar cambiarlos sería dejar
+ *   que alguien reclame los datos de otro.
+ * - **El tipo de vehículo fija el precio.** `getServicePrice` cobra según él;
+ *   poder cambiarlo a `moto` es poder pagar menos.
+ * - **La placa es como el lavadero encuentra el carro**, y podría chocar con la
+ *   de otro cliente del mismo lavadero.
+ *
+ * Derivar esos casos a un asesor es un canal atendido, que es lo que la ley
+ * pide. Lo que no era aceptable era que **todo** dependiera de que alguien
+ * conteste.
+ */
+export function textoPedirNombre(actual: string): string {
+  return [
+    '✏️ *Corregir tu nombre*',
+    '',
+    `Ahora mismo te tenemos como *${actual}*.`,
+    '',
+    'Escribe cómo quieres que aparezca, o *0* para dejarlo así.',
+  ].join('\n');
+}
+
+export function textoNombreCorregido(nuevo: string): string {
+  return (
+    `✅ Listo, ahora te tenemos como *${nuevo}*.\n\n` +
+    'Si hay algo más que corregir —tu placa, tu teléfono— escribe *ASESOR* y lo ' +
+    'revisamos contigo.'
+  );
+}
+
+export const TEXTO_NOMBRE_INVALIDO =
+  'Ese nombre no me sirve. 😅\n\n' +
+  'Escribe sólo tu nombre, sin números ni símbolos, o *0* para dejarlo como está.';
+
+/**
+ * ¿Sirve como nombre?
+ *
+ * Rechaza lo que claramente no lo es. Vale la pena ser estricto acá: lo que se
+ * escriba queda como el nombre del titular, y un «BORRAR MIS DATOS» tecleado en
+ * este paso se guardaría como nombre en vez de entenderse.
+ */
+export function nombreValido(texto: string): boolean {
+  const t = String(texto ?? '').trim();
+  if (t.length < 2 || t.length > 80) return false;
+  // Una palabra reservada escrita acá es una petición mal entendida, no un
+  // nombre: se rechaza para poder repreguntar.
+  if (accionSolicitada(t) !== null) return false;
+  // Sin dígitos: una placa o un teléfono tecleados por error no son un nombre.
+  if (/\d/.test(t)) return false;
+  return /^[\p{L}\s'.\-]+$/u.test(t);
+}
+
+/** Parte el nombre en las dos columnas, como hace el alta. */
+export function partirNombre(texto: string): { first: string; last: string | null } {
+  const partes = texto.trim().split(/\s+/);
+  return {
+    first: partes[0].slice(0, 80),
+    last: partes.slice(1).join(' ').slice(0, 80) || null,
+  };
+}
