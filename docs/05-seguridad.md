@@ -730,6 +730,30 @@ Ordenadas por relación entre riesgo y esfuerzo.
 |---|---|---|---|
 | 6 | **Clientes sin autorización que no han vuelto** — a los que vuelven ya se les pide (§5) | Pasivo decreciente | Bajo (decisión del responsable) |
 
+**Brecha #6: el número, que antes no se podía ver.** Estaba clasificada como
+*"decisión del responsable"*, y la decisión no se podía tomar: `clientesSinAutorizacion()`
+existía desde hacía meses, con pruebas, y **no la llamaba nadie fuera de las
+pruebas**. Ninguna ruta, ningún script. RF-DAT-5 era cierto sobre el código y
+falso sobre lo que alguien podía hacer.
+
+```bash
+npm run db:consentimiento          # cuántos hay, por lavadero
+npm run db:consentimiento 12       # y a cuántos alcanzaría anonimizar a los 12 meses
+```
+
+No modifica nada: anonimizar tiene consecuencias legales y lo decide el
+responsable del tratamiento, no un script corrido sin querer. El informe usa el
+**mismo criterio de inactividad** que `anonimizarClientesInactivos`
+—`COALESCE(last_visit_at, created_at)`— para que no diga un número y pase otro.
+
+Las tres salidas siguen siendo las mismas, y la elección depende del tamaño:
+
+| Salida | Cuándo tiene sentido |
+|---|---|
+| Pedirles autorización | Casi nunca: escribirle a quien no volvió es usar sus datos para contactarlo **sin** tenerla |
+| Anonimizarlos | Con `DATA_RETENTION_CUSTOMERS_MONTHS`. Los turnos quedan como historial del negocio |
+| Dejarlo correr | Si son pocos: cada cliente que vuelve sale de la lista solo |
+
 ### Notas sobre algunas
 
 > **Corrección (2026-09).** La entrada describía esto como "Zod ausente en seis
