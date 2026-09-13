@@ -15,6 +15,7 @@ import qrcode from 'qrcode-terminal';
 import pino from 'pino';
 import { forwardToN8n } from './n8n-client';
 import { Deduplicador } from './dedupe';
+import { DetectorDeBucle, TEXTO_ULTIMO_AVISO } from './bucle';
 import type { BotState, IncomingMessage } from './types';
 
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
@@ -42,6 +43,9 @@ const lidToJid = new Map<string, string>();
 
 /** Descarta los reenvios de WhatsApp. Ver dedupe.ts. */
 const dedupe = new Deduplicador();
+
+/** Corta las conversaciones que se repiten sin avanzar. Ver bucle.ts. */
+const bucle = new DetectorDeBucle();
 
 /**
  * Deja un telefono reconocible sin escribirlo entero en el log.
@@ -332,6 +336,28 @@ async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
   };
 
   logger.info({ from: phone, replyJid, preview: text.substring(0, 80) }, 'Mensaje recibido');
+
+  // Antes de consultar a n8n: si el mismo remitente repite el mismo texto una y
+  // otra vez, no hay conversacion que continuar. Cortarlo aca y no despues
+  // ahorra tambien la llamada a Claude, que es la mitad del coste del bucle.
+  const decision = bucle.decidir(replyJid, text);
+
+  if (decision === 'silencio') {
+    logger.warn(
+      { jid: replyJid, preview: text.substring(0, 40) },
+      'Bucle: mismo texto repetido, no se responde ni se consulta a la IA'
+    );
+    return;
+  }
+
+  if (decision === 'ultimo-aviso') {
+    logger.warn(
+      { jid: replyJid, preview: text.substring(0, 40) },
+      'Bucle detectado: ultimo aviso y a callar'
+    );
+    await sendMessage(replyJid, TEXTO_ULTIMO_AVISO);
+    return;
+  }
 
   const response = await forwardToN8n(incoming);
 

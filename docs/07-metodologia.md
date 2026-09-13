@@ -205,6 +205,7 @@ Un orden que evita perder tiempo:
 | Una rama devuelve vacío | n8n → Executions → el nodo en rojo |
 | "Tenant no encontrado" | `TENANT_PHONE` vs `tenants.whatsapp_phone` |
 | El backend no arranca | `docker compose logs backend` — nombra la variable |
+| Dejó de responderle a un número | `docker compose logs bot-wa \| grep -i bucle` — si repitió el mismo texto tres veces está en silencio; con escribir otra cosa se reanuda |
 
 ## 9. Cuando el proyecto crezca
 

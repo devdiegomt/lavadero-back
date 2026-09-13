@@ -165,6 +165,31 @@ El backend expone `POST /api/wa-bridge/booking-step`, que recibe el mensaje,
 avanza la máquina de estados y devuelve el siguiente texto. La lógica del flujo
 está en `src/modules/whatsapp/flows/booking.js` — código determinista, sin IA.
 
+### Cortar los bucles
+
+Pasó en producción: otro sistema automatizado tenía conversación abierta con el
+número del lavadero y reenviaba su mensaje enlatado **cada 38 segundos
+exactos**. El bot contestaba "no entendí", el otro repetía, y así
+indefinidamente. Dos bots hablándose, gastando una llamada a Claude por vuelta y
+consumiendo la cuota del límite por cliente.
+
+`bot-wa/src/bucle.ts` corta eso con la señal más simple que existe: **el mismo
+remitente enviando exactamente el mismo texto, varias veces seguidas.** A la
+tercera repetición manda un último mensaje explicando que deja de responder, y
+de ahí en adelante calla. No mira el contenido de la respuesta ni intenta
+adivinar si el otro extremo es un bot; eso acabaría en heurísticas frágiles.
+
+Lo que hace esto seguro para una persona es que **un texto distinto reinicia la
+cuenta al instante**. Quien escriba "hola" tres veces y luego cualquier otra
+cosa vuelve a ser atendido de inmediato. Y a la media hora sin escribir se
+olvida el rastro, para que alguien que vuelva mañana no arrastre el silencio de
+hoy.
+
+Va en bot-wa y antes de llamar a n8n, así el silencio también ahorra la llamada
+a Claude. Es la única excepción a "el estado vive en el backend" (§2): es estado
+del transporte, no del negocio, y perderlo en un reinicio sólo cuesta unos
+mensajes de más.
+
 ### Degradación cuando Claude no está
 
 Si la llamada a Claude falla —sin crédito, caída, timeout— el nodo de parseo
@@ -207,6 +232,7 @@ cada consulta. Ver [Seguridad §3](05-seguridad.md#3-aislamiento-multi-tenant) y
 | **Máquina de estados** | `flows/booking.js` | Una conversación multi-turno es literalmente eso |
 | **Validación en el borde** | Middleware Zod | Los datos entran validados o no entran |
 | **Degradación con reserva** | Fallback por palabras clave | Un servicio externo caído no debe tumbar el producto |
+| **Corte de bucle** | `bucle.ts` en bot-wa | Dos automatismos hablándose no se detienen solos |
 | **Idempotencia por clave natural** | `external_id = 'reminder:<id>'` | Un cron que corre cada 5 min no puede mandar el mismo aviso repetido |
 | **Configuración validada al arrancar** | `config.ts` con Zod | Fallar al arrancar es mejor que fallar en la primera petición |
 
@@ -214,7 +240,9 @@ cada consulta. Ver [Seguridad §3](05-seguridad.md#3-aislamiento-multi-tenant) y
 
 - **IA decidiendo lógica de negocio** — precios y disponibilidad son
   deterministas. Ver [ADR-0006](adr/0006-ia-solo-para-clasificar.md).
-- **Estado en el satélite** — bot-wa y n8n son sin estado; todo va al backend.
+- **Estado en el satélite** — n8n es sin estado y el del negocio va al backend.
+  La única memoria de bot-wa es el detector de bucles (§4), que no guarda nada
+  del negocio y es desechable.
 - **Microservicios prematuros** — §1.
 
 ## 7. Decisiones registradas

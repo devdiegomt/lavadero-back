@@ -126,6 +126,7 @@ Escritos como criterios verificables. Donde no hay medición, se dice.
 | RNF-DIS-3 | Que Alegra falle no pierde el pago | ✅ Se registra en `billing_errors` y se reintenta |
 | RNF-DIS-4 | bot-wa se reconecta solo si WhatsApp cierra la sesión | ✅ Limpia credenciales y pide QR nuevo |
 | RNF-DIS-6 | Un cliente que escribe de más no deja sin bot a los demás | ✅ Límite por cliente en `wa-bridge`, no por IP |
+| RNF-DIS-7 | Una conversación que se repite sin avanzar se corta, avisando antes | ✅ `bucle.ts`; un texto distinto la reanuda |
 | RNF-DIS-5 | Objetivo de disponibilidad | ⚠️ No definido |
 
 ### Seguridad
@@ -142,7 +143,7 @@ retención de datos personales según la Ley 1581.
 | RNF-MAN-1 | Todo el backend en TypeScript con `strict` | ✅ |
 | RNF-MAN-2 | Los módulos siguen la misma estructura | ✅ 14 módulos, `controller` + `routes` |
 | RNF-MAN-3 | Las decisiones estructurales quedan en un ADR | ✅ Ver `adr/` |
-| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 190 tests |
+| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 199 tests |
 
 ### Compatibilidad
 
@@ -156,7 +157,7 @@ retención de datos personales según la Ley 1581.
 
 | ID | Requerimiento | Estado |
 |---|---|---|
-| RNF-LEG-1 | Cumplir la Ley 1581 sobre datos personales | ⚠️ Parcial — autorización y retención resueltas; falta exponer acceso y supresión al titular. Ver [Seguridad §5](05-seguridad.md#5-datos-personales-ley-1581) |
+| RNF-LEG-1 | Cumplir la Ley 1581 sobre datos personales | ⚠️ Parcial — autorización, retención, acceso y supresión resueltos; falta publicar el aviso completo, la rectificación por el propio titular y el registro ante la SIC. Ver [Seguridad §5](05-seguridad.md#5-datos-personales-ley-1581) |
 | RNF-LEG-2 | Facturar según las reglas de la DIAN | ✅ Delegado en Alegra |
 | RNF-LEG-3 | Conservar facturas 5 años | ⚠️ Se guarda la referencia, no el documento |
 
