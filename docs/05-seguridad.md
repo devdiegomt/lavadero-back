@@ -327,6 +327,13 @@ crons van envueltos en `conBypassRlsFueraDePeticion`. Y hay una prueba —
 `__tests__/crons-bajo-rls.test.ts`— que corre la limpieza y **comprueba que
 borró**, no que no falló.
 
+**Los tres bypasses son el punto débil, y hay que tratarlos como tal.** Ahí el
+aislamiento no lo sostiene el motor sino una línea de `authorize` o el orden del
+código. `superadmin` —ocho rutas, el módulo que más poder concentra— **no tenía
+ninguna prueba** hasta 2026-09; ahora `__tests__/superadmin.test.ts` comprueba
+que un admin de lavadero no llega a ninguna de las ocho, que sin sesión tampoco,
+y que el bypass efectivamente trae filas (sin él devolvería vacío).
+
 **Al escribir una consulta nueva**, la pregunta sigue siendo: *¿puede esta
 consulta devolver una fila de otro tenant?* El `WHERE tenant_id` se sigue
 poniendo. RLS es la red debajo, no el reemplazo: una consulta sin filtro dentro

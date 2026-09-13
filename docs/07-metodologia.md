@@ -146,6 +146,15 @@ ciegas ante síntomas mal entendidos. Los casos concretos:
   de verdad. **Una suite en verde delimita lo que ejercita**, y la pregunta útil
   no es cuántas pruebas pasan sino por dónde no entra ninguna.
 
+- El módulo `superadmin` —ocho rutas, la única cuenta que ve todos los lavaderos,
+  y uno de los tres bypasses deliberados de RLS— **no tenía ni una prueba**. No
+  se descubrió leyendo el código ni mirando un informe de cobertura, sino
+  **contando**: `grep -l "/api/superadmin" __tests__/` devolvió cero. Con 376
+  pruebas en verde, el número invitaba a suponer que estaba cubierto. Al
+  sondearlo apareció además que desactivar un lavadero no cortaba a quien ya
+  estaba adentro. **Un total alto de pruebas dice cuánto se ejercita, no qué
+  queda afuera**, y lo segundo es lo que hay que preguntar.
+
 **La regla que sale de ahí:** antes de cambiar código, conseguir el dato que
 distingue entre las causas posibles. Un log, una ejecución, una petición
 reproducida. Si no se puede reproducir, el primer trabajo es hacerlo
@@ -189,7 +198,7 @@ mientras no lo haya abierto un navegador. Las pruebas están en
 
 ```bash
 npm run db:reset          # base limpia
-npx jest                  # 363 tests
+npx jest                  # 383 tests
 npm run test:rls          # los mismos, con RLS aplicándose
 npx tsc --noEmit          # backend
 cd bot-wa && npm run build # bot

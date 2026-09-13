@@ -130,12 +130,16 @@ export async function refresh(req: Request, res: Response): Promise<void> {
     id: string; user_id: string; email: string;
     tenant_id: string | null; role: UserRow['role'];
     first_name: string; last_name: string | null; is_active: boolean;
+    /** Del lavadero, no del usuario. `null` para el superadministrador. */
+    tenant_activo: boolean | null;
   };
 
   const { rows } = await db.query<RefreshRow>(
-    `SELECT rt.*, u.email, u.tenant_id, u.role, u.first_name, u.last_name, u.is_active
+    `SELECT rt.*, u.email, u.tenant_id, u.role, u.first_name, u.last_name, u.is_active,
+            t.is_active AS tenant_activo
      FROM refresh_tokens rt
      JOIN users u ON u.id = rt.user_id
+     LEFT JOIN tenants t ON t.id = u.tenant_id
      WHERE rt.token_hash = $1 AND rt.revoked_at IS NULL AND rt.expires_at > NOW()
      LIMIT 1`,
     [tokenHash],
@@ -144,6 +148,26 @@ export async function refresh(req: Request, res: Response): Promise<void> {
   if (rows.length === 0) throw new AppError('Refresh token inválido o expirado', 401);
   const tokenRow = rows[0];
   if (!tokenRow.is_active) throw new AppError('Usuario desactivado', 403);
+
+  // El login comprobaba el lavadero y esto no, así que desactivar uno sólo
+  // frenaba a quien **todavía no había entrado**. Los que ya estaban adentro
+  // seguían trabajando y renovando la sesión indefinidamente: el refresh dura
+  // siete días y rota en cada uso, así que la suspensión no les llegaba nunca.
+  //
+  // Comprobado contra la API: con el lavadero desactivado, sus rutas seguían
+  // respondiendo 200 y `POST /auth/refresh` devolvía un token nuevo. Desactivar
+  // es la palanca para falta de pago o abuso — justo la población que ya está
+  // usando el sistema, que era la única a la que no alcanzaba.
+  //
+  // Con esto, el corte llega en cuanto vence el access token que tengan: 15
+  // minutos como mucho. `authenticate` no consulta la base a propósito —sólo
+  // verifica el JWT— y meterle una consulta por petición costaría más de lo que
+  // ahorra esa ventana.
+  //
+  // `LEFT JOIN`: el superadministrador no tiene tenant, y `null` no es `false`.
+  if (tokenRow.tenant_activo === false) {
+    throw new AppError('Tu cuenta de lavadero está desactivada', 403);
+  }
 
   await db.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = $1', [tokenRow.id]);
 
