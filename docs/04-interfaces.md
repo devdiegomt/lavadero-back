@@ -73,7 +73,7 @@ que emite `pino` para poder correlacionar.
 
 ### Endpoints
 
-80 en 15 módulos. Los agrupados por recurso:
+81 en 15 módulos. Los agrupados por recurso:
 
 <details>
 <summary><strong>auth</strong> (4)</summary>
@@ -124,7 +124,7 @@ CRUD estándar, más:
 </details>
 
 <details>
-<summary><strong>billing</strong> (10)</summary>
+<summary><strong>billing</strong> (11)</summary>
 
 | Método | Ruta |
 |---|---|
@@ -134,6 +134,7 @@ CRUD estándar, más:
 | POST | `/billing/credit-note/:paymentId` |
 | GET | `/billing/invoices`, `/pending`, `/config` |
 | PUT | `/billing/config/credentials` — las guarda cifradas; no devuelve el valor |
+| GET | `/billing/archivo/:paymentId/:kind` — la copia propia (`pdf` o `json`). Devuelve el SHA-256 en `X-Documento-SHA256`; si el documento no coincide con su hash, falla en vez de entregarlo |
 | POST | `/billing/config/test`, `/sync-services` |
 </details>
 

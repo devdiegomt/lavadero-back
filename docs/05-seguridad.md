@@ -65,7 +65,7 @@ la cookie. El panel lo hace al arrancar.
 decía *"Alto (implica cookies httpOnly y CSRF)"*, y esa estimación asumía mover
 **los dos** tokens a cookies. Si la autenticación de cada petición viajara en una
 cookie, el navegador la adjuntaría sola en cualquier petición que un sitio ajeno
-provoque, y haría falta un token CSRF en las 80 rutas.
+provoque, y haría falta un token CSRF en las 81 rutas.
 
 Dejando el access token en un header, **las rutas que cambian algo quedan inmunes
 por construcción**: el navegador nunca adjunta `Authorization` por su cuenta. La
@@ -415,11 +415,17 @@ así que el borrado alcanza sólo al cliente de ese lavadero. En WhatsApp la
 identidad es el LID —o el teléfono— desde el que se escribe: es la cuenta del
 titular, y en este canal no hay prueba más fuerte disponible.
 
-> **Ninguna de las dos tareas toca datos de facturación.** `payments` y
-> `billing_sync` responden a la obligación de la DIAN de conservar 5 años
-> (§6), que es más larga y de otra naturaleza. Un plazo de retención de datos
-> personales no la sobreescribe: son obligaciones distintas sobre tablas
-> distintas, y confundirlas haría incumplir una para cumplir la otra.
+> **Ninguna de las dos tareas toca datos de facturación.** `payments`,
+> `billing_sync` e `invoice_archive` responden a la obligación de la DIAN de
+> conservar 5 años (§6), que es más larga y de otra naturaleza. Un plazo de
+> retención de datos personales no la sobreescribe: son obligaciones distintas
+> sobre tablas distintas, y confundirlas haría incumplir una para cumplir la otra.
+>
+> Vale decirlo explícitamente para `invoice_archive`, que es la más incómoda: una
+> factura **contiene datos personales** del cliente —nombre, documento— y aun así
+> no se purga ni se anonimiza. La obligación tributaria gana sobre el plazo de
+> retención, y anonimizar a un cliente no puede alterar una factura ya emitida:
+> eso sería falsificar un documento fiscal.
 
 ### El rastro de acciones
 

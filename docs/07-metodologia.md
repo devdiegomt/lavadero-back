@@ -269,6 +269,7 @@ Un orden que evita perder tiempo:
 | "Tenant no encontrado" | `TENANT_PHONE` vs `tenants.whatsapp_phone` |
 | El backend no arranca | `docker compose logs backend` — nombra la variable |
 | Dejó de responderle a un número | `docker compose logs bot-wa \| grep -i bucle` — si repitió el mismo texto tres veces está en silencio; con escribir otra cosa se reanuda |
+| Una factura archivada no se puede descargar | `npm run db:verificar-facturas`: si su hash no coincide, el sistema se niega a entregarla como auténtica. Volver a bajarla con `db:archivar-facturas` mientras Alegra siga vigente |
 | Un cliente aparece dos veces | `npm run db:migrate-telefonos` lista los que comparten teléfono. No los fusiona: eso se decide a mano |
 | El bot deja de responder de golpe | Si el backend murió, mirar si fue un `unhandled rejection`. Toda ruta `async` va con `asyncHandler`: sin él, en Express 4 el rechazo no llega al errorHandler y Node 22 termina el proceso |
 | Una consulta devuelve vacío y debería traer filas | Puede ser RLS: la ruta no abrió el contexto de tenant. Se ve en el log de arranque si RLS está activo, y con `SELECT current_setting('app.tenant_id', true)` en la conexión |

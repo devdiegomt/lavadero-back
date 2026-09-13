@@ -23,6 +23,7 @@ import type { Request, Response } from 'express';
 import * as db from '../../shared/db';
 import { AppError } from '../../shared/middleware/errorHandler';
 import { encrypt, isEncrypted } from '../../shared/utils/crypto';
+import { archivarFactura, leerArtefacto } from './archivo';
 import type { TenantRow } from '../../types/entities';
 
 // `alegra.client` y `billing.sync` aún viven como .js — usamos firmas mínimas tipadas
@@ -232,7 +233,27 @@ export async function generateInvoice(req: Request, res: Response): Promise<void
       ],
     );
 
-    // 8. Si el cliente tiene email, enviar factura
+    // 8. Guardar nuestra copia. La DIAN obliga a conservar cinco años y hasta
+    // ahora sólo quedaba una URL al PDF de Alegra, que no es una copia: si esa
+    // cuenta se vence, el lavadero se queda sin los documentos.
+    //
+    // Va después del UPDATE y nunca lanza: una factura emitida con la copia
+    // pendiente es un problema mucho menor que una emisión que falla por no
+    // poder guardarla. Lo que quede se recupera con db:archivar-facturas.
+    await archivarFactura(
+      {
+        tenantId: req.tenantId as string,
+        paymentId,
+        invoiceId: invoice.id.toString(),
+        invoiceNumber,
+        cufe,
+        issuedAt: (invoice as { date?: string }).date ?? null,
+      },
+      invoice,
+      pdfUrl,
+    );
+
+    // 9. Si el cliente tiene email, enviar factura
     if (payment.customer_email) {
       try {
         await alegra.sendInvoiceByEmail(invoice.id, payment.customer_email);
@@ -789,4 +810,40 @@ async function logBillingError(tenantId: string, paymentId: string, error: Alegr
   } catch (logErr) {
     console.error('[Billing] Error logging billing error:', (logErr as Error).message);
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// GET /api/billing/archivo/:paymentId/:kind
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Descarga la copia propia de una factura.
+ *
+ * Es lo que hace útil al archivo: guardar sin poder recuperar no cumple nada.
+ * Si el documento no coincide con su hash, `leerArtefacto` lanza — entregar como
+ * auténtico algo corrupto es peor que decir que se perdió.
+ */
+export async function descargarArchivada(req: Request, res: Response): Promise<void> {
+  const { paymentId, kind } = req.params as { paymentId: string; kind: string };
+
+  if (kind !== 'pdf' && kind !== 'json' && kind !== 'xml') {
+    throw new AppError('Tipo inválido. Usar pdf, json o xml.', 400);
+  }
+
+  const doc = await leerArtefacto(req.tenantId as string, paymentId, kind);
+  if (!doc) {
+    throw new AppError(
+      'No hay copia archivada de esa factura. Si se emitió antes de que existiera el ' +
+        'archivo, recuperarla con: npm run db:archivar-facturas',
+      404,
+    );
+  }
+
+  const nombre = `factura-${doc.invoice_number ?? paymentId}.${kind}`;
+  res.setHeader('Content-Type', doc.content_type ?? 'application/octet-stream');
+  res.setHeader('Content-Disposition', `attachment; filename="${nombre}"`);
+  // Para que quien descargue pueda verificar por su cuenta que es el mismo
+  // documento que se archivó.
+  res.setHeader('X-Documento-SHA256', doc.sha256);
+  res.send(doc.content);
 }

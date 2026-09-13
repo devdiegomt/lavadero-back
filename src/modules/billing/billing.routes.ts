@@ -47,6 +47,13 @@ router.put(
   asyncHandler(ctrl.setCredentials),
 );
 
+// Descargar la copia propia de una factura. Ver modules/billing/archivo.ts.
+router.get(
+  '/archivo/:paymentId/:kind',
+  validarUuid('paymentId'),
+  asyncHandler(ctrl.descargarArchivada),
+);
+
 // Probar conexión con Alegra
 router.post('/config/test', authorize('admin'), asyncHandler(ctrl.testConnection));
 

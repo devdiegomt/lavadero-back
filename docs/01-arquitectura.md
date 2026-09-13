@@ -255,3 +255,4 @@ cada consulta. Ver [Seguridad §3](05-seguridad.md#3-aislamiento-multi-tenant) y
 | [0004](adr/0004-n8n-como-orquestador.md) | n8n como capa conversacional |
 | [0005](adr/0005-identidad-por-lid.md) | Identificar clientes por LID |
 | [0006](adr/0006-ia-solo-para-clasificar.md) | La IA sólo clasifica |
+| [0009](adr/0009-archivo-de-facturas.md) | Las facturas se archivan en PostgreSQL |
