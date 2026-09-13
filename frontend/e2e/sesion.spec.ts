@@ -105,6 +105,64 @@ test.describe('recargar la página', () => {
     }
   });
 
+  test('otra pestaña no renueva mientras esta está renovando', async ({ page, context }) => {
+    // Dos pestañas comparten la cookie pero no las variables del módulo, así que
+    // la cura de la prueba anterior —renovar de a una— no las alcanza: cada una
+    // tiene su propia "de a una". Las dos llegan con el mismo refresh token, una
+    // lo revoca y la otra se queda sin nada. Reproducido recargando dos juntas:
+    // tres de cada cuatro intentos dejaban alguna en el login, y uno dejó a las
+    // dos. Lo cierra un candado de `navigator.locks`, que es del origen.
+    //
+    // **Por qué esta prueba tiene esta forma.** Recargar dos pestañas a la vez y
+    // ver si alguna pierde la sesión no sirve como prueba: la ventana de la
+    // carrera dura lo que tarda el refresh, y contra la base local son 2 ms, así
+    // que lo atrapaba 1 de cada 8 veces. Ensancharla con un retraso tampoco —
+    // cualquier interceptor de Playwright serializa las peticiones y termina
+    // implementando el candado sin querer, con lo cual la prueba pasaba incluso
+    // con el arreglo desactivado.
+    //
+    // Así que se comprueba el mecanismo, que es lo que de verdad da la garantía:
+    // con el candado tomado, la otra pestaña **no puede** pedir un refresh. Sale
+    // determinista — 1.500 ms con el arreglo, 90 ms sin él.
+    await entrar(page);
+
+    // Si no hubiera `navigator.locks` el panel renovaría sin candado y esta
+    // prueba mediría otra cosa. Requiere contexto seguro: `localhost` lo es.
+    expect(
+      await page.evaluate(() => typeof navigator.locks),
+      'sin navigator.locks el panel no puede coordinar pestañas',
+    ).toBe('object');
+
+    const otra = await context.newPage();
+    await otra.goto('/');
+    await expect(otra.locator('#password')).toHaveCount(0, { timeout: 15_000 });
+
+    // Esta pestaña toma el candado y lo sostiene, como si estuviera renovando.
+    const SOSTENIDO_MS = 1500;
+    await page.evaluate((ms) => {
+      void navigator.locks.request(
+        'carwash:refresh',
+        () => new Promise<void>((suelta) => setTimeout(suelta, ms)),
+      );
+    }, SOSTENIDO_MS);
+
+    const t0 = Date.now();
+    const pedido = otra.waitForRequest((r) => r.url().includes('/auth/refresh'), {
+      timeout: 10_000,
+    });
+    void otra.goto('/payments');
+    await pedido;
+    const cuando = Date.now() - t0;
+
+    expect(
+      cuando,
+      `la otra pestaña pidió el refresh a los ${cuando} ms: no esperó el candado`,
+    ).toBeGreaterThan(SOSTENIDO_MS * 0.8);
+
+    // Y después de esperar, entra: el candado retrasa, no rompe.
+    await expect(otra.locator('#password')).toHaveCount(0, { timeout: 15_000 });
+  });
+
   test('sin cookie, recargar lleva al login', async ({ page }) => {
     await entrar(page);
     await page.context().clearCookies();

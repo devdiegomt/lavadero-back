@@ -103,22 +103,85 @@ export function setStoredUser(user: unknown): void {
  * `Refresh token inválido o expirado`. Con `supertest` no aparece: las
  * peticiones van de a una.
  *
- * Queda un caso que esto no cubre: **dos pestañas** comparten la cookie pero no
- * esta variable, así que si renuevan en el mismo instante una pierde. Hace
- * falta un candado entre pestañas (`BroadcastChannel` o `navigator.locks`) o
- * una ventana de gracia en el backend. Anotado en docs/05-seguridad.md.
+ * Esta variable sólo ordena **esta** pestaña. Entre pestañas hace falta otra
+ * cosa: ver `conCandado`.
  */
 let renovacionEnCurso: Promise<boolean> | null = null;
 
 /**
+ * El candado, que es de todo el origen y no sólo de esta pestaña.
+ *
+ * Dos pestañas del panel comparten la cookie pero no la variable de arriba, así
+ * que cada una tiene su propia "de a una" y volvía a pasar lo mismo. Reproducido
+ * abriendo dos y recargando las dos juntas: en tres de cuatro intentos alguna
+ * terminaba en el login, y en uno **las dos** — llegan con el mismo token, una lo
+ * revoca y la otra se queda sin nada.
+ *
+ * `navigator.locks` lo resuelve porque el candado es del origen: la segunda
+ * pestaña espera y, cuando le toca, renueva con la cookie que dejó la primera,
+ * que es válida. Renueva de más —un token extra por pestaña— y eso es
+ * exactamente lo que la rotación espera que pase.
+ *
+ * Las dos alternativas que se descartaron:
+ *
+ * - **Una ventana de gracia en el backend**, aceptando el token recién rotado
+ *   unos segundos. Es lo que hace la mayoría de las implementaciones, y debilita
+ *   justo lo que la rotación compra: detectar que alguien reusó un token robado.
+ * - **`BroadcastChannel`**, repartiendo el access token entre pestañas. Habría
+ *   que coordinar a mano quién renueva, y pone la credencial en un canal que
+ *   cualquier script del origen puede escuchar.
+ *
+ * ## Esto no tiene prueba automatizada, y es a propósito
+ *
+ * La ventana de la carrera dura lo que tarda el refresh. Contra la base local
+ * caliente son 2 ms, y una prueba de dos pestañas lo atrapaba **1 de cada 8
+ * veces**: un verde que no significa nada. Ensancharla con un retraso tampoco
+ * sirve — cualquier interceptor de Playwright, por pestaña o por contexto,
+ * serializa las peticiones y termina implementando el candado sin querer, así
+ * que la prueba pasaba incluso con el arreglo desactivado. Pasar por la razón
+ * equivocada es peor que no probar.
+ *
+ * Que sea difícil de reproducir acá **no lo hace raro en producción**: la
+ * ventana es el ida y vuelta a la API, que sobre una red son 30 a 300 ms en vez
+ * de 2. Es entre 15 y 150 veces más ancha justo donde hay usuarios.
+ *
+ * ## Dónde no protege
+ *
+ * `navigator.locks` existe en Chrome, Firefox y Safari 15.4+, pero **sólo en
+ * contexto seguro** (HTTPS, o `localhost`). Si no está —un despliegue en HTTP
+ * plano— se renueva sin candado, que es como estaba antes: una pestaña sola anda
+ * bien y dos a la vez pueden pisarse.
+ */
+const CANDADO = 'carwash:refresh';
+
+/** Si una pestaña se cuelga sosteniendo el candado, las demás no esperan para siempre. */
+const ESPERA_MAXIMA_MS = 10_000;
+
+function conCandado(tarea: () => Promise<boolean>): Promise<boolean> {
+  const candados = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+  if (!candados) return tarea();
+
+  const corte = new AbortController();
+  const reloj = setTimeout(() => corte.abort(), ESPERA_MAXIMA_MS);
+
+  return candados
+    .request(CANDADO, { signal: corte.signal }, tarea)
+    // Si no se pudo tomar el candado a tiempo, intentar igual: quedarse sin
+    // sesión porque otra pestaña se colgó sería peor que arriesgar la carrera.
+    .catch(() => tarea())
+    .finally(() => clearTimeout(reloj));
+}
+
+/**
  * Pide un access token nuevo usando la cookie.
  *
- * Los que lleguen mientras hay una renovación en curso se cuelgan de esa misma
- * en vez de empezar otra. Ver arriba.
+ * Dos capas, porque son dos problemas distintos: los que llegan mientras hay una
+ * renovación en curso **en esta pestaña** se cuelgan de esa misma promesa, y el
+ * candado ordena las de **otras pestañas**.
  */
 function renovar(): Promise<boolean> {
   if (!renovacionEnCurso) {
-    renovacionEnCurso = pedirTokenNuevo();
+    renovacionEnCurso = conCandado(pedirTokenNuevo);
     void renovacionEnCurso.finally(() => {
       renovacionEnCurso = null;
     });
