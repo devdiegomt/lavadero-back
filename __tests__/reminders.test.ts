@@ -16,12 +16,21 @@ let customerId: string;
 let vehicleId: string;
 let serviceId: string;
 
-/** Crea un turno a `minutos` de ahora, en la zona horaria del tenant. */
+/**
+ * Crea un turno a `minutos` de ahora, en la zona horaria del tenant.
+ *
+ * La fecha **y** la hora salen del mismo instante. Antes la fecha se tomaba del
+ * "ahora" local y la hora del instante futuro, que para un turno pasada la
+ * medianoche local daba una fila incoherente: fecha de ayer con hora de hoy.
+ */
 async function crearTurno(minutos: number): Promise<string> {
   const { rows } = await db.query<{ hora: string; dia: string }>(
-    `SELECT to_char((NOW() AT TIME ZONE t.timezone) + ($2 || ' minutes')::interval, 'HH24:MI') AS hora,
-            to_char((NOW() AT TIME ZONE t.timezone), 'YYYY-MM-DD') AS dia
-     FROM tenants t WHERE t.id = $1`,
+    `SELECT to_char(momento, 'HH24:MI') AS hora,
+            to_char(momento, 'YYYY-MM-DD') AS dia
+     FROM (
+       SELECT (NOW() AT TIME ZONE t.timezone) + ($2 || ' minutes')::interval AS momento
+       FROM tenants t WHERE t.id = $1
+     ) q`,
     [tenantId, String(minutos)],
   );
   const { rows: appt } = await db.query<{ id: string }>(
@@ -109,6 +118,109 @@ describe('la fecha se compara contra el día del lavadero', () => {
     await sendAppointmentReminders();
 
     expect(enviar).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('la ventana cruza la medianoche del lavadero', () => {
+  /**
+   * El bug: la ventana se comparaba sobre `scheduled_time` a secas, contra
+   * `(ahora+25min)::time` y `(ahora+35min)::time`. `::time` descarta el día, así
+   * que a las 23:40 locales quedaba `BETWEEN '00:05' AND '00:15'` con el
+   * inferior mayor que el superior — y `BETWEEN` así no calza con nada.
+   *
+   * Resultado: **entre las 23:25 y la medianoche del lavadero no salía un solo
+   * recordatorio, todos los días**, sin un error en el log. Y un turno a las
+   * 00:10 tampoco, porque el `scheduled_date = hoy` lo excluía.
+   *
+   * Apareció corriendo las pruebas a las 23:26 de Bogotá. A cualquier otra hora
+   * pasaban. Por eso esta prueba **fija** la hora local del lavadero en vez de
+   * confiar en cuándo se ejecute.
+   */
+  afterEach(async () => {
+    await db.query(`UPDATE tenants SET timezone = 'America/Bogota' WHERE id = $1`, [tenantId]);
+  });
+
+  /**
+   * Pone la hora local del tenant en `hhmm`, con precisión de minuto.
+   *
+   * PostgreSQL acepta un desplazamiento arbitrario como zona, con el signo
+   * invertido al estilo POSIX: `AT TIME ZONE '-05:30'` es UTC+5:30. Eso permite
+   * cualquier hora local, que es lo que hace falta para fijar el borde de la
+   * medianoche sin depender del reloj de la máquina.
+   */
+  async function fijarHoraLocal(hhmm: string): Promise<void> {
+    const [h, m] = hhmm.split(':').map(Number);
+    const ahora = new Date();
+    const utcMin = ahora.getUTCHours() * 60 + ahora.getUTCMinutes();
+    let desfase = (((h * 60 + m - utcMin) % 1440) + 1440) % 1440;
+    if (desfase > 720) desfase -= 1440;
+
+    const signo = desfase >= 0 ? '-' : '+';   // invertido a propósito: ver arriba
+    const abs = Math.abs(desfase);
+    const zona = `${signo}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
+
+    await db.query(`UPDATE tenants SET timezone = $1 WHERE id = $2`, [zona, tenantId]);
+
+    const { rows } = await db.query<{ local: string }>(
+      `SELECT to_char(NOW() AT TIME ZONE timezone, 'HH24:MI') AS local
+       FROM tenants WHERE id = $1`, [tenantId],
+    );
+    // Guardia: si la zona no quedó como se pretende, la prueba no prueba nada.
+    expect(rows[0].local).toBe(hhmm);
+  }
+
+  it('avisa de un turno de las 00:10 cuando en el lavadero son las 23:40', async () => {
+    await fijarHoraLocal('23:40');
+    const id = await crearTurno(30);   // 00:10 del día local siguiente
+
+    // Guardia: el turno quedó en otra fecha local que "hoy". Sin esto, la
+    // prueba podría pasar sin cruzar nada.
+    const { rows } = await db.query<{ otro_dia: boolean }>(
+      `SELECT a.scheduled_date <> (NOW() AT TIME ZONE t.timezone)::date AS otro_dia
+       FROM appointments a JOIN tenants t ON t.id = a.tenant_id WHERE a.id = $1`, [id],
+    );
+    expect(rows[0].otro_dia).toBe(true);
+
+    const enviar = jest.spyOn(botWa, 'enviarWhatsApp').mockResolvedValue({ enviado: true });
+    await sendAppointmentReminders();
+
+    expect(enviar).toHaveBeenCalledTimes(1);
+  });
+
+  it('y dice "mañana", no "hoy"', async () => {
+    await fijarHoraLocal('23:40');
+    await crearTurno(30);
+
+    const enviar = jest.spyOn(botWa, 'enviarWhatsApp').mockResolvedValue({ enviado: true });
+    await sendAppointmentReminders();
+
+    const [, mensaje] = enviar.mock.calls[0];
+    expect(mensaje).toContain('mañana');
+    expect(mensaje).not.toContain('es hoy');
+  });
+
+  it('a las 23:40 un turno de las 23:50 no se avisa: está fuera de la ventana', async () => {
+    // El otro lado: que el arreglo no se haya vuelto tan laxo que avise de todo
+    // lo que queda antes de medianoche.
+    await fijarHoraLocal('23:40');
+    await crearTurno(10);
+
+    const enviar = jest.spyOn(botWa, 'enviarWhatsApp').mockResolvedValue({ enviado: true });
+    await sendAppointmentReminders();
+
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it('pasada la medianoche, un turno de las 00:35 sí se avisa a las 00:05', async () => {
+    await fijarHoraLocal('00:05');
+    await crearTurno(30);
+
+    const enviar = jest.spyOn(botWa, 'enviarWhatsApp').mockResolvedValue({ enviado: true });
+    await sendAppointmentReminders();
+
+    expect(enviar).toHaveBeenCalledTimes(1);
+    const [, mensaje] = enviar.mock.calls[0];
+    expect(mensaje).toContain('hoy');
   });
 });
 

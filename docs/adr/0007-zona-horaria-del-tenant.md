@@ -61,10 +61,51 @@ bomba de tiempo. La columna `timezone` ya existía.
 ## Cuándo reconsiderar
 
 Si aparecen turnos que cruzan medianoche o que abarcan varios días, `TIME` deja
-de alcanzar y habría que revisar el modelo.
+de alcanzar y habría que revisar el modelo. Ya apareció un caso cercano: la
+*ventana* de recordatorios sí cruza medianoche, aunque el turno no. Ver la cuarta
+aparición, más abajo.
 
 ## Lección
 
 El bug sobrevivió porque **las pruebas dependían de la hora a la que se
 corrían**. Una prueba que pasa a las 9 y falla a las 19 no está midiendo el
 código: está midiendo el reloj.
+
+## Cuarta aparición: perder el día al quedarse con la hora (2026-09)
+
+Las tres primeras fueron la misma forma del error —comparar con el reloj del
+servidor en vez del del lavadero— y se corrigieron en `getAvailableSlots`, en la
+confirmación del agendamiento y en la consulta de recordatorios. La cuarta es
+una variante distinta, y por eso no la atrapó ninguna de las correcciones
+anteriores.
+
+La ventana de recordatorios comparaba así:
+
+```sql
+-- mal
+a.scheduled_time BETWEEN (NOW() AT TIME ZONE t.timezone + INTERVAL '25 minutes')::time
+                     AND (NOW() AT TIME ZONE t.timezone + INTERVAL '35 minutes')::time
+```
+
+La zona estaba bien. El problema es `::time`, que **descarta el día**: a las
+23:40 locales los dos límites quedan `'00:05'` y `'00:15'`, el inferior mayor que
+el superior, y `BETWEEN` así no calza con nada. De 23:25 a medianoche no salía un
+solo recordatorio, todos los días, sin un error en el log. El
+`scheduled_date = hoy` de la misma consulta cerraba el otro lado: un turno a las
+00:10 había que avisarlo a las 23:40 del día anterior, cuando la fecha local
+todavía es otra.
+
+Se compara sobre el instante completo, `scheduled_date + scheduled_time`, contra
+un `timestamp` sin `::time` de por medio. La cota por fecha se mantiene —ahora de
+dos días— sólo para que el índice siga sirviendo.
+
+**Cómo apareció:** corriendo la suite a las 23:26 de Bogotá. A cualquier otra
+hora pasaba. Es exactamente la lección de arriba otra vez, así que las pruebas
+nuevas **fijan** la hora local del lavadero al minuto, aprovechando que
+PostgreSQL acepta un desfase arbitrario como zona (`AT TIME ZONE '-05:30'`, con
+el signo invertido al estilo POSIX). Ya no hay ninguna hora del día a la que
+estas pruebas pasen sin medir.
+
+**Regla que queda:** `::time` sobre algo que salió de un `NOW()` es sospechoso
+siempre. Si la comparación puede cruzar una medianoche, va sobre el instante
+completo.

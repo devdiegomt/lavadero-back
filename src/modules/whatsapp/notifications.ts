@@ -76,31 +76,50 @@ export async function sendAppointmentReminders(): Promise<void> {
     // WhatsApp vive en ese proceso. Y se identifica al cliente por wa_lid,
     // porque WhatsApp no entrega el teléfono y c.phone es NULL para quien
     // llegó por este canal.
-    const { rows: appointments } = await db.query<ReminderRow & { wa_lid: string | null }>(
+    const { rows: appointments } = await db.query<
+      ReminderRow & { wa_lid: string | null; es_hoy: boolean }
+    >(
       `SELECT a.id, a.scheduled_time, a.tenant_id,
               c.first_name, c.phone AS customer_phone, c.wa_lid,
               v.plate, s.name AS service_name,
               t.name AS tenant_name,
+              -- Para decir "hoy" o "mañana" sin suponer: el turno puede caer al
+              -- otro lado de la medianoche local respecto de cuando se avisa.
+              (a.scheduled_date = (NOW() AT TIME ZONE t.timezone)::date) AS es_hoy,
               NULL::numeric AS total_amount, NULL AS brand, NULL AS model
        FROM appointments a
        JOIN customers c ON c.id = a.customer_id
        JOIN vehicles  v ON v.id = a.vehicle_id
        JOIN services  s ON s.id = a.service_id
        JOIN tenants   t ON t.id = a.tenant_id
-       -- La fecha se compara contra el dia DEL LAVADERO, no contra
-       -- CURRENT_DATE, que es el del servidor y corre en UTC. El turno se
-       -- guarda con la fecha local del lavadero, asi que entre la medianoche
-       -- UTC y la local las dos no coinciden y la consulta no devolvia nada:
-       -- los recordatorios dejaban de salir sin ningun error. Es el mismo
-       -- error de mezclar relojes que ya se corrigio en getAvailableSlots y en
-       -- el paso de confirmacion del agendamiento.
-       WHERE a.scheduled_date = (NOW() AT TIME ZONE t.timezone)::date
-         AND a.status = 'pending' AND a.source = 'whatsapp'
+       WHERE a.status = 'pending' AND a.source = 'whatsapp'
          AND a.scheduled_time IS NOT NULL AND t.whatsapp_enabled = true
          AND (c.wa_lid IS NOT NULL OR c.phone IS NOT NULL)
-         AND a.scheduled_time BETWEEN
-           (NOW() AT TIME ZONE t.timezone + INTERVAL '25 minutes')::time
-           AND (NOW() AT TIME ZONE t.timezone + INTERVAL '35 minutes')::time
+         -- La ventana se compara sobre el INSTANTE del turno
+         -- (fecha + hora), no sobre la hora sola.
+         --
+         -- Antes era \`scheduled_time BETWEEN (ahora+25min)::time AND
+         -- (ahora+35min)::time\`, y \`::time\` descarta el dia: a las 23:30
+         -- locales eso queda \`BETWEEN '23:55' AND '00:05'\`, que con BETWEEN
+         -- —que exige inferior <= superior— no calza con NADA. Resultado: entre
+         -- las 23:25 y la medianoche del lavadero no salia un solo
+         -- recordatorio, todos los dias, sin ningun error en el log.
+         --
+         -- Y el \`scheduled_date = hoy\` que habia aca arriba hacia imposible el
+         -- otro lado del mismo problema: un turno a las 00:10 hay que avisarlo a
+         -- las 23:40 del dia ANTERIOR, cuando la fecha local todavia es otra.
+         --
+         -- Es la cuarta vez que aparece este error en el proyecto: mezclar un
+         -- reloj con otro, o perder el dia al quedarse con la hora. Ver
+         -- ADR-0007.
+         AND (a.scheduled_date + a.scheduled_time) BETWEEN
+               (NOW() AT TIME ZONE t.timezone) + INTERVAL '25 minutes'
+           AND (NOW() AT TIME ZONE t.timezone) + INTERVAL '35 minutes'
+         -- Acota por fecha para que el indice (tenant_id, scheduled_date,
+         -- status) siga sirviendo. Son dos dias porque la ventana puede cruzar
+         -- la medianoche local, que es justamente lo que se viene a arreglar.
+         AND a.scheduled_date BETWEEN (NOW() AT TIME ZONE t.timezone)::date
+                                  AND ((NOW() AT TIME ZONE t.timezone) + INTERVAL '35 minutes')::date
          -- Un solo recordatorio por turno: el cron corre cada pocos minutos y
          -- la ventana de 10 min lo devolveria varias veces.
          AND NOT EXISTS (
@@ -121,9 +140,13 @@ export async function sendAppointmentReminders(): Promise<void> {
       const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
       const timeStr = `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
 
+      // "hoy" sólo si de verdad es hoy para el lavadero: un turno a las 00:10
+      // se avisa a las 23:40 del día anterior, y ahí "hoy" sería mentira.
+      const cuando = appt.es_hoy ? 'hoy' : 'mañana';
+
       const message =
         `⏰ *Recordatorio de tu turno*\n\n` +
-        `Hola ${appt.first_name}, tu turno en *${appt.tenant_name}* es hoy a las *${timeStr}*.\n\n` +
+        `Hola ${appt.first_name}, tu turno en *${appt.tenant_name}* es ${cuando} a las *${timeStr}*.\n\n` +
         `Servicio: ${appt.service_name}\nVehículo: ${appt.plate}\n\n` +
         `¡Te esperamos! 🚗`;
 
