@@ -182,6 +182,11 @@ Y si hay migración, correrla **antes** de que la versión nueva reciba tráfico
 docker compose exec backend npm run db:migrate-all:prod
 ```
 
+`db:migrate-telefonos` reescribe datos, no esquema, así que además **imprime un
+informe**: los clientes que quedaron compartiendo teléfono. Conviene leerlo en
+vez de dejarlo pasar — casi siempre es la misma persona cargada dos veces, y el
+script no los fusiona a propósito.
+
 ## 8. Cuando algo falla en producción
 
 Un orden que evita perder tiempo:
@@ -206,6 +211,7 @@ Un orden que evita perder tiempo:
 | "Tenant no encontrado" | `TENANT_PHONE` vs `tenants.whatsapp_phone` |
 | El backend no arranca | `docker compose logs backend` — nombra la variable |
 | Dejó de responderle a un número | `docker compose logs bot-wa \| grep -i bucle` — si repitió el mismo texto tres veces está en silencio; con escribir otra cosa se reanuda |
+| Un cliente aparece dos veces | `npm run db:migrate-telefonos` lista los que comparten teléfono. No los fusiona: eso se decide a mano |
 
 ## 9. Cuando el proyecto crezca
 

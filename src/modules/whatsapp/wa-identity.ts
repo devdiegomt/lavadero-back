@@ -10,6 +10,7 @@
  * un cliente cargado desde el panel tiene teléfono pero no LID.
  */
 import * as db from '../../shared/db';
+import { normalizarTelefono } from '../../shared/utils/telefono';
 import type { Autorizacion } from './consentimiento';
 
 export interface IdentidadWa {
@@ -17,14 +18,20 @@ export interface IdentidadWa {
   waLid: string | null;
 }
 
-/** Lee la identidad de un body o query, normalizando lo que venga vacío. */
+/**
+ * Lee la identidad de un body o query, normalizando lo que venga vacío.
+ *
+ * El teléfono se lleva a su forma canónica acá y no en cada consulta: las
+ * búsquedas comparan `phone = $1` como texto, así que si entra en dos formas
+ * distintas el mismo cliente aparece como dos. Ver `utils/telefono.ts`.
+ */
 export function leerIdentidad(fuente: Record<string, unknown>): IdentidadWa {
   const limpiar = (v: unknown): string | null => {
     const s = typeof v === 'string' ? v.trim() : '';
     return s === '' ? null : s;
   };
   return {
-    phone: limpiar(fuente.phone),
+    phone: normalizarTelefono(fuente.phone),
     waLid: limpiar(fuente.waLid),
   };
 }

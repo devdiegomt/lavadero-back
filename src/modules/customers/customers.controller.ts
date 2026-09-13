@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import * as db from '../../shared/db';
 import { AppError } from '../../shared/middleware/errorHandler';
 import { anonimizarCliente } from '../../shared/db/retencion';
+import { normalizarTelefono } from '../../shared/utils/telefono';
 import type { CustomerRow, VehicleRow } from '../../types/entities';
 import type { CustomerCreateBody } from '../../shared/middleware/validate';
 
@@ -80,7 +81,9 @@ export async function create(req: Request, res: Response): Promise<void> {
   const { rows } = await db.query<CustomerRow>(
     `INSERT INTO customers (tenant_id, first_name, last_name, phone, email, document_type, document_number, notes)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-    [req.tenantId, firstName.trim(), lastName?.trim() ?? null, phone.trim(),
+    // `phone` llega ya canónico desde el schema (`normalizarTelefono`), que es
+    // lo que lo mantiene enlazable con el WhatsApp del mismo cliente.
+    [req.tenantId, firstName.trim(), lastName?.trim() ?? null, phone,
      email?.trim() ?? null, documentType ?? 'CC', documentNumber?.trim() ?? null, notes?.trim() ?? null],
   );
 
@@ -103,7 +106,12 @@ export async function update(req: Request, res: Response): Promise<void> {
   for (const [jsKey, dbKey] of Object.entries(fieldMap)) {
     if (body[jsKey] !== undefined) {
       updates.push(`${dbKey} = $${idx}`);
-      values.push(body[jsKey]);
+      // Esta ruta no pasa por Zod, así que el teléfono se canoniza acá. Si no,
+      // una edición desde el panel puede desenlazar al cliente de su WhatsApp
+      // —exactamente el bug que `normalizarTelefono` viene a cerrar— y encima
+      // sólo en la edición, que es donde menos se va a buscar.
+      const valor = jsKey === 'phone' ? normalizarTelefono(body[jsKey]) : body[jsKey];
+      values.push(valor);
       idx++;
     }
   }
