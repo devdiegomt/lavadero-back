@@ -12,7 +12,7 @@
     "db:migrate": "ts-node --transpile-only -r dotenv/config src/shared/db/migrate.ts",
     "db:migrate-billing": "ts-node --transpile-only -r dotenv/config src/shared/db/migrate-billing.ts",
     "db:migrate-mt": "ts-node --transpile-only -r dotenv/config src/shared/db/migrate-multitenant.ts",
-    "db:migrate-all": "npm run db:migrate && npm run db:migrate-billing && npm run db:migrate-mt && npm run db:migrate-wa-lid && npm run db:migrate-consent && npm run db:migrate-agenda && npm run db:migrate-telefonos && npm run db:migrate-tipos-vehiculo && npm run db:migrate-auditoria && npm run db:encrypt-billing-keys",
+    "db:migrate-all": "npm run db:migrate && npm run db:migrate-billing && npm run db:migrate-mt && npm run db:migrate-wa-lid && npm run db:migrate-consent && npm run db:migrate-agenda && npm run db:migrate-telefonos && npm run db:migrate-tipos-vehiculo && npm run db:migrate-auditoria && npm run db:encrypt-billing-keys && npm run db:migrate-rls",
     "db:seed-superadmin": "ts-node --transpile-only -r dotenv/config src/shared/db/seed-superadmin.ts",
     "db:seed": "ts-node --transpile-only -r dotenv/config src/shared/db/seed.ts",
     "db:reset": "npm run db:migrate-all && npm run db:seed",
@@ -23,10 +23,11 @@
     "encrypt": "ts-node --transpile-only -r dotenv/config src/shared/db/encrypt-value.ts",
     "test": "jest",
     "test:watch": "jest --watch --detectOpenHandles",
+    "test:rls": "DATABASE_URL=\"$DATABASE_URL_APP\" jest",
     "db:migrate:prod": "node dist/src/shared/db/migrate.js",
     "db:migrate-billing:prod": "node dist/src/shared/db/migrate-billing.js",
     "db:migrate-mt:prod": "node dist/src/shared/db/migrate-multitenant.js",
-    "db:migrate-all:prod": "npm run db:migrate:prod && npm run db:migrate-billing:prod && npm run db:migrate-mt:prod && npm run db:migrate-wa-lid:prod && npm run db:migrate-consent:prod && npm run db:migrate-agenda:prod && npm run db:migrate-telefonos:prod && npm run db:migrate-tipos-vehiculo:prod && npm run db:migrate-auditoria:prod && npm run db:encrypt-billing-keys:prod",
+    "db:migrate-all:prod": "npm run db:migrate:prod && npm run db:migrate-billing:prod && npm run db:migrate-mt:prod && npm run db:migrate-wa-lid:prod && npm run db:migrate-consent:prod && npm run db:migrate-agenda:prod && npm run db:migrate-telefonos:prod && npm run db:migrate-tipos-vehiculo:prod && npm run db:migrate-auditoria:prod && npm run db:encrypt-billing-keys:prod && npm run db:migrate-rls:prod",
     "db:seed:prod": "node dist/src/shared/db/seed.js",
     "db:seed-superadmin:prod": "node dist/src/shared/db/seed-superadmin.js",
     "db:migrate-wa-lid": "ts-node --transpile-only -r dotenv/config src/shared/db/migrate-wa-lid.ts",
@@ -40,7 +41,9 @@
     "db:migrate-tipos-vehiculo": "ts-node --transpile-only -r dotenv/config src/shared/db/migrate-tipos-vehiculo.ts",
     "db:migrate-tipos-vehiculo:prod": "node dist/src/shared/db/migrate-tipos-vehiculo.js",
     "db:migrate-auditoria": "ts-node --transpile-only -r dotenv/config src/shared/db/migrate-auditoria.ts",
-    "db:migrate-auditoria:prod": "node dist/src/shared/db/migrate-auditoria.js"
+    "db:migrate-auditoria:prod": "node dist/src/shared/db/migrate-auditoria.js",
+    "db:migrate-rls": "ts-node --transpile-only -r dotenv/config src/shared/db/migrate-rls.ts",
+    "db:migrate-rls:prod": "node dist/src/shared/db/migrate-rls.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

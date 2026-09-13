@@ -260,6 +260,7 @@ npm run db:migrate-agenda     # días de apertura y ventana de reserva
 npm run db:migrate-telefonos  # teléfonos a forma canónica
 npm run db:migrate-tipos-vehiculo  # cierra vehicle_type a los tipos con precio
 npm run db:migrate-auditoria       # bitácora de acciones del personal
+npm run db:migrate-rls             # rol de la aplicación y políticas de RLS
 npm run db:encrypt-billing-keys    # cifra las credenciales de facturación
 # o todas:
 npm run db:migrate-all

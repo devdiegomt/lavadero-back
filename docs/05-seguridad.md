@@ -100,21 +100,70 @@ un atacante anónimo sino un cliente —o un bucle— hablando de más.
 El aislamiento es **por columna**: cada tabla de negocio tiene `tenant_id` y
 toda consulta lo incluye. `req.tenantId` sale del JWT vía `requireTenant`.
 
-**El riesgo, dicho sin vueltas:** una sola consulta que olvide el `tenant_id`
-filtra datos entre lavaderos. No hay Row Level Security de PostgreSQL como red
-de seguridad — el aislamiento depende de que cada consulta esté bien escrita.
+Eso era todo lo que había, y el riesgo era evidente: una sola consulta de 212 que
+olvide el `tenant_id` filtra datos entre lavaderos. Ahora hay una segunda capa
+que no depende de que nadie se acuerde.
 
-Mitigaciones actuales:
+### Row Level Security
 
-- Todas las consultas de negocio parametrizan `tenant_id` como `$1`, por convención
-- Los tests de integración verifican que un tenant desconocido reciba 404
+PostgreSQL aplica las políticas: una consulta sin `WHERE tenant_id` devuelve sólo
+las filas del lavadero en curso, y una que pida el registro de otro no devuelve
+nada. No es que la aplicación filtre mejor — es que el motor no deja ver el
+resto.
 
-Mitigación que **no** existe: nada impide mecánicamente escribir una consulta
-sin el filtro. Ver §7.
+**El rol es la mitad que se pasa por alto.** RLS **no se aplica a superusuarios
+ni a roles con `BYPASSRLS`**, y la aplicación se conectaba como `postgres`, que
+es los dos. Habilitar políticas sin cambiar el rol deja un esquema que *parece*
+protegido y en ejecución no hace nada — el mismo engaño de `validateId` puesto en
+una sola ruta y de `decryptIfNeeded` aceptando texto plano. Por eso
+`db:migrate-rls` crea `carwash_app` (`NOSUPERUSER`, `NOBYPASSRLS`) y el servidor
+**avisa al arrancar** si las políticas están inertes.
 
-**Al escribir una consulta nueva**, la pregunta obligatoria es: *¿puede esta
-consulta devolver una fila de otro tenant?* Si toca una tabla con `tenant_id`,
-el `WHERE` lo lleva. Siempre.
+**Cómo sabe el motor de qué tenant se trata.** De `current_setting('app.tenant_id')`,
+que `requireTenant` fija sobre la conexión de la petición. Va ahí y no en un
+middleware aparte que cada router deba encadenar: todos usan `requireTenant`, así
+que no queda ninguno afuera. La conexión viaja en un `AsyncLocalStorage`
+(`shared/db/contexto.ts`), y por eso `db.query()` la usa sin que ninguna de las
+212 consultas haya tenido que cambiar. El costo es que cada petición retiene una
+conexión del pool mientras dura.
+
+**Falla cerrado.** Sin contexto, `current_setting` devuelve NULL y no se ve
+ninguna fila. Una ruta que se olvide de abrirlo devuelve vacío, que se nota
+enseguida; al revés, el olvido no se notaría nunca — que es la fuga que se viene
+a cerrar.
+
+**Las tres puertas de atrás**, que son deliberadas y conviene nombrar:
+
+| Camino | Por qué |
+|---|---|
+| Autenticación | El login busca al usuario por email para averiguar de qué lavadero es. No se puede filtrar por tenant para averiguar el tenant |
+| Onboarding | Crea el tenant: no puede filtrar por algo que todavía no existe |
+| Super admin | Ver todos los lavaderos es para lo que existe. Acá el control es `authorize('super_admin')` |
+
+Las tareas de fondo —recordatorios, retención, migraciones de datos— también
+cruzan tenants, y tienen que pedirlo con `conBypassRlsFueraDePeticion` o
+`queryAdmin`. Que sea explícito es el punto: hace visible en el código que cruzan
+tenants, en vez de funcionar por casualidad.
+
+Es un agujero, sí. La diferencia con no tener RLS es que ahora está en cinco
+lugares que se leen en un minuto, en vez de repartido en 212 consultas.
+
+**Sin RLS quedan** `plans`, que es el catálogo global de la plataforma y no es de
+nadie, y `refresh_tokens`, que se consulta por el hash del token antes de saber de
+qué tenant es la sesión — el mismo problema de orden que la autenticación. Lo que
+protege a esa tabla es que sólo guarda hashes.
+
+**Cómo se verifica.** `npm run test:rls` corre la suite entera conectada como
+`carwash_app`, con las políticas aplicándose de verdad. `__tests__/rls.test.ts`
+además intenta leer, modificar, borrar e insertar en el lavadero vecino y
+comprueba que el motor lo impide. Probar esto como `postgres` daría verde sin
+medir nada.
+
+**Al escribir una consulta nueva**, la pregunta sigue siendo: *¿puede esta
+consulta devolver una fila de otro tenant?* El `WHERE tenant_id` se sigue
+poniendo. RLS es la red debajo, no el reemplazo: una consulta sin filtro dentro
+del contexto correcto devuelve lo que corresponde, pero también trae de más
+—todas las filas de ese lavadero— y eso sigue siendo un bug.
 
 ## 4. Datos en reposo
 
@@ -420,6 +469,12 @@ Ordenadas por relación entre riesgo y esfuerzo.
 > guardar. Lo que queda de esa tanda es que el resto de los datos sigue sin
 > cifrar, que es decisión consciente y está dicho en la §4, no una brecha.
 
+> **Cerrada (2026-09).** *"Sin RLS en PostgreSQL"* era la #5, y era la de mayor
+> esfuerzo. Está en la §3. El paso que la activa —apuntar `DATABASE_URL` al rol
+> `carwash_app`— es operativo y va aparte del despliegue: la suite pasa con los
+> dos roles, y el servidor avisa al arrancar mientras las políticas estén
+> inertes.
+
 > **Cerrada (2026-09).** *"Sin auditoría de acciones"* era la #4. Existe
 > `action_log`, que escribe un middleware global —no una llamada por controller,
 > que es lo que se olvida— y se lee en `GET /api/audit`. Guarda **nombres de
@@ -430,7 +485,6 @@ Ordenadas por relación entre riesgo y esfuerzo.
 |---|---|---|---|
 | 2 | **Validación Zod ausente en `whatsapp`** — el resto de los módulos ya valida alta, `PATCH` y query | Entrada no validada hacia la base, pero tras la clave compartida de n8n | Bajo |
 | 3 | **Tokens en `localStorage`** (frontend) | Un XSS expone la sesión | Alto (implica cookies httpOnly y CSRF) |
-| 5 | **Sin RLS en PostgreSQL** | Una consulta mal escrita cruza tenants | Alto |
 | 6 | **Clientes sin autorización que no han vuelto** — a los que vuelven ya se les pide (§5) | Pasivo decreciente | Bajo (decisión del responsable) |
 
 ### Notas sobre algunas
@@ -481,9 +535,7 @@ olvida de un caso y el síntoma aparece lejos.
 cara: implica pasar a cookies `httpOnly` + `SameSite`, lo que a su vez obliga a
 protección CSRF. No se recomienda atacarla antes que las demás.
 
-**#5 — RLS.** Row Level Security de PostgreSQL convertiría el aislamiento en
-una garantía del motor en vez de una convención. Es la mitigación correcta a
-largo plazo, pero implica revisar las 80 rutas.
+
 
 ## 8. Gestión de secretos
 

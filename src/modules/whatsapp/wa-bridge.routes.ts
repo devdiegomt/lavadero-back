@@ -9,6 +9,7 @@ import crypto from 'crypto';
 import * as db from '../../shared/db';
 import { leerIdentidad } from './wa-identity';
 import { normalizarTelefono } from '../../shared/utils/telefono';
+import { abrirContextoDeTenant, conBypassRlsFueraDePeticion } from '../../shared/middleware/rls';
 import { bookingStep } from './wa-bridge.booking';
 import * as ctrl from './wa-bridge.controller';
 
@@ -58,10 +59,15 @@ async function resolveTenant(req: Request, res: Response, next: NextFunction): P
     // "Tenant no encontrado" a todo.
     const comoAntes = tenantPhone.replace(/[\s\-()]/g, '');
 
-    const { rows } = await db.query<{ id: string }>(
-      `SELECT id FROM tenants
-       WHERE whatsapp_phone IN ($1, $2) AND is_active = true LIMIT 1`,
-      [canonico ?? comoAntes, comoAntes],
+    // Esta consulta es la que averigua el tenant, así que no puede filtrar por
+    // tenant: va con la puerta de atrás, como el login. Es el mismo problema de
+    // orden.
+    const { rows } = await conBypassRlsFueraDePeticion(() =>
+      db.query<{ id: string }>(
+        `SELECT id FROM tenants
+         WHERE whatsapp_phone IN ($1, $2) AND is_active = true LIMIT 1`,
+        [canonico ?? comoAntes, comoAntes],
+      ),
     );
 
     if (!rows[0]) {
@@ -70,7 +76,13 @@ async function resolveTenant(req: Request, res: Response, next: NextFunction): P
     }
 
     req.tenantId = rows[0].id;
-    next();
+
+    // Abre el contexto de RLS, igual que `requireTenant` para el panel. Este
+    // middleware resuelve el tenant por su cuenta —por el número de WhatsApp, no
+    // por un JWT— así que si no se hiciera acá, todas las consultas del bot
+    // devolverían vacío en vez de fallar.
+    void abrirContextoDeTenant(req, res, next);
+    return;
   } catch (err) {
     next(err);
   }

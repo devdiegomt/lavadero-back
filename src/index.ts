@@ -27,6 +27,7 @@ import logger, { httpLogger } from './shared/utils/logger';
 import { auditarAcciones } from './shared/middleware/auditoria';
 import { errorHandler } from './shared/middleware/errorHandler';
 import { initCronJobs } from './shared/db/cron';
+import { verificarRls } from './shared/db/rls';
 
 const app: Express = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -124,6 +125,10 @@ if (process.env.NODE_ENV !== 'test') {
     logger.info(`   Health:   http://localhost:${PORT}/api/health`);
     logger.info(`   WA Bridge: http://localhost:${PORT}/api/wa-bridge`);
   });
+
+  // Lo primero que conviene saber: si el aislamiento entre lavaderos lo está
+  // exigiendo el motor o sólo la disciplina de cada consulta.
+  void verificarRls();
 
   initCronJobs();
 

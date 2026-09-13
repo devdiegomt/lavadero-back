@@ -30,14 +30,14 @@ function log(waLid: string) {
 }
 
 beforeAll(async () => {
-  const { rows } = await db.query<{ whatsapp_phone: string }>(
+  const { rows } = await db.queryAdmin<{ whatsapp_phone: string }>(
     `SELECT whatsapp_phone FROM tenants WHERE slug = 'el-brillante' LIMIT 1`,
   );
   tenantPhone = rows[0].whatsapp_phone;
 });
 
 afterAll(async () => {
-  await db.query(`DELETE FROM whatsapp_messages WHERE content LIKE '[test-limite]%'`);
+  await db.queryAdmin(`DELETE FROM whatsapp_messages WHERE content LIKE '[test-limite]%'`);
   await db.pool.end();
 });
 
@@ -80,7 +80,7 @@ describe('auditoría por lotes', () => {
     expect(r.status).toBe(201);
     expect(r.body.registrados).toBe(2);
 
-    const { rows } = await db.query(
+    const { rows } = await db.queryAdmin(
       `SELECT direction FROM whatsapp_messages WHERE wa_lid = $1 ORDER BY direction`,
       [lid],
     );

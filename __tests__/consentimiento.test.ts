@@ -10,6 +10,7 @@
  * - *informada*: queda registrada la versión del aviso que se le mostró
  */
 import * as db from '../src/shared/db';
+import { conTenant } from './helpers/rls';
 import {
   interpretarRespuesta,
   autorizacionDe,
@@ -32,13 +33,23 @@ const LID_FLUJO = '99900011122255@lid';
 let tenantId: string;
 let tenant: { id: string; name: string; timezone?: string };
 
+/**
+ * Corre la prueba dentro del contexto de tenant, como lo haría una petición.
+ * Con RLS activo, llamar estas funciones sin contexto no ve ninguna fila: las
+ * políticas fallan cerrado a propósito. Ver helpers/rls.ts.
+ */
+const itEnTenant = (nombre: string, fn: () => Promise<void>): void => {
+  it(nombre, () => conTenant(tenantId, fn));
+};
+
+
 beforeAll(async () => {
-  const { rows } = await db.query<{ id: string; name: string; timezone: string }>(
+  const { rows } = await db.queryAdmin<{ id: string; name: string; timezone: string }>(
     `SELECT id, name, timezone FROM tenants WHERE slug = 'el-brillante' LIMIT 1`,
   );
   tenantId = rows[0].id;
   tenant = rows[0];
-  await db.query(`DELETE FROM customers WHERE tenant_id = $1 AND wa_lid IN ($2, $3, $4)`, [
+  await db.queryAdmin(`DELETE FROM customers WHERE tenant_id = $1 AND wa_lid IN ($2, $3, $4)`, [
     tenantId,
     LID_CONSENT,
     LID_SIN_CONSENT,
@@ -47,7 +58,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db.query(`DELETE FROM customers WHERE tenant_id = $1 AND wa_lid IN ($2, $3, $4)`, [
+  await db.queryAdmin(`DELETE FROM customers WHERE tenant_id = $1 AND wa_lid IN ($2, $3, $4)`, [
     tenantId,
     LID_CONSENT,
     LID_SIN_CONSENT,
@@ -97,7 +108,7 @@ describe('interpretación de la respuesta', () => {
 });
 
 describe('constancia en la base', () => {
-  it('guarda cuándo, con qué texto y por qué canal autorizó', async () => {
+  itEnTenant('guarda cuándo, con qué texto y por qué canal autorizó', async () => {
     const autorizacion = autorizacionDe('whatsapp');
     const id = await buscarOCrearCliente(
       tenantId,
@@ -107,7 +118,7 @@ describe('constancia en la base', () => {
       autorizacion,
     );
 
-    const { rows } = await db.query<{
+    const { rows } = await db.queryAdmin<{
       consent_at: Date | null;
       consent_version: string | null;
       consent_source: string | null;
@@ -119,14 +130,14 @@ describe('constancia en la base', () => {
     expect(rows[0].consent_source).toBe('whatsapp');
   });
 
-  it('un alta sin autorización queda marcada como tal, no se inventa una', async () => {
+  itEnTenant('un alta sin autorización queda marcada como tal, no se inventa una', async () => {
     const id = await buscarOCrearCliente(
       tenantId,
       { phone: null, waLid: LID_SIN_CONSENT },
       'Beto SinConsentimiento',
     );
 
-    const { rows } = await db.query<{ consent_at: Date | null }>(
+    const { rows } = await db.queryAdmin<{ consent_at: Date | null }>(
       `SELECT consent_at FROM customers WHERE id = $1`,
       [id],
     );
@@ -167,7 +178,7 @@ describe('el paso en la conversación', () => {
     expect(r.nextStep).toBeNull();
     expect(r.messages[0]).toBe(TEXTO_RECHAZO);
 
-    const { rows } = await db.query(
+    const { rows } = await db.queryAdmin(
       `SELECT id FROM customers WHERE tenant_id = $1 AND wa_lid = $2`,
       [tenantId, LID_FLUJO],
     );

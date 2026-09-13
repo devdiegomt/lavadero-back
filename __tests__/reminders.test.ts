@@ -7,8 +7,14 @@
  * para quien llega por WhatsApp, porque el número no lo entrega.
  */
 import * as db from '../src/shared/db';
+import { cruzandoTenants } from './helpers/rls';
 import * as botWa from '../src/modules/whatsapp/bot-wa.client';
 import { sendAppointmentReminders } from '../src/modules/whatsapp/notifications';
+
+// `sendAppointmentReminders` recorre los turnos de TODOS los lavaderos: es una
+// tarea de fondo, no una petición. En producción el cron la corre con el bypass
+// de RLS explícito, y acá se hace igual — si la prueba usara un contexto de
+// tenant estaría probando algo que no ocurre.
 
 const LID = 'REM' + Date.now() + '@lid';
 let tenantId: string;
@@ -24,7 +30,7 @@ let serviceId: string;
  * medianoche local daba una fila incoherente: fecha de ayer con hora de hoy.
  */
 async function crearTurno(minutos: number): Promise<string> {
-  const { rows } = await db.query<{ hora: string; dia: string }>(
+  const { rows } = await db.queryAdmin<{ hora: string; dia: string }>(
     `SELECT to_char(momento, 'HH24:MI') AS hora,
             to_char(momento, 'YYYY-MM-DD') AS dia
      FROM (
@@ -33,7 +39,7 @@ async function crearTurno(minutos: number): Promise<string> {
      ) q`,
     [tenantId, String(minutos)],
   );
-  const { rows: appt } = await db.query<{ id: string }>(
+  const { rows: appt } = await db.queryAdmin<{ id: string }>(
     `INSERT INTO appointments
        (tenant_id, customer_id, vehicle_id, service_id, scheduled_date, scheduled_time,
         price, status, source)
@@ -45,42 +51,42 @@ async function crearTurno(minutos: number): Promise<string> {
 }
 
 beforeAll(async () => {
-  const { rows: t } = await db.query<{ id: string }>(
+  const { rows: t } = await db.queryAdmin<{ id: string }>(
     `UPDATE tenants SET whatsapp_enabled = true WHERE slug = 'el-brillante' RETURNING id`,
   );
   tenantId = t[0].id;
 
   // Cliente identificado sólo por LID: el caso real.
-  const { rows: c } = await db.query<{ id: string }>(
+  const { rows: c } = await db.queryAdmin<{ id: string }>(
     `INSERT INTO customers (tenant_id, first_name, wa_lid) VALUES ($1, 'Diego', $2) RETURNING id`,
     [tenantId, LID],
   );
   customerId = c[0].id;
 
-  const { rows: v } = await db.query<{ id: string }>(
+  const { rows: v } = await db.queryAdmin<{ id: string }>(
     `INSERT INTO vehicles (tenant_id, customer_id, plate, vehicle_type)
      VALUES ($1, $2, 'REM123', 'sedan') RETURNING id`,
     [tenantId, customerId],
   );
   vehicleId = v[0].id;
 
-  const { rows: s } = await db.query<{ id: string }>(
+  const { rows: s } = await db.queryAdmin<{ id: string }>(
     `SELECT id FROM services WHERE tenant_id = $1 LIMIT 1`, [tenantId],
   );
   serviceId = s[0].id;
 });
 
 afterAll(async () => {
-  await db.query(`DELETE FROM whatsapp_messages WHERE wa_lid = $1`, [LID]);
-  await db.query(`DELETE FROM appointments WHERE customer_id = $1`, [customerId]);
-  await db.query(`DELETE FROM vehicles WHERE customer_id = $1`, [customerId]);
-  await db.query(`DELETE FROM customers WHERE id = $1`, [customerId]);
+  await db.queryAdmin(`DELETE FROM whatsapp_messages WHERE wa_lid = $1`, [LID]);
+  await db.queryAdmin(`DELETE FROM appointments WHERE customer_id = $1`, [customerId]);
+  await db.queryAdmin(`DELETE FROM vehicles WHERE customer_id = $1`, [customerId]);
+  await db.queryAdmin(`DELETE FROM customers WHERE id = $1`, [customerId]);
   await db.pool.end();
 });
 
 beforeEach(async () => {
-  await db.query(`DELETE FROM whatsapp_messages WHERE wa_lid = $1`, [LID]);
-  await db.query(`DELETE FROM appointments WHERE customer_id = $1`, [customerId]);
+  await db.queryAdmin(`DELETE FROM whatsapp_messages WHERE wa_lid = $1`, [LID]);
+  await db.queryAdmin(`DELETE FROM appointments WHERE customer_id = $1`, [customerId]);
   jest.restoreAllMocks();
 });
 
@@ -93,7 +99,7 @@ describe('la fecha se compara contra el día del lavadero', () => {
   // Se descubrió porque un cambio de orden de las suites dejó al tenant en
   // otra zona y estos tests empezaron a fallar sin relación aparente.
   afterEach(async () => {
-    await db.query(
+    await db.queryAdmin(
       `UPDATE tenants SET timezone = 'America/Bogota' WHERE id = $1`, [tenantId],
     );
   });
@@ -103,9 +109,9 @@ describe('la fecha se compara contra el día del lavadero', () => {
     const utcHour = new Date().getUTCHours();
     const offset = utcHour < 12 ? -1 - utcHour : 25 - utcHour;
     const tz = offset >= 0 ? `Etc/GMT-${offset}` : `Etc/GMT+${-offset}`;
-    await db.query(`UPDATE tenants SET timezone = $1 WHERE id = $2`, [tz, tenantId]);
+    await db.queryAdmin(`UPDATE tenants SET timezone = $1 WHERE id = $2`, [tz, tenantId]);
 
-    const { rows } = await db.query<{ distintos: boolean }>(
+    const { rows } = await db.queryAdmin<{ distintos: boolean }>(
       `SELECT CURRENT_DATE <> (NOW() AT TIME ZONE timezone)::date AS distintos
        FROM tenants WHERE id = $1`, [tenantId],
     );
@@ -115,7 +121,7 @@ describe('la fecha se compara contra el día del lavadero', () => {
     await crearTurno(30);
     const enviar = jest.spyOn(botWa, 'enviarWhatsApp').mockResolvedValue({ enviado: true });
 
-    await sendAppointmentReminders();
+    await cruzandoTenants(() => sendAppointmentReminders());
 
     expect(enviar).toHaveBeenCalledTimes(1);
   });
@@ -137,7 +143,7 @@ describe('la ventana cruza la medianoche del lavadero', () => {
    * confiar en cuándo se ejecute.
    */
   afterEach(async () => {
-    await db.query(`UPDATE tenants SET timezone = 'America/Bogota' WHERE id = $1`, [tenantId]);
+    await db.queryAdmin(`UPDATE tenants SET timezone = 'America/Bogota' WHERE id = $1`, [tenantId]);
   });
 
   /**
@@ -159,9 +165,9 @@ describe('la ventana cruza la medianoche del lavadero', () => {
     const abs = Math.abs(desfase);
     const zona = `${signo}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
 
-    await db.query(`UPDATE tenants SET timezone = $1 WHERE id = $2`, [zona, tenantId]);
+    await db.queryAdmin(`UPDATE tenants SET timezone = $1 WHERE id = $2`, [zona, tenantId]);
 
-    const { rows } = await db.query<{ local: string }>(
+    const { rows } = await db.queryAdmin<{ local: string }>(
       `SELECT to_char(NOW() AT TIME ZONE timezone, 'HH24:MI') AS local
        FROM tenants WHERE id = $1`, [tenantId],
     );
@@ -175,14 +181,14 @@ describe('la ventana cruza la medianoche del lavadero', () => {
 
     // Guardia: el turno quedó en otra fecha local que "hoy". Sin esto, la
     // prueba podría pasar sin cruzar nada.
-    const { rows } = await db.query<{ otro_dia: boolean }>(
+    const { rows } = await db.queryAdmin<{ otro_dia: boolean }>(
       `SELECT a.scheduled_date <> (NOW() AT TIME ZONE t.timezone)::date AS otro_dia
        FROM appointments a JOIN tenants t ON t.id = a.tenant_id WHERE a.id = $1`, [id],
     );
     expect(rows[0].otro_dia).toBe(true);
 
     const enviar = jest.spyOn(botWa, 'enviarWhatsApp').mockResolvedValue({ enviado: true });
-    await sendAppointmentReminders();
+    await cruzandoTenants(() => sendAppointmentReminders());
 
     expect(enviar).toHaveBeenCalledTimes(1);
   });
@@ -192,7 +198,7 @@ describe('la ventana cruza la medianoche del lavadero', () => {
     await crearTurno(30);
 
     const enviar = jest.spyOn(botWa, 'enviarWhatsApp').mockResolvedValue({ enviado: true });
-    await sendAppointmentReminders();
+    await cruzandoTenants(() => sendAppointmentReminders());
 
     const [, mensaje] = enviar.mock.calls[0];
     expect(mensaje).toContain('mañana');
@@ -206,7 +212,7 @@ describe('la ventana cruza la medianoche del lavadero', () => {
     await crearTurno(10);
 
     const enviar = jest.spyOn(botWa, 'enviarWhatsApp').mockResolvedValue({ enviado: true });
-    await sendAppointmentReminders();
+    await cruzandoTenants(() => sendAppointmentReminders());
 
     expect(enviar).not.toHaveBeenCalled();
   });
@@ -216,7 +222,7 @@ describe('la ventana cruza la medianoche del lavadero', () => {
     await crearTurno(30);
 
     const enviar = jest.spyOn(botWa, 'enviarWhatsApp').mockResolvedValue({ enviado: true });
-    await sendAppointmentReminders();
+    await cruzandoTenants(() => sendAppointmentReminders());
 
     expect(enviar).toHaveBeenCalledTimes(1);
     const [, mensaje] = enviar.mock.calls[0];
@@ -229,7 +235,7 @@ describe('recordatorios de turno', () => {
     await crearTurno(30);
     const enviar = jest.spyOn(botWa, 'enviarWhatsApp').mockResolvedValue({ enviado: true });
 
-    await sendAppointmentReminders();
+    await cruzandoTenants(() => sendAppointmentReminders());
 
     expect(enviar).toHaveBeenCalledTimes(1);
     const [destino, mensaje] = enviar.mock.calls[0];
@@ -243,8 +249,8 @@ describe('recordatorios de turno', () => {
     await crearTurno(30);
     const enviar = jest.spyOn(botWa, 'enviarWhatsApp').mockResolvedValue({ enviado: true });
 
-    await sendAppointmentReminders();
-    await sendAppointmentReminders();   // el cron corre cada 5 min
+    await cruzandoTenants(() => sendAppointmentReminders());
+    await cruzandoTenants(() => sendAppointmentReminders());   // el cron corre cada 5 min
 
     expect(enviar).toHaveBeenCalledTimes(1);
   });
@@ -253,7 +259,7 @@ describe('recordatorios de turno', () => {
     await crearTurno(120);
     const enviar = jest.spyOn(botWa, 'enviarWhatsApp').mockResolvedValue({ enviado: true });
 
-    await sendAppointmentReminders();
+    await cruzandoTenants(() => sendAppointmentReminders());
 
     expect(enviar).not.toHaveBeenCalled();
   });
@@ -265,15 +271,15 @@ describe('recordatorios de turno', () => {
       .mockResolvedValueOnce({ enviado: false, motivo: 'bot-wa 503' })
       .mockResolvedValueOnce({ enviado: true });
 
-    await sendAppointmentReminders();
-    const { rows: tras1 } = await db.query(
+    await cruzandoTenants(() => sendAppointmentReminders());
+    const { rows: tras1 } = await db.queryAdmin(
       `SELECT 1 FROM whatsapp_messages WHERE wa_lid = $1`, [LID],
     );
     expect(tras1).toHaveLength(0);   // nada registrado: el aviso no llegó
 
-    await sendAppointmentReminders();
+    await cruzandoTenants(() => sendAppointmentReminders());
     expect(enviar).toHaveBeenCalledTimes(2);
-    const { rows: tras2 } = await db.query(
+    const { rows: tras2 } = await db.queryAdmin(
       `SELECT 1 FROM whatsapp_messages WHERE wa_lid = $1`, [LID],
     );
     expect(tras2).toHaveLength(1);
@@ -283,9 +289,9 @@ describe('recordatorios de turno', () => {
     await crearTurno(30);
     jest.spyOn(botWa, 'enviarWhatsApp').mockResolvedValue({ enviado: true });
 
-    await sendAppointmentReminders();
+    await cruzandoTenants(() => sendAppointmentReminders());
 
-    const { rows } = await db.query<{ direction: string; flow_step: string; external_id: string }>(
+    const { rows } = await db.queryAdmin<{ direction: string; flow_step: string; external_id: string }>(
       `SELECT direction, flow_step, external_id FROM whatsapp_messages WHERE wa_lid = $1`, [LID],
     );
     expect(rows).toHaveLength(1);

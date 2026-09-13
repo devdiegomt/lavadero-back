@@ -34,7 +34,7 @@ let token: string;
 let original: { provider: string | null; key: string | null };
 
 beforeAll(async () => {
-  const { rows } = await db.query<{ id: string; billing_provider: string | null; billing_api_key: string | null }>(
+  const { rows } = await db.queryAdmin<{ id: string; billing_provider: string | null; billing_api_key: string | null }>(
     `SELECT id, billing_provider, billing_api_key FROM tenants WHERE slug = 'el-brillante' LIMIT 1`,
   );
   tenantId = rows[0].id;
@@ -49,7 +49,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   // Dejar el tenant como estaba: otras suites leen esta misma fila.
-  await db.query(
+  await db.queryAdmin(
     `UPDATE tenants SET billing_provider = $1, billing_api_key = $2 WHERE id = $3`,
     [original.provider, original.key, tenantId],
   );
@@ -105,12 +105,12 @@ describe('leer una credencial exige que esté cifrada', () => {
   });
 
   it('el cliente de Alegra se niega a usar una credencial en texto plano', async () => {
-    await db.query(
+    await db.queryAdmin(
       `UPDATE tenants SET billing_provider = 'alegra', billing_api_key = $1 WHERE id = $2`,
       [`${EMAIL}:${TOKEN}`, tenantId],
     );
 
-    const { rows } = await db.query(`SELECT * FROM tenants WHERE id = $1`, [tenantId]);
+    const { rows } = await db.queryAdmin(`SELECT * FROM tenants WHERE id = $1`, [tenantId]);
     expect(() => createAlegraClientForTenant(rows[0])).toThrow(CredencialIlegible);
   });
 });
@@ -142,7 +142,7 @@ describe('escribir una credencial la cifra', () => {
     expect(res.status).toBe(200);
     expect(res.body.credencialCifrada).toBe(true);
 
-    const { rows } = await db.query<{ billing_api_key: string; billing_provider: string }>(
+    const { rows } = await db.queryAdmin<{ billing_api_key: string; billing_provider: string }>(
       `SELECT billing_api_key, billing_provider FROM tenants WHERE id = $1`, [tenantId],
     );
 
@@ -208,7 +208,7 @@ describe('escribir una credencial la cifra', () => {
 
 describe('GET /config dice si está cifrada', () => {
   it('lo reporta sin exponer el valor', async () => {
-    await db.query(
+    await db.queryAdmin(
       `UPDATE tenants SET billing_provider = 'alegra', billing_api_key = $1 WHERE id = $2`,
       [encrypt(`${EMAIL}:${TOKEN}`), tenantId],
     );
@@ -224,7 +224,7 @@ describe('GET /config dice si está cifrada', () => {
 
   it('marca en falso la que está en texto plano, para que se vea', async () => {
     // El punto de la brecha era que nadie se enteraba. Ahora el panel puede.
-    await db.query(
+    await db.queryAdmin(
       `UPDATE tenants SET billing_provider = 'alegra', billing_api_key = $1 WHERE id = $2`,
       [`${EMAIL}:${TOKEN}`, tenantId],
     );

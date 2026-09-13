@@ -13,6 +13,7 @@ import request from 'supertest';
 import Redis from 'ioredis';
 import app from '../src/index';
 import * as db from '../src/shared/db';
+import { conTenant } from './helpers/rls';
 import { initBooking } from '../src/modules/whatsapp/wa-bridge.booking';
 import { accionSolicitada } from '../src/modules/whatsapp/datos-personales';
 import { buscarOCrearCliente } from '../src/modules/whatsapp/wa-identity';
@@ -26,6 +27,16 @@ let tenantId: string;
 let tenantPhone: string;
 let redis: Redis;
 
+/**
+ * Corre la prueba dentro del contexto de tenant, como lo haría una petición.
+ * Con RLS activo, llamar estas funciones sin contexto no ve ninguna fila: las
+ * políticas fallan cerrado a propósito. Ver helpers/rls.ts.
+ */
+const itEnTenant = (nombre: string, fn: () => Promise<void>): void => {
+  it(nombre, () => conTenant(tenantId, fn));
+};
+
+
 /** Un mensaje al bridge, como lo manda n8n en cada mensaje entrante. */
 function escribir(waLid: string, message: string) {
   return request(app)
@@ -36,7 +47,7 @@ function escribir(waLid: string, message: string) {
 }
 
 async function datosDe(waLid: string) {
-  const { rows } = await db.query<{
+  const { rows } = await db.queryAdmin<{
     first_name: string; phone: string | null; anonymized_at: Date | null;
   }>(
     `SELECT first_name, phone, anonymized_at FROM customers
@@ -51,7 +62,7 @@ beforeAll(async () => {
   redis = new Redis(process.env.REDIS_URL as string, { maxRetriesPerRequest: 2 });
   initBooking(redis);
 
-  const { rows } = await db.query<{ id: string; whatsapp_phone: string }>(
+  const { rows } = await db.queryAdmin<{ id: string; whatsapp_phone: string }>(
     `SELECT id, whatsapp_phone FROM tenants WHERE slug = 'el-brillante' LIMIT 1`,
   );
   tenantId = rows[0].id;
@@ -60,21 +71,27 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await redis.flushdb();
-  await db.query(
+  await db.queryAdmin(
     `DELETE FROM customers WHERE tenant_id = $1 AND wa_lid IN ($2, $3)`,
     [tenantId, LID_TITULAR, LID_VECINO],
   );
-  await buscarOCrearCliente(
-    tenantId, { phone: '+573001119999', waLid: LID_TITULAR },
-    'Ana Titular', db.query, autorizacionDe('whatsapp'),
-  );
-  await buscarOCrearCliente(
-    tenantId, { phone: null, waLid: LID_VECINO }, 'Beto Vecino',
-  );
+
+  // El alta va dentro del contexto del tenant: `buscarOCrearCliente` es código
+  // de la aplicación y con RLS activo su INSERT choca contra el `WITH CHECK` si
+  // nadie fijó `app.tenant_id`. En producción lo fija `requireTenant`.
+  await conTenant(tenantId, async () => {
+    await buscarOCrearCliente(
+      tenantId, { phone: '+573001119999', waLid: LID_TITULAR },
+      'Ana Titular', db.query, autorizacionDe('whatsapp'),
+    );
+    await buscarOCrearCliente(
+      tenantId, { phone: null, waLid: LID_VECINO }, 'Beto Vecino',
+    );
+  });
 });
 
 afterAll(async () => {
-  await db.query(
+  await db.queryAdmin(
     `DELETE FROM customers WHERE tenant_id = $1
        AND (wa_lid IN ($2, $3) OR (anonymized_at IS NOT NULL AND phone IS NULL AND wa_lid IS NULL))`,
     [tenantId, LID_TITULAR, LID_VECINO],
@@ -142,7 +159,7 @@ describe('derecho de supresión', () => {
 
     expect(r.body.reply).toContain('borramos tus datos');
 
-    const { rows } = await db.query<{ first_name: string; phone: string | null }>(
+    const { rows } = await db.queryAdmin<{ first_name: string; phone: string | null }>(
       `SELECT first_name, phone FROM customers
        WHERE tenant_id = $1 AND anonymized_at IS NOT NULL
        ORDER BY updated_at DESC LIMIT 1`,
@@ -200,7 +217,7 @@ describe('supresión desde el panel', () => {
   });
 
   async function idDe(waLid: string): Promise<string> {
-    const { rows } = await db.query<{ id: string }>(
+    const { rows } = await db.queryAdmin<{ id: string }>(
       `SELECT id FROM customers WHERE tenant_id = $1 AND wa_lid = $2`,
       [tenantId, waLid],
     );
@@ -216,7 +233,7 @@ describe('supresión desde el panel', () => {
     expect(r.status).toBe(200);
     expect(r.body.anonimizado).toBe(true);
 
-    const { rows } = await db.query<{ phone: string | null; anonymized_at: Date | null }>(
+    const { rows } = await db.queryAdmin<{ phone: string | null; anonymized_at: Date | null }>(
       `SELECT phone, anonymized_at FROM customers WHERE id = $1`, [id],
     );
     expect(rows[0].phone).toBeNull();

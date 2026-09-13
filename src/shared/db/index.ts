@@ -13,6 +13,7 @@
  */
 
 import { Pool, type PoolClient, type QueryResult } from 'pg';
+import { clienteDelContexto } from './contexto';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -69,7 +70,43 @@ export async function query<T extends object = Record<string, unknown>>(
   text: string,
   params?: ParametroSql[],
 ): Promise<QueryResult<T>> {
+  // Si hay una petición en curso con contexto de tenant, la consulta va por esa
+  // conexión: es la que tiene `app.tenant_id` fijado, y sin eso RLS no devuelve
+  // nada. Ver shared/db/contexto.ts.
+  const delContexto = clienteDelContexto();
+  if (delContexto) return delContexto.query<T>(text, params as unknown[]);
+
   return pool.query<T>(text, params as unknown[]);
+}
+
+/**
+ * Consulta que **saltea RLS**, para trabajo de administración de la base.
+ *
+ * Es para los seeds, los scripts y los fixtures de las pruebas: cosas que por
+ * naturaleza cruzan tenants o preparan datos antes de que exista una petición.
+ * Con RLS activo, `query()` sin contexto no ve nada —falla cerrado a propósito—
+ * así que ese trabajo necesita decir explícitamente que lo está salteando.
+ *
+ * **No usar desde un controller.** Si hace falta cruzar tenants en una ruta, el
+ * lugar correcto es `conBypassRls` en el router, donde queda a la vista y
+ * enumerado junto a las otras dos excepciones. La diferencia entre esto y no
+ * tener RLS es que el agujero sea visible y contable.
+ */
+export async function queryAdmin<T extends object = Record<string, unknown>>(
+  text: string,
+  params?: ParametroSql[],
+): Promise<QueryResult<T>> {
+  const cliente = await pool.connect();
+  try {
+    await cliente.query(`SELECT set_config('app.bypass_rls', 'on', false)`);
+    return await cliente.query<T>(text, params as unknown[]);
+  } finally {
+    // Se limpia antes de devolverla al pool: si quedara pegada, la próxima
+    // petición que tome esta conexión vería todos los lavaderos. Es el modo de
+    // fallo más peligroso de este diseño.
+    await cliente.query(`SELECT set_config('app.bypass_rls', '', false)`).catch(() => undefined);
+    cliente.release();
+  }
 }
 
 /**
@@ -87,8 +124,30 @@ export async function query<T extends object = Record<string, unknown>>(
  *   } finally {
  *     client.release();
  *   }
+ *
+ * **Dentro de una petición devuelve la conexión del contexto**, que es la que
+ * tiene el tenant fijado. Tomar otra del pool dejaría la transacción sin
+ * `app.tenant_id` y RLS no le mostraría nada — un `INSERT ... RETURNING` que no
+ * devuelve nada, sin error que explique por qué.
+ *
+ * Por eso `release()` en esa conexión es deliberadamente inofensivo: la libera
+ * quien abrió el contexto, al terminar la petición. Los cinco sitios que usan
+ * transacciones no tuvieron que cambiar.
  */
-export const getClient = (): Promise<PoolClient> => pool.connect();
+export async function getClient(): Promise<PoolClient> {
+  const delContexto = clienteDelContexto();
+  if (delContexto) {
+    // `release` se neutraliza: si el controller la liberara a mitad de la
+    // petición, las consultas siguientes irían a otra conexión sin tenant.
+    return new Proxy(delContexto, {
+      get(destino, prop, receptor) {
+        if (prop === 'release') return () => undefined;
+        return Reflect.get(destino, prop, receptor) as unknown;
+      },
+    });
+  }
+  return pool.connect();
+}
 
 /** Pool crudo — usar solo cuando query/getClient no sean suficientes. */
 export { pool };

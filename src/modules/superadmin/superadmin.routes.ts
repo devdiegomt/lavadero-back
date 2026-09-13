@@ -2,10 +2,15 @@ import { Router } from 'express';
 import * as ctrl from './superadmin.controller';
 import { authenticate, authorize } from '../../shared/middleware/auth';
 import { asyncHandler } from '../../shared/utils/asyncHandler';
+import { conBypassRls } from '../../shared/middleware/rls';
 import { validate, validarUuid, schemas } from '../../shared/middleware/validate';
 
 const router = Router();
 router.use(authenticate, authorize('super_admin'));
+
+// Ver todos los lavaderos es, literalmente, para lo que existe este módulo. Acá
+// el control es `authorize('super_admin')`, no RLS.
+router.use(conBypassRls('super admin: administra todos los tenants'));
 
 router.get('/dashboard',              asyncHandler(ctrl.dashboard));
 router.get('/tenants',                validate(schemas.queryListado, 'query'), asyncHandler(ctrl.listTenants));

@@ -30,7 +30,7 @@
  *   ALTER TABLE vehicles VALIDATE CONSTRAINT chk_vehicles_tipo;
  */
 import 'dotenv/config';
-import { pool } from './index';
+import { pool, queryAdmin } from './index';
 
 const TIPOS = ['sedan', 'suv', 'camioneta', 'moto', 'pickup'] as const;
 
@@ -50,7 +50,7 @@ async function migrate(): Promise<void> {
     await pool.query(migration);
     console.log('✅ Restricción chk_vehicles_tipo agregada (NOT VALID)');
 
-    const { rows } = await pool.query<{
+    const { rows } = await queryAdmin<{
       id: string;
       plate: string;
       vehicle_type: string;
