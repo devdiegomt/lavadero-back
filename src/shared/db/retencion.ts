@@ -31,6 +31,15 @@ const MESES_MENSAJES = config.DATA_RETENTION_MESSAGES_MONTHS;
 const MESES_CLIENTES = config.DATA_RETENTION_CUSTOMERS_MONTHS;
 
 /**
+ * Meses que se conserva la bitácora de acciones. 0 desactiva la purga.
+ *
+ * Más largo que el de las conversaciones a propósito: el valor de una bitácora
+ * está en poder mirar atrás cuando alguien por fin nota algo raro, y eso rara vez
+ * pasa la misma semana.
+ */
+const MESES_AUDITORIA = config.DATA_RETENTION_AUDIT_MONTHS;
+
+/**
  * Los campos que dejan de identificar a una persona.
  *
  * Vive en una constante porque lo usan la tarea automática y el derecho de
@@ -157,7 +166,41 @@ export async function clientesSinAutorizacion(tenantId?: string): Promise<number
 }
 
 /** Configuración vigente, para reportarla al arrancar. */
+/**
+ * Purga la bitácora de acciones vencida.
+ *
+ * Tiene su propio plazo, más largo que el de las conversaciones, y por una razón
+ * distinta: una bitácora que se borra rápido deja de servir justo para lo que
+ * existe —reconstruir qué pasó semanas atrás, cuando alguien finalmente nota
+ * algo raro—. El plazo por defecto son 24 meses.
+ *
+ * No contiene datos personales de clientes: guarda nombres de campos, no valores
+ * (ver `migrate-auditoria.ts`). Lo que sí contiene es qué hizo cada empleado, que
+ * es dato personal **del empleado**, y por eso tiene plazo en vez de quedarse
+ * para siempre.
+ */
+export async function purgarAuditoriaVieja(meses: number = MESES_AUDITORIA): Promise<number> {
+  if (meses <= 0) return 0;
+
+  try {
+    const { rowCount } = await db.query(
+      `DELETE FROM action_log
+       WHERE created_at < NOW() - ($1 || ' months')::interval`,
+      [String(meses)],
+    );
+    const borrados = rowCount ?? 0;
+    if (borrados > 0) {
+      logger.info({ borrados, meses }, 'Bitácora de acciones purgada por retención');
+    }
+    return borrados;
+  } catch (err) {
+    logger.error({ err }, 'Error purgando la bitácora de acciones');
+    return 0;
+  }
+}
+
 export const politicaRetencion = {
   mesesMensajes: MESES_MENSAJES,
   mesesClientes: MESES_CLIENTES,
+  mesesAuditoria: MESES_AUDITORIA,
 };

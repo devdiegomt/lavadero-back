@@ -327,6 +327,50 @@ titular, y en este canal no hay prueba más fuerte disponible.
 > personales no la sobreescribe: son obligaciones distintas sobre tablas
 > distintas, y confundirlas haría incumplir una para cumplir la otra.
 
+### El rastro de acciones
+
+`action_log` registra quién cambió qué desde el panel. Antes sólo existía
+`appointment_status_log`, que cubre los cambios de estado de un turno y nada
+más: quién desactivó un usuario, quién cambió un precio o quién tocó las
+credenciales de facturación no quedaba en ningún lado.
+
+Lo escribe un middleware global (`shared/middleware/auditoria.ts`), no una
+llamada en cada controller. La razón es la misma que ya se pagó dos veces en
+este proyecto: `validateId` existía desde el principio y estaba puesto en **una**
+de veinte rutas, y el cifrado tenía la función de descifrar y ninguna de cifrar.
+**Lo que hay que acordarse de poner, no se pone.** El precio es que registra a
+nivel HTTP —método, ruta, campos— en vez de en términos del negocio.
+
+**Guarda nombres de campos, nunca valores.** Es una decisión de esta sección, no
+una comodidad:
+
+- Guardar los valores convertiría la bitácora en una **segunda copia de los datos
+  personales**, con su propia obligación de retención y su propio riesgo si se
+  filtra. Una bitácora de cumplimiento que crea un problema de cumplimiento es un
+  mal negocio.
+- Y arrastraría secretos de paso: contraseñas, tokens, la credencial de Alegra.
+  Redactar caso por caso es una lista que se olvida de uno.
+
+Para las preguntas que se hacen de verdad —quién, qué, cuándo, sobre qué
+registro— los nombres alcanzan. Si algún día hace falta el antes/después de algo
+puntual, se agrega para ese caso con los valores filtrados a mano.
+
+Tiene su propio plazo de retención, `DATA_RETENTION_AUDIT_MONTHS`, más largo que
+el de las conversaciones (24 meses por defecto): el valor de una bitácora está en
+poder mirar atrás cuando alguien por fin nota algo raro, y eso rara vez pasa la
+misma semana. Que tenga plazo y no sea para siempre es porque **qué hizo cada
+empleado es dato personal del empleado**, aunque no lo sea del cliente.
+
+Se lee en `GET /api/audit`, sólo `admin`, con filtros por usuario, por registro,
+por fecha y por intentos rechazados. Los rechazados se registran a propósito: un
+403 es justamente lo que interesa mirar después.
+
+**Lo que no cubre:** la autenticación. Iniciar sesión no es un cambio, el refresh
+ocurre cada 15 minutos por usuario, y esas filas no tendrían `tenant_id` —se
+conoce después de autenticar—, así que quedarían invisibles en el único lector que
+hay. Auditar autenticación es otro problema, que se mira por IP y cruza tenants.
+Hoy lo que existe es el limitador por `email|IP` del login (§2).
+
 ## 6. Facturación electrónica (DIAN)
 
 La emisión se delega en **Alegra**, que es el proveedor tecnológico autorizado.
@@ -376,11 +420,16 @@ Ordenadas por relación entre riesgo y esfuerzo.
 > guardar. Lo que queda de esa tanda es que el resto de los datos sigue sin
 > cifrar, que es decisión consciente y está dicho en la §4, no una brecha.
 
+> **Cerrada (2026-09).** *"Sin auditoría de acciones"* era la #4. Existe
+> `action_log`, que escribe un middleware global —no una llamada por controller,
+> que es lo que se olvida— y se lee en `GET /api/audit`. Guarda **nombres de
+> campos, nunca valores**: ver la §5. Lo que no cubre es la autenticación, que es
+> otro problema y tiene otra forma; queda anotado ahí.
+
 | # | Brecha | Riesgo | Esfuerzo |
 |---|---|---|---|
 | 2 | **Validación Zod ausente en `whatsapp`** — el resto de los módulos ya valida alta, `PATCH` y query | Entrada no validada hacia la base, pero tras la clave compartida de n8n | Bajo |
 | 3 | **Tokens en `localStorage`** (frontend) | Un XSS expone la sesión | Alto (implica cookies httpOnly y CSRF) |
-| 4 | **Sin auditoría de acciones** — sólo hay `appointment_status_log` | No se puede reconstruir quién cambió qué | Medio |
 | 5 | **Sin RLS en PostgreSQL** | Una consulta mal escrita cruza tenants | Alto |
 | 6 | **Clientes sin autorización que no han vuelto** — a los que vuelven ya se les pide (§5) | Pasivo decreciente | Bajo (decisión del responsable) |
 
@@ -434,7 +483,7 @@ protección CSRF. No se recomienda atacarla antes que las demás.
 
 **#5 — RLS.** Row Level Security de PostgreSQL convertiría el aislamiento en
 una garantía del motor en vez de una convención. Es la mitigación correcta a
-largo plazo, pero implica revisar las 79 rutas.
+largo plazo, pero implica revisar las 80 rutas.
 
 ## 8. Gestión de secretos
 

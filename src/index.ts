@@ -19,10 +19,12 @@ import onboardingRoutes  from './modules/onboarding/onboarding.routes';
 import superadminRoutes  from './modules/superadmin/superadmin.routes';
 import billingRoutes     from './modules/billing/billing.routes';
 import waBridgeRoutes    from './modules/whatsapp/wa-bridge.routes';
+import auditRoutes       from './modules/audit/audit.routes';
 import { initBooking }   from './modules/whatsapp/wa-bridge.booking';
 import Redis             from 'ioredis';
 
 import logger, { httpLogger } from './shared/utils/logger';
+import { auditarAcciones } from './shared/middleware/auditoria';
 import { errorHandler } from './shared/middleware/errorHandler';
 import { initCronJobs } from './shared/db/cron';
 
@@ -76,6 +78,15 @@ app.get('/api/health', (_req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
+// Auditoría de acciones
+// ---------------------------------------------------------------------------
+// Va una vez y arriba, antes de las rutas, para que cubra también las que se
+// agreguen después. Registrar acción por acción en cada controller es lo que se
+// olvida: en este proyecto `validateId` existía desde el principio y estaba
+// puesto en una de veinte rutas. Ver shared/middleware/auditoria.ts.
+app.use(auditarAcciones);
+
+// ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
 app.use('/api/auth',         authRoutes);
@@ -91,6 +102,7 @@ app.use('/api/reports',      reportRoutes);
 app.use('/api/billing',      billingRoutes);
 app.use('/api/onboarding',   onboardingRoutes);
 app.use('/api/superadmin',   superadminRoutes);
+app.use('/api/audit',        auditRoutes);
 
 // WhatsApp AI Bridge (consumido por n8n)
 app.use('/api/wa-bridge', waBridgeRoutes);

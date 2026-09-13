@@ -15,6 +15,7 @@ import { sendAppointmentReminders } from '../../modules/whatsapp/notifications';
 import {
   purgarMensajesViejos,
   anonimizarClientesInactivos,
+  purgarAuditoriaVieja,
   politicaRetencion,
 } from './retencion';
 
@@ -93,6 +94,7 @@ export function initCronJobs(): void {
   // seguido sólo agrega DELETEs que no borran nada.
   setInterval(() => { void purgarMensajesViejos(); },        24 * 60 * 60 * 1_000);
   setInterval(() => { void anonimizarClientesInactivos(); }, 24 * 60 * 60 * 1_000);
+  setInterval(() => { void purgarAuditoriaVieja(); },         24 * 60 * 60 * 1_000);
 
   // Ejecutar limpieza al inicio
   cleanExpiredTokens();
@@ -108,6 +110,9 @@ export function initCronJobs(): void {
       clientes: politicaRetencion.mesesClientes
         ? `${politicaRetencion.mesesClientes} meses`
         : 'sin anonimización automática',
+      auditoria: politicaRetencion.mesesAuditoria
+        ? `${politicaRetencion.mesesAuditoria} meses`
+        : 'sin purga',
     },
     'Política de retención de datos personales',
   );

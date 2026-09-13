@@ -61,7 +61,7 @@ que emite `pino` para poder correlacionar.
 
 ### Endpoints
 
-79 en 14 módulos. Los agrupados por recurso:
+80 en 15 módulos. Los agrupados por recurso:
 
 <details>
 <summary><strong>auth</strong> (4)</summary>
@@ -123,6 +123,14 @@ CRUD estándar, más:
 | GET | `/billing/invoices`, `/pending`, `/config` |
 | PUT | `/billing/config/credentials` — las guarda cifradas; no devuelve el valor |
 | POST | `/billing/config/test`, `/sync-services` |
+</details>
+
+<details>
+<summary><strong>audit</strong> (1)</summary>
+
+| Método | Ruta | Nota |
+|---|---|---|
+| GET | `/audit` | Bitácora de acciones. Sólo `admin`. Filtros: `userId`, `entity`, `entityId`, `from`, `to`, `soloFallidas`. No hay `POST`: las filas las escribe un middleware |
 </details>
 
 <details>

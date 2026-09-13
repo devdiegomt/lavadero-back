@@ -118,6 +118,13 @@ const envSchema = z.object({
   DATA_RETENTION_MESSAGES_MONTHS: z.coerce.number().int().min(0).default(12),
   DATA_RETENTION_CUSTOMERS_MONTHS: z.coerce.number().int().min(0).default(0),
 
+  // La bitacora de acciones se guarda mas tiempo que las conversaciones: su
+  // valor esta en poder mirar atras cuando alguien por fin nota algo raro, y
+  // eso rara vez pasa la misma semana. No contiene datos de clientes (solo
+  // nombres de campos), pero si que hizo cada empleado, que es dato personal
+  // del empleado — de ahi que tenga plazo y no sea para siempre.
+  DATA_RETENTION_AUDIT_MONTHS: z.coerce.number().int().min(0).default(24),
+
   // ── Misc ─────────────────────────────────────────────────────────────────
   TIMEZONE: z.string().default('America/Bogota'),
 });
