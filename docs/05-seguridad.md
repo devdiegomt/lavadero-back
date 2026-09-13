@@ -61,7 +61,7 @@ router.post('/', authenticate, requireTenant, authorize('admin'), crearServicio)
 | Rate limit | 100 peticiones / 15 min sobre `/api/` | Global, por IP — **excepto `/api/wa-bridge`** |
 | Rate limit de `wa-bridge` | 120 / 15 min **por cliente de WhatsApp** | Ver abajo |
 | Body limit | 1 MB | Contra cargas grandes |
-| Validación | Zod, en 8 de 14 módulos, más la ruta de credenciales de `billing` | Ver brecha en §7 |
+| Validación | Zod en los `POST` de alta, `validarUuid` en todo `:id`, schema de query en los listados | Ver brecha #2 en §7 |
 
 ### Límite específico del login
 
@@ -378,7 +378,7 @@ Ordenadas por relación entre riesgo y esfuerzo.
 
 | # | Brecha | Riesgo | Esfuerzo |
 |---|---|---|---|
-| 2 | **Validación Zod ausente** en `billing` (salvo credenciales), `history`, `reports`, `superadmin`, `tenants`, `whatsapp` | Entrada no validada hacia la base | Medio |
+| 2 | **Validación Zod parcial** — los `POST` de alta validan; los cuerpos de `PATCH` y el módulo `whatsapp`, no | Entrada no validada hacia la base | Medio |
 | 3 | **Tokens en `localStorage`** (frontend) | Un XSS expone la sesión | Alto (implica cookies httpOnly y CSRF) |
 | 4 | **Sin auditoría de acciones** — sólo hay `appointment_status_log` | No se puede reconstruir quién cambió qué | Medio |
 | 5 | **Sin RLS en PostgreSQL** | Una consulta mal escrita cruza tenants | Alto |
@@ -386,10 +386,31 @@ Ordenadas por relación entre riesgo y esfuerzo.
 
 ### Notas sobre algunas
 
-**#2 — validación.** Los seis módulos sin Zod reciben parámetros que llegan
-directo a las consultas. Las consultas están parametrizadas, así que no hay
-inyección SQL, pero sí entra basura: fechas inválidas, IDs con formato
-incorrecto, campos ausentes que producen 500 en vez de 400.
+**#2 — validación.** Los parámetros llegan directo a las consultas. Están
+parametrizadas, así que no hay inyección SQL, pero sí entra basura: fechas
+inválidas, IDs con formato incorrecto, campos que producen 500 en vez de 400.
+
+> **Corrección (2026-09).** La entrada describía esto como "Zod ausente en seis
+> módulos", y al medirlo resultó impreciso en las dos direcciones:
+>
+> - **Más grave de lo escrito.** Se sondearon las rutas con entrada basura y
+>   **29 devolvían 500**, incluidos módulos que la tabla daba por validados
+>   —`customers`, `vehicles`, `services`, `payments`, `users`—. Tenían Zod en el
+>   `POST` de alta y nada en los `:id` ni en el query.
+> - **Y el diagnóstico estaba errado.** `validateId` y `validate(…, 'query')`
+>   existían desde siempre, puestos en **una** ruta. No faltaba validación:
+>   faltaba conectarla. Eso es peor que ausente, porque leyendo el código parece
+>   resuelta.
+>
+> Las tres clases de 500 —ids que no son UUID, query malformado, cuerpos que no
+> calzan con la columna— están cerradas y hay una prueba que recorre las rutas
+> con basura y falla si alguna vuelve a contestar 5xx. Lo que queda de la brecha
+> es el contenido de los cuerpos de `PATCH`, que siguen pasando por listas de
+> campos permitidos en vez de por un schema.
+>
+> La lección, otra vez la de la [metodología §2](07-metodologia.md): medir antes
+> de describir. La tabla llevaba meses afirmando algo que una sonda de veinte
+> minutos contradecía.
 
 **#3 — localStorage.** Es la brecha de mayor riesgo teórico y también la más
 cara: implica pasar a cookies `httpOnly` + `SameSite`, lo que a su vez obliga a
