@@ -211,7 +211,7 @@ WhatsApp, y autorización y retención de datos personales según la Ley 1581.
 |---|---|---|
 | RNF-COM-1 | Node.js 20+ | ✅ |
 | RNF-COM-2 | PostgreSQL 14+ | ✅ Probado contra 16 |
-| RNF-COM-3 | El panel funciona en navegadores actuales y en móvil | ⚠️ No probado sistemáticamente |
+| RNF-COM-3 | El panel funciona en navegadores actuales y en móvil | ⚠️ Parcial — 40 pruebas en Chromium, en escritorio (1280px) y en móvil (Pixel 5): las nueve pantallas caben a lo ancho, la navegación de abajo se puede tocar y la sesión sobrevive a una recarga. Falta Safari y Firefox. Ver [`e2e/` en el frontend](https://github.com/devdiegomt/lavadero-front/tree/main/e2e) |
 
 ### Legales
 

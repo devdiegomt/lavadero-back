@@ -88,6 +88,44 @@ guardarlo donde no debe. Existe para no dejar sin sesión a un frontend viejo
 mientras se despliega el nuevo; conviene volverlo a `false` después. Lo correcto
 es desplegar backend y panel juntos.
 
+#### Lo que sólo se ve en un navegador
+
+Las once pruebas de este flujo usan `supertest`, que copia cabeceras: **no aplica
+`HttpOnly`, ni `SameSite`, ni `Path`, ni decide si una petición cross-origin
+lleva la cookie.** Todo eso lo decide el navegador. El panel tiene ahora una
+suite de Playwright ([`e2e/`](https://github.com/devdiegomt/lavadero-front/tree/main/e2e))
+que lo comprueba, y en su primera corrida encontró dos fallas que acá no se
+podían ver:
+
+- **Escribir mal la contraseña decía "Sesión expirada".** El panel responde a
+  cualquier 401 pidiendo un token nuevo, y el 401 del login no es un token
+  vencido: son credenciales que no sirven. El mensaje del servidor se perdía.
+- **Entrar a ciertas pantallas cerraba la sesión sola.** `POST /auth/refresh`
+  **rota** el token: emite uno nuevo y revoca el anterior en el acto. Eso es lo
+  correcto, pero vuelve fatal renovar dos veces a la vez — y eso es lo normal, no
+  lo raro: al cargar una pantalla el panel dispara varias consultas en paralelo
+  y, recién cargado el documento, ninguna tiene access token, así que todas
+  responden 401 y todas querrían renovar. Ganaba una; las demás llegaban con un
+  token revocado y el panel mandaba al login. Tres de nueve pantallas, y el log
+  del backend tenía exactamente tres `Refresh token inválido o expirado`.
+
+Las dos se arreglaron en el panel (no acá): no renovar ante un 401 del login, y
+renovar de a una.
+
+**Lo que queda.** Dos pestañas comparten la cookie pero no la variable que
+serializa las renovaciones, así que si renuevan en el mismo instante una pierde
+la sesión. Se arregla con un candado entre pestañas (`navigator.locks`) o con una
+ventana de gracia acá —aceptar el token recién rotado durante unos segundos—,
+que es lo que hace la mayoría de las implementaciones de rotación. Lo segundo
+debilita la detección de reuso, así que conviene lo primero. No está hecho.
+
+Tampoco está comprobado el caso que de verdad importa en producción:
+`localhost:5173` y `localhost:3000` son orígenes distintos pero el **mismo
+sitio**, así que `SameSite=Lax` no estorba. Con el panel en Vercel y la API en
+Railway son sitios distintos y la cookie no viajaría: hace falta
+`AUTH_COOKIE_SAMESITE=none` (y con eso, `Secure`, o sea HTTPS). Comprobarlo
+requiere desplegar en dos dominios.
+
 ### Autorización
 
 Tres roles: `super_admin`, `admin`, `operator`. El middleware `authorize(...roles)`
@@ -556,6 +594,12 @@ Ordenadas por relación entre riesgo y esfuerzo.
 > estimada como la más cara. Resultó mucho menos: la §1 explica por qué dejar el
 > access token en un header evita tener que poner un token CSRF en las 80 rutas.
 > La estimación original asumía mover los dos tokens a cookies.
+>
+> Pero costó más de lo que este párrafo decía cuando se escribió. El cambio se
+> dio por terminado con once pruebas verdes de `supertest`, y `supertest` no es
+> un navegador: dos fallas visibles —un mensaje de error equivocado y cierres de
+> sesión al entrar a ciertas pantallas— sobrevivieron hasta que hubo pruebas de
+> Playwright. Están contadas en la §1.
 
 > **Cerrada (2026-09).** *"Sin RLS en PostgreSQL"* era la #5, y era la de mayor
 > esfuerzo. Está en la §3. El paso que la activa —apuntar `DATABASE_URL` al rol

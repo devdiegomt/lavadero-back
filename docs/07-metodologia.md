@@ -147,6 +147,25 @@ Una tarea está terminada cuando **todas** se cumplen:
 El penúltimo punto es el que más se olvida. Documentación que se actualiza
 "después" no se actualiza.
 
+### Si el cambio se ve en el navegador, probarlo en un navegador
+
+`supertest` no es un navegador. Copia cabeceras: no aplica `HttpOnly`, ni
+`SameSite`, ni `Path`, no decide si una petición cross-origin lleva una cookie,
+no corre el JavaScript del panel y manda las peticiones de a una.
+
+La sesión en cookie se dio por terminada con once pruebas verdes de `supertest`
+y se mergeó. Después, la primera corrida de Playwright encontró dos fallas —una
+cosmética y una que cerraba la sesión sola— que ninguna prueba de este
+repositorio podía ver, porque las dos sólo existen del lado del navegador. La
+segunda es la más instructiva: el backend **rota** el refresh token en cada uso,
+y el panel disparaba varias renovaciones en paralelo. Cada petición, por
+separado, era correcta. Lo que fallaba era el conjunto — y eso se rompe recién
+cuando algo hace varias a la vez.
+
+Así que: un cambio que toca cookies, sesión, CORS o layout no está probado
+mientras no lo haya abierto un navegador. Las pruebas están en
+[`e2e/` del frontend](https://github.com/devdiegomt/lavadero-front/tree/main/e2e).
+
 ## 4. Antes de mergear
 
 ```bash
@@ -157,7 +176,13 @@ npx tsc --noEmit          # backend
 cd bot-wa && npm run build # bot
 ```
 
-Los cuatro tienen que pasar. Si alguno falla de forma intermitente, **eso es un
+Y si el cambio se ve en el panel, además, con el backend arriba:
+
+```bash
+cd ../lavadero-front && npm run e2e   # 40 pruebas en Chromium, escritorio y móvil
+```
+
+Todos tienen que pasar. Si alguno falla de forma intermitente, **eso es un
 bug**, no ruido: un test que falla 1 de cada 8 corridas enseña a ignorar el
 rojo. (Pasó — dos suites compartían base y se pisaban en paralelo. Se resolvió
 con `maxWorkers: 1`.)
