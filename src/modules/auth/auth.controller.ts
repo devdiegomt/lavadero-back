@@ -6,6 +6,11 @@ import * as db from '../../shared/db';
 import { AppError } from '../../shared/middleware/errorHandler';
 import { config } from '../../config';
 import type { JwtPayload, LoginResponseDto, AuthUserDto } from '../../types/api';
+import {
+  ponerRefreshEnCookie,
+  borrarRefreshCookie,
+  leerRefreshToken,
+} from './cookies';
 import type { UserRow, TenantRow } from '../../types/entities';
 
 // ─── Helpers JWT ─────────────────────────────────────────────────────────────
@@ -84,9 +89,17 @@ export async function login(req: Request, res: Response): Promise<void> {
 
   await db.query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]);
 
+  // El refresh token va en una cookie httpOnly: el JavaScript de la página no la
+  // puede leer, así que un XSS no se lleva siete días de sesión renovable.
+  ponerRefreshEnCookie(res, refreshToken);
+
   const response: LoginResponseDto = {
     accessToken,
-    refreshToken,
+    // Devolverlo en el cuerpo invita a guardarlo en localStorage, que es la
+    // brecha entera. Sólo se hace si AUTH_REFRESH_IN_BODY lo pide, y eso existe
+    // nada más para no dejar sin sesión a un frontend viejo durante el
+    // despliegue. Ver modules/auth/cookies.ts.
+    ...(config.AUTH_REFRESH_IN_BODY ? { refreshToken } : {}),
     user: {
       id: user.id,
       email: user.email,
@@ -105,7 +118,9 @@ export async function login(req: Request, res: Response): Promise<void> {
 // ─── Refresh ──────────────────────────────────────────────────────────────────
 
 export async function refresh(req: Request, res: Response): Promise<void> {
-  const { refreshToken } = req.body as { refreshToken: string };
+  // De la cookie, no del cuerpo. El cuerpo se sigue aceptando como transición
+  // para un frontend viejo; ver `leerRefreshToken`.
+  const refreshToken = leerRefreshToken(req);
   if (!refreshToken) throw new AppError('Refresh token requerido', 400);
 
   const tokenHash = hashToken(refreshToken);
@@ -148,13 +163,20 @@ export async function refresh(req: Request, res: Response): Promise<void> {
     [userForToken.id, hashToken(newRefreshToken), expiresAt],
   );
 
-  res.json({ accessToken: newAccessToken, refreshToken: newRefreshToken });
+  // La rotación también rota la cookie: si alguien robó la anterior, deja de
+  // servir en cuanto el dueño legítimo renueva.
+  ponerRefreshEnCookie(res, newRefreshToken);
+
+  res.json({
+    accessToken: newAccessToken,
+    ...(config.AUTH_REFRESH_IN_BODY ? { refreshToken: newRefreshToken } : {}),
+  });
 }
 
 // ─── Logout ──────────────────────────────────────────────────────────────────
 
 export async function logout(req: Request, res: Response): Promise<void> {
-  const { refreshToken } = req.body as { refreshToken?: string };
+  const refreshToken = leerRefreshToken(req);
 
   if (refreshToken) {
     await db.query(
@@ -167,6 +189,11 @@ export async function logout(req: Request, res: Response): Promise<void> {
       [req.user!.id],
     );
   }
+
+  // Sin esto el navegador conserva la cookie y la sesión "cerrada" se puede
+  // reanudar con un refresh. La fila ya está revocada, así que no serviría, pero
+  // dejar una credencial muerta en el navegador no tiene ninguna ventaja.
+  borrarRefreshCookie(res);
 
   res.json({ message: 'Sesión cerrada' });
 }

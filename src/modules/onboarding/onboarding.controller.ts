@@ -9,6 +9,7 @@ import type { OnboardingRegisterBody } from '../../shared/middleware/validate';
 import type { JwtPayload } from '../../types/api';
 import type { UserRole } from '../../types/entities';
 import { hashPassword } from '../../shared/utils/password';
+import { ponerRefreshEnCookie } from '../auth/cookies';
 
 // ─── POST /api/onboarding/register (PÚBLICO) ─────────────────────────────────
 
@@ -100,12 +101,17 @@ export async function register(req: Request, res: Response): Promise<void> {
       [admin.id, refreshHash, expiresAt],
     );
 
+    // La misma cookie httpOnly que pone el login. Sin esto, quien se registra
+    // queda con una sesión de 15 minutos sin forma de renovarla, y el síntoma
+    // —"me echa al rato de crear la cuenta"— no señalaría a este archivo.
+    ponerRefreshEnCookie(res, refreshToken);
+
     res.status(201).json({
       message: 'Lavadero registrado exitosamente',
       tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug, plan: tenant.plan, trialEndsAt: tenant.trial_ends_at },
       user:   { id: admin.id, email: admin.email, firstName: admin.first_name, lastName: admin.last_name, role: admin.role },
       accessToken,
-      refreshToken,
+      ...(config.AUTH_REFRESH_IN_BODY ? { refreshToken } : {}),
     });
   } catch (err) {
     await client.query('ROLLBACK');

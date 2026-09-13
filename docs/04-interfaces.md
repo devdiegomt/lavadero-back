@@ -20,7 +20,19 @@ entienda de JWT o que el panel conozca los LIDs.
 Authorization: Bearer <access_token>
 ```
 
-15 minutos de vida. Vencido, se renueva con `POST /api/auth/refresh`.
+15 minutos de vida, y **vive en memoria del cliente**: no se persiste. Vencido, se
+renueva con `POST /api/auth/refresh`, que no lleva nada en el cuerpo — el refresh
+token viaja en una cookie `httpOnly` que el JavaScript de la página no puede leer.
+Ver [Seguridad §1](05-seguridad.md#dónde-vive-la-sesión-en-el-navegador).
+
+Dos consecuencias para quien consuma esta API desde un navegador:
+
+- **`credentials: 'include'` en todas las peticiones.** Sin eso el navegador no
+  guarda la cookie que devuelve el login, y la sesión se cae en el primer refresh
+  sin un error que lo explique.
+- **`refresh` y `logout` necesitan la cabecera `x-panel-request`.** Es la defensa
+  contra CSRF de los dos únicos endpoints que se autentican con cookie; las demás
+  rutas no la necesitan.
 
 ### Convenciones
 
@@ -69,8 +81,8 @@ que emite `pino` para poder correlacionar.
 | Método | Ruta | Rol |
 |---|---|---|
 | POST | `/auth/login` | público |
-| POST | `/auth/refresh` | público |
-| POST | `/auth/logout` | autenticado |
+| POST | `/auth/refresh` | cookie + `x-panel-request` |
+| POST | `/auth/logout` | autenticado + cookie + `x-panel-request` |
 | GET | `/auth/me` | autenticado |
 </details>
 

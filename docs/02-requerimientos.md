@@ -13,7 +13,7 @@ Nomenclatura: `RF-<módulo>-<n>`.
 
 | ID | Requerimiento | Dónde |
 |---|---|---|
-| RF-AUT-1 | Un usuario inicia sesión con correo y contraseña y recibe un access token (15 min) y un refresh token (7 días) | `POST /api/auth/login` |
+| RF-AUT-1 | Un usuario inicia sesión con correo y contraseña y recibe un access token (15 min) y un refresh token (7 días) en cookie `httpOnly` | `POST /api/auth/login` |
 | RF-AUT-2 | El refresh token rota: al usarlo se revoca y se emite uno nuevo | `POST /api/auth/refresh` |
 | RF-AUT-3 | Cerrar sesión revoca el refresh; sin cuerpo revoca todas las sesiones | `POST /api/auth/logout` |
 | RF-USR-1 | Un `admin` crea, edita, activa y desactiva usuarios de su tenant | `/api/users` |
@@ -146,7 +146,7 @@ WhatsApp, y autorización y retención de datos personales según la Ley 1581.
 | RNF-MAN-1 | Todo el backend en TypeScript con `strict` | ✅ |
 | RNF-MAN-2 | Los módulos siguen la misma estructura | ✅ 14 módulos, `controller` + `routes` |
 | RNF-MAN-3 | Las decisiones estructurales quedan en un ADR | ✅ Ver `adr/` |
-| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 321 tests, y `npm run test:rls` los corre con RLS aplicándose |
+| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 332 tests, y `npm run test:rls` los corre con RLS aplicándose |
 
 ### Compatibilidad
 

@@ -59,7 +59,13 @@ export interface AuthUserDto {
 
 export interface LoginResponseDto {
   accessToken: string;
-  refreshToken: string;
+  /**
+   * **Obsoleto.** El refresh token va en una cookie `httpOnly`; sólo aparece acá
+   * si `AUTH_REFRESH_IN_BODY` está en `true`, que existe para no dejar sin sesión
+   * a un frontend viejo durante el despliegue. Un cliente nuevo no debe usarlo:
+   * guardarlo del lado del JavaScript es la brecha que esto vino a cerrar.
+   */
+  refreshToken?: string;
   user: AuthUserDto;
 }
 

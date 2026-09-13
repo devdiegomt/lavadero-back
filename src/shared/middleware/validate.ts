@@ -196,10 +196,6 @@ export const schemas = {
     password: z.string().min(1, 'Contraseña requerida'),
   }),
 
-  refresh: z.object({
-    refreshToken: z.string().min(1, 'Refresh token requerido'),
-  }),
-
   // ── Appointments ──────────────────────────────────────────────────────────
   appointmentCreate: z.object({
     customerId: uuid,

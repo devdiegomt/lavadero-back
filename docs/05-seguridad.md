@@ -28,10 +28,10 @@ contraseña. No hay verificación contra listas de contraseñas filtradas.
 
 Dos tokens, con roles distintos:
 
-| Token | Vida | Dónde vive | Para qué |
+| Token | Vida | Dónde vive en el cliente | Para qué |
 |---|---|---|---|
-| **Access** | 15 min | Sólo en el cliente | Autoriza cada petición |
-| **Refresh** | 7 días | `refresh_tokens`, hasheado con SHA-256 | Obtiene un access nuevo |
+| **Access** | 15 min | En memoria del panel, sin persistir | Autoriza cada petición, por header |
+| **Refresh** | 7 días | Cookie `httpOnly` (en la base, hasheado con SHA-256) | Obtiene un access nuevo |
 
 El refresh token **rota de verdad**: al usarlo se revoca (`revoked_at = NOW()`)
 y se emite uno nuevo. Si alguien roba un refresh y lo usa, el legítimo deja de
@@ -40,8 +40,53 @@ funcionar — la anomalía se vuelve visible.
 En la base sólo se guarda el **hash** del refresh, no el token. Quien lea la
 tabla no puede suplantar a nadie.
 
-`POST /api/auth/logout` revoca; sin cuerpo revoca todas las sesiones del
-usuario.
+`POST /api/auth/logout` revoca; sin un token concreto revoca todas las sesiones
+del usuario.
+
+### Dónde vive la sesión en el navegador
+
+Los dos tokens se guardaban en `localStorage`, y eso es legible por cualquier
+JavaScript de la página: una dependencia comprometida o un texto sin escapar se
+llevaba el **refresh token**, y con él siete días de sesión renovable que
+sobreviven al cierre del navegador y a un cambio de contraseña hasta que alguien
+revoque.
+
+- **El refresh token va en una cookie `httpOnly`**, acotada a `/api/auth`, con
+  `SameSite` y `Secure` en producción. El JavaScript del panel no la puede leer —
+  tampoco el propio.
+- **El access token vive en memoria**, sin persistir. Un XSS lo puede robar, pero
+  dura 15 minutos y no se puede renovar sin la cookie. Se pasa de *"sesión
+  comprometida indefinidamente"* a *"quince minutos"*.
+
+El costo es que al recargar la página no hay access token y hay que pedir uno con
+la cookie. El panel lo hace al arrancar.
+
+**Por qué esto no fue el proyecto de CSRF que la brecha anunciaba.** La entrada
+decía *"Alto (implica cookies httpOnly y CSRF)"*, y esa estimación asumía mover
+**los dos** tokens a cookies. Si la autenticación de cada petición viajara en una
+cookie, el navegador la adjuntaría sola en cualquier petición que un sitio ajeno
+provoque, y haría falta un token CSRF en las 80 rutas.
+
+Dejando el access token en un header, **las rutas que cambian algo quedan inmunes
+por construcción**: el navegador nunca adjunta `Authorization` por su cuenta. La
+superficie de CSRF se reduce a `refresh` y `logout`, los dos únicos que se
+autentican con la cookie, y ahí se cubre con dos capas:
+
+| Capa | Qué frena |
+|---|---|
+| `SameSite` (`lax` por defecto) | El POST cross-site no lleva la cookie |
+| Cabecera `x-panel-request` | Un `<form>` ajeno no puede ponerla, y un `fetch` que la pone dispara un preflight que CORS rechaza |
+
+La cabecera va **además** de `SameSite` y no en su lugar: un despliegue con el
+panel y la API en dominios distintos necesita `SameSite=None`, y entonces es lo
+único que queda. Sólo se exige cuando la petición llega **con** la cookie — si el
+token viene en el cuerpo, quien lo manda ya lo tenía y no hay nada que provocar.
+
+**Transición.** `AUTH_REFRESH_IN_BODY` hace que el login además devuelva el
+refresh token en el cuerpo. Por defecto es `false`, porque devolverlo invita a
+guardarlo donde no debe. Existe para no dejar sin sesión a un frontend viejo
+mientras se despliega el nuevo; conviene volverlo a `false` después. Lo correcto
+es desplegar backend y panel juntos.
 
 ### Autorización
 
@@ -469,6 +514,11 @@ Ordenadas por relación entre riesgo y esfuerzo.
 > guardar. Lo que queda de esa tanda es que el resto de los datos sigue sin
 > cifrar, que es decisión consciente y está dicho en la §4, no una brecha.
 
+> **Cerrada (2026-09).** *"Tokens en `localStorage`"* era la #3, y estaba
+> estimada como la más cara. Resultó mucho menos: la §1 explica por qué dejar el
+> access token en un header evita tener que poner un token CSRF en las 80 rutas.
+> La estimación original asumía mover los dos tokens a cookies.
+
 > **Cerrada (2026-09).** *"Sin RLS en PostgreSQL"* era la #5, y era la de mayor
 > esfuerzo. Está en la §3. El paso que la activa —apuntar `DATABASE_URL` al rol
 > `carwash_app`— es operativo y va aparte del despliegue: la suite pasa con los
@@ -484,7 +534,6 @@ Ordenadas por relación entre riesgo y esfuerzo.
 | # | Brecha | Riesgo | Esfuerzo |
 |---|---|---|---|
 | 2 | **Validación Zod ausente en `whatsapp`** — el resto de los módulos ya valida alta, `PATCH` y query | Entrada no validada hacia la base, pero tras la clave compartida de n8n | Bajo |
-| 3 | **Tokens en `localStorage`** (frontend) | Un XSS expone la sesión | Alto (implica cookies httpOnly y CSRF) |
 | 6 | **Clientes sin autorización que no han vuelto** — a los que vuelven ya se les pide (§5) | Pasivo decreciente | Bajo (decisión del responsable) |
 
 ### Notas sobre algunas
@@ -530,10 +579,6 @@ olvida de un caso y el síntoma aparece lejos.
 > La lección, otra vez la de la [metodología §2](07-metodologia.md): medir antes
 > de describir. La tabla llevaba meses afirmando algo que una sonda de veinte
 > minutos contradecía.
-
-**#3 — localStorage.** Es la brecha de mayor riesgo teórico y también la más
-cara: implica pasar a cookies `httpOnly` + `SameSite`, lo que a su vez obliga a
-protección CSRF. No se recomienda atacarla antes que las demás.
 
 
 
