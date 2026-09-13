@@ -93,6 +93,7 @@ Nomenclatura: `RF-<módulo>-<n>`.
 | RF-MT-1 | Cada tenant ve únicamente sus datos | `WHERE tenant_id = $1`, y RLS en PostgreSQL como garantía del motor |
 | RF-MT-2 | Un tenant pertenece a un plan que define sus límites | `plans`, `planLimits.ts` |
 | RF-MT-3 | El super admin administra tenants y planes | `/api/superadmin/*` |
+| RF-MT-6 | Desactivar un lavadero le corta el acceso: ni entra ni renueva la sesión que tuviera abierta | `toggleTenant`, y la comprobación en `login` y `refresh` |
 | RF-MT-4 | Un lavadero se registra por sí mismo | `/api/onboarding/*` |
 | RF-MT-5 | Toda acción del personal que cambia algo queda registrada con quién, qué y cuándo | `action_log`, `GET /api/audit` |
 
@@ -237,7 +238,7 @@ WhatsApp, y autorización y retención de datos personales según la Ley 1581.
 | RNF-MAN-1 | Todo el backend en TypeScript con `strict` | ✅ |
 | RNF-MAN-2 | Los módulos siguen la misma estructura | ✅ 14 módulos, `controller` + `routes` |
 | RNF-MAN-3 | Las decisiones estructurales quedan en un ADR | ✅ Ver `adr/` |
-| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 341 tests, y `npm run test:rls` los corre con RLS aplicándose |
+| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 383 tests, y `npm run test:rls` los corre con RLS aplicándose. **Contar no alcanza**: `superadmin` tenía ocho rutas y cero pruebas, y es el módulo que más poder concentra. Lo que importa es qué queda sin cubrir, no cuántas hay |
 
 ### Compatibilidad
 
