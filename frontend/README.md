@@ -30,7 +30,12 @@ App en `http://localhost:5173`.
 
 Credenciales demo (necesitas que el backend esté seedeado):
 - Admin: `admin@elbrillante.co` / `admin123`
-- Super admin: `superadmin@carwash-saas.com` / `super123!` → redirige a `/admin`
+- Super admin: la que hayas puesto en `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD`
+  del backend → redirige a `/admin`
+
+> ⚠️ Sólo para desarrollo. El super admin ve **todos** los lavaderos: en
+> cualquier entorno accesible desde internet, aunque sea una demo, esa cuenta va
+> con una contraseña propia. El backend ya no tiene una por defecto.
 
 ---
 
