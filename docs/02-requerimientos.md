@@ -117,7 +117,7 @@ Escritos como criterios verificables. Donde no hay medición, se dice.
 
 | ID | Requerimiento | Estado |
 |---|---|---|
-| RNF-REN-1 | Una consulta del panel responde en < 500 ms con 10k turnos | ✅ Medido: peor p95 **24 ms** con 10k, **114 ms** con 100k. Ver abajo |
+| RNF-REN-1 | Una consulta del panel responde en < 500 ms con 10k turnos | ✅ Medido: peor p95 **24 ms** con 10k, **108 ms** con 100k. Ver abajo |
 | RNF-REN-2 | El bot responde en < 5 s (incluye la llamada a Claude) | ⚠️ Parcial — el tramo del backend son **18 ms** en el peor paso con 100k turnos. Claude, n8n y WhatsApp no se miden desde acá. Ver abajo |
 | RNF-REN-3 | Las consultas frecuentes tienen índice | ✅ 6 índices en `appointments`, 5 en `customers` |
 

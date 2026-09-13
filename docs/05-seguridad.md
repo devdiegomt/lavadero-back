@@ -112,12 +112,28 @@ podían ver:
 Las dos se arreglaron en el panel (no acá): no renovar ante un 401 del login, y
 renovar de a una.
 
-**Lo que queda.** Dos pestañas comparten la cookie pero no la variable que
-serializa las renovaciones, así que si renuevan en el mismo instante una pierde
-la sesión. Se arregla con un candado entre pestañas (`navigator.locks`) o con una
-ventana de gracia acá —aceptar el token recién rotado durante unos segundos—,
-que es lo que hace la mayoría de las implementaciones de rotación. Lo segundo
-debilita la detección de reuso, así que conviene lo primero. No está hecho.
+**Dos pestañas, que era lo que quedaba.** Comparten la cookie pero no la variable
+que serializa las renovaciones, así que cada una tenía su propia cola y volvía a
+pasar lo mismo. Reproducido recargando dos juntas: tres de cada cuatro intentos
+dejaban alguna en el login, y uno dejó a **las dos** — llegan con el mismo token,
+una lo revoca y la otra se queda sin nada.
+
+Cerrado en el panel con un candado de `navigator.locks`, que es del origen y no
+de la pestaña: la segunda espera y, cuando le toca, renueva con la cookie que
+dejó la primera. Se descartó la alternativa habitual —una **ventana de gracia**
+acá, aceptando el token recién rotado unos segundos— porque debilita justo lo que
+la rotación compra: detectar que alguien reusó un token robado.
+
+Dos cosas que conviene saber:
+
+- **No protege en HTTP plano.** `navigator.locks` sólo existe en contexto seguro.
+  Con HTTPS —o `localhost`— está; sin él se renueva sin candado, como antes.
+- **La prueba comprueba el mecanismo, no la carrera.** Recargar dos pestañas y
+  ver si alguna pierde la sesión atrapaba el fallo 1 de cada 8 veces contra una
+  base local, porque la ventana dura lo que tarda el refresh: 2 ms acá. Que sea
+  difícil de reproducir en una máquina no lo hace raro en producción, donde la
+  ventana es el ida y vuelta a la API —de 30 a 300 ms— y es entre 15 y 150 veces
+  más ancha.
 
 Tampoco está comprobado el caso que de verdad importa en producción:
 `localhost:5173` y `localhost:3000` son orígenes distintos pero el **mismo
