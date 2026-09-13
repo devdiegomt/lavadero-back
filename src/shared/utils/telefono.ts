@@ -70,3 +70,21 @@ export function normalizarTelefono(valor: unknown): string | null {
 export function esCanonico(telefono: string | null): boolean {
   return telefono !== null && /^\+\d{10,15}$/.test(telefono);
 }
+
+/**
+ * Columnas que guardan un teléfono.
+ *
+ * Varias rutas actualizan por lista de campos permitidos (`ALLOWED_FIELDS`,
+ * `UPDATABLE_FIELDS`, `fieldMap`) y no pasan por Zod. Que cada una se acuerde
+ * de canonizar por su cuenta es el modo de fallo que ya se dio: el PATCH del
+ * tenant quedó sin canonizar en el primer intento de este arreglo.
+ */
+export const CAMPOS_TELEFONO: ReadonlySet<string> = new Set(['phone', 'whatsapp_phone']);
+
+/**
+ * Para los bucles que arman un UPDATE campo por campo: canoniza si el campo es
+ * un teléfono y devuelve el resto tal cual.
+ */
+export function valorDeCampo(campo: string, valor: unknown): unknown {
+  return CAMPOS_TELEFONO.has(campo) ? normalizarTelefono(valor) : valor;
+}

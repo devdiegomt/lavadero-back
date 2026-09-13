@@ -118,6 +118,46 @@ describe('mitad 1: lo que entra queda canónico', () => {
   });
 });
 
+describe('las rutas que no pasan por Zod', () => {
+  // Actualizan por lista de campos permitidos, campo por campo. Es donde más
+  // fácil se olvida canonizar, y de hecho se olvidó en el primer intento.
+  it('PATCH /api/tenants/me canoniza el whatsapp_phone', async () => {
+    const { rows: antes } = await db.query<{ whatsapp_phone: string | null }>(
+      `SELECT whatsapp_phone FROM tenants WHERE id = $1`, [tenantId],
+    );
+
+    const res = await request(app)
+      .patch('/api/tenants/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ whatsapp_phone: '300 123 4567' });
+
+    expect(res.status).toBe(200);
+    // Sin canonizar, el bridge dejaría de resolver el tenant y el bot
+    // responderia "Tenant no encontrado" a todo.
+    expect(res.body.whatsapp_phone).toBe('+573001234567');
+
+    await db.query(`UPDATE tenants SET whatsapp_phone = $1 WHERE id = $2`, [
+      antes[0].whatsapp_phone, tenantId,
+    ]);
+  });
+
+  it('PATCH /api/tenants/me canoniza también el teléfono de contacto', async () => {
+    const { rows: antes } = await db.query<{ phone: string | null }>(
+      `SELECT phone FROM tenants WHERE id = $1`, [tenantId],
+    );
+
+    const res = await request(app)
+      .patch('/api/tenants/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ phone: SIN_PREFIJO });
+
+    expect(res.status).toBe(200);
+    expect(res.body.phone).toBe(CANONICO);
+
+    await db.query(`UPDATE tenants SET phone = $1 WHERE id = $2`, [antes[0].phone, tenantId]);
+  });
+});
+
 describe('mitad 2: la migración enlaza lo que ya estaba escrito', () => {
   it('un cliente guardado antes del arreglo no se encuentra… hasta normalizar', async () => {
     // Escrito directo en la base: así quedaron las filas cargadas antes de que

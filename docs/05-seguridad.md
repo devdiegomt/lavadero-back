@@ -61,7 +61,7 @@ router.post('/', authenticate, requireTenant, authorize('admin'), crearServicio)
 | Rate limit | 100 peticiones / 15 min sobre `/api/` | Global, por IP — **excepto `/api/wa-bridge`** |
 | Rate limit de `wa-bridge` | 120 / 15 min **por cliente de WhatsApp** | Ver abajo |
 | Body limit | 1 MB | Contra cargas grandes |
-| Validación | Zod, en 8 de 14 módulos | Ver brecha en §7 |
+| Validación | Zod, en 8 de 14 módulos, más la ruta de credenciales de `billing` | Ver brecha en §7 |
 
 ### Límite específico del login
 
@@ -120,29 +120,42 @@ el `WHERE` lo lleva. Siempre.
 
 ### Cifrado
 
-Las claves de API de facturación (`tenants.billing_api_key`) **pueden**
-guardarse cifradas con **AES-256-GCM**, clave en `ENCRYPTION_KEY` (32 bytes
-hex). GCM además autentica: un ciphertext manipulado falla al descifrar en
-lugar de devolver basura.
+Las claves de API de facturación (`tenants.billing_api_key`) se guardan cifradas
+con **AES-256-GCM**, clave en `ENCRYPTION_KEY` (32 bytes hex). GCM además
+autentica: un ciphertext manipulado falla al descifrar en lugar de devolver
+basura.
 
 Hay rotación implementada: `npm run db:rotate-key` descifra con la vieja y
 re-cifra con la nueva.
 
-> ⚠️ **El cifrado no está garantizado.** La lectura usa `decryptIfNeeded()`,
-> que descifra si el valor está cifrado y **devuelve el texto plano si no lo
-> está** — una tolerancia que quedó del período de migración. No hay ningún
-> punto en el código que cifre al guardar: la clave se cifra a mano con
-> `npm run encrypt` y se escribe con un `UPDATE`.
->
-> Consecuencia: una credencial guardada en claro funciona perfectamente y
-> nada avisa. Verificar el estado real con:
->
-> ```sql
-> SELECT slug, billing_api_key LIKE '%:%:%' AS parece_cifrada
-> FROM tenants WHERE billing_api_key IS NOT NULL;
-> ```
->
-> Ver brecha #4 en la §7.
+**El cifrado es obligatorio, no opcional**, y eso son dos cosas:
+
+- **Al leer**, `descifrarCredencial()` exige que el valor esté cifrado. Si está
+  en claro lanza `CredencialIlegible` con el comando que lo arregla. Antes esto
+  lo hacía `decryptIfNeeded()`, que devolvía el texto plano tal cual: una
+  credencial podía quedarse sin cifrar para siempre y todo funcionaba igual, sin
+  que nada avisara. Un cifrado opcional no es una medida de seguridad.
+- **Al escribir**, `PUT /api/billing/config/credentials` cifra antes del
+  `UPDATE`. Es la pieza que faltaba: cifrar al leer no sirve de nada si no hay
+  una puerta que cifre al guardar. Antes la única vía era un `UPDATE` por SQL,
+  que es justamente cómo terminaban en claro.
+
+Queda `npm run encrypt` para producir un ciphertext a mano, pero ya no es el
+camino normal.
+
+**Orden al desplegar.** `db:encrypt-billing-keys` está dentro de
+`db:migrate-all`, así que correr las migraciones antes de dar tráfico —que es lo
+que dice la [metodología §7](07-metodologia.md)— resuelve la dependencia. Si se
+despliega al revés, las facturas fallan con un error que nombra el comando, y
+quedan en `billing_errors` para reintentar.
+
+`GET /api/billing/config` devuelve `credencialCifrada`, para que el estado real
+se vea desde el panel. También se puede mirar directo:
+
+```sql
+SELECT slug, billing_api_key LIKE '%:%:%' AS parece_cifrada
+FROM tenants WHERE billing_api_key IS NOT NULL;
+```
 
 > **`ENCRYPTION_KEY` no se puede perder.** Sin ella no hay forma de recuperar
 > las credenciales de facturación de los tenants. Va en un gestor de secretos,
@@ -358,22 +371,20 @@ Ordenadas por relación entre riesgo y esfuerzo.
 > en la §5. Queda de esa tanda el pasivo de clientes creados antes de que
 > existiera la autorización, que es proceso y no código: hoy es la brecha 6.
 
+> **Cerrada (2026-09).** *"Cifrado de credenciales no forzado"* era la #1 y se
+> resolvió en la §4: la lectura exige cifrado y hay un endpoint que cifra al
+> guardar. Lo que queda de esa tanda es que el resto de los datos sigue sin
+> cifrar, que es decisión consciente y está dicho en la §4, no una brecha.
+
 | # | Brecha | Riesgo | Esfuerzo |
 |---|---|---|---|
-| 1 | **Cifrado de credenciales no forzado** — `decryptIfNeeded` acepta texto plano y nada cifra al guardar | Credenciales de facturación en claro sin que nadie lo note | Bajo |
-| 2 | **Validación Zod ausente** en `billing`, `history`, `reports`, `superadmin`, `tenants`, `whatsapp` | Entrada no validada hacia la base | Medio |
+| 2 | **Validación Zod ausente** en `billing` (salvo credenciales), `history`, `reports`, `superadmin`, `tenants`, `whatsapp` | Entrada no validada hacia la base | Medio |
 | 3 | **Tokens en `localStorage`** (frontend) | Un XSS expone la sesión | Alto (implica cookies httpOnly y CSRF) |
 | 4 | **Sin auditoría de acciones** — sólo hay `appointment_status_log` | No se puede reconstruir quién cambió qué | Medio |
 | 5 | **Sin RLS en PostgreSQL** | Una consulta mal escrita cruza tenants | Alto |
 | 6 | **Clientes sin autorización que no han vuelto** — a los que vuelven ya se les pide (§5) | Pasivo decreciente | Bajo (decisión del responsable) |
 
 ### Notas sobre algunas
-
-**#1 — cifrado no forzado.** La corrección tiene dos partes: cifrar al
-escribir (hoy no hay dónde, porque la clave se carga por SQL) y dejar de
-aceptar texto plano en la lectura. Lo segundo es de una línea, pero rompe
-cualquier credencial que hoy esté en claro — conviene migrarlas primero con
-`npm run db:encrypt-billing-keys`.
 
 **#2 — validación.** Los seis módulos sin Zod reciben parámetros que llegan
 directo a las consultas. Las consultas están parametrizadas, así que no hay
@@ -386,7 +397,7 @@ protección CSRF. No se recomienda atacarla antes que las demás.
 
 **#5 — RLS.** Row Level Security de PostgreSQL convertiría el aislamiento en
 una garantía del motor en vez de una convención. Es la mitigación correcta a
-largo plazo, pero implica revisar las 78 rutas.
+largo plazo, pero implica revisar las 79 rutas.
 
 ## 8. Gestión de secretos
 

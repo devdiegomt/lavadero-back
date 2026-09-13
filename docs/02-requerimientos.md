@@ -128,14 +128,15 @@ Escritos como criterios verificables. Donde no hay medición, se dice.
 | RNF-DIS-4 | bot-wa se reconecta solo si WhatsApp cierra la sesión | ✅ Limpia credenciales y pide QR nuevo |
 | RNF-DIS-6 | Un cliente que escribe de más no deja sin bot a los demás | ✅ Límite por cliente en `wa-bridge`, no por IP |
 | RNF-DIS-7 | Una conversación que se repite sin avanzar se corta, avisando antes | ✅ `bucle.ts`; un texto distinto la reanuda |
+| RNF-DIS-8 | Un proveedor externo que no responde no deja una petición colgada | ✅ Alegra con corte a los 15 s (`ALEGRA_TIMEOUT_MS`) |
 | RNF-DIS-5 | Objetivo de disponibilidad | ⚠️ No definido |
 
 ### Seguridad
 
 Ver [05 · Seguridad](05-seguridad.md). En resumen: contraseñas con bcrypt,
-tokens de vida corta con rotación, aislamiento por tenant, cifrado disponible
-para credenciales de facturación, rate limiting global, y autorización y
-retención de datos personales según la Ley 1581.
+tokens de vida corta con rotación, aislamiento por tenant, cifrado obligatorio
+de las credenciales de facturación, rate limiting global y por cliente de
+WhatsApp, y autorización y retención de datos personales según la Ley 1581.
 
 ### Mantenibilidad
 
@@ -144,7 +145,7 @@ retención de datos personales según la Ley 1581.
 | RNF-MAN-1 | Todo el backend en TypeScript con `strict` | ✅ |
 | RNF-MAN-2 | Los módulos siguen la misma estructura | ✅ 14 módulos, `controller` + `routes` |
 | RNF-MAN-3 | Las decisiones estructurales quedan en un ADR | ✅ Ver `adr/` |
-| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 220 tests |
+| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 235 tests |
 
 ### Compatibilidad
 

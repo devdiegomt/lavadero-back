@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import * as db from '../../shared/db';
 import { AppError } from '../../shared/middleware/errorHandler';
 import { getTenantUsage } from '../../shared/middleware/planLimits';
+import { valorDeCampo } from '../../shared/utils/telefono';
 import type { TenantRow, PlanRow, PlanId } from '../../types/entities';
 import type { SuperAdminDashboardDto, TenantListItemDto } from '../../types/api';
 
@@ -112,7 +113,7 @@ export async function updateTenant(req: Request, res: Response): Promise<void> {
   for (const field of UPDATABLE_FIELDS) {
     if (body[field] !== undefined) {
       updates.push(`${field} = $${idx}`);
-      values.push(body[field]);
+      values.push(valorDeCampo(field, body[field]));
       idx++;
     }
   }

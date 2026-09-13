@@ -93,11 +93,52 @@ export function isEncrypted(value: string | null | undefined): boolean {
 }
 
 /**
- * Devuelve el plaintext. Si está cifrado, lo descifra; si no, lo devuelve tal cual.
- * Útil mientras algunos valores están en texto plano y otros ya cifrados.
+ * Error de credencial que no se pudo leer cifrada. Se distingue del resto para
+ * que quien la atrape sepa que es de configuración y no de red ni de Alegra.
  */
-export function decryptIfNeeded(value: string | null | undefined): string | null {
+export class CredencialIlegible extends Error {
+  constructor(mensaje: string) {
+    super(mensaje);
+    this.name = 'CredencialIlegible';
+  }
+}
+
+/**
+ * Descifra una credencial guardada en la base. **Exige que esté cifrada.**
+ *
+ * Antes existía `decryptIfNeeded`, que si el valor venía en texto plano lo
+ * devolvía tal cual. Era cómodo para migrar y a la vez el agujero entero: una
+ * credencial de facturación podía quedarse sin cifrar para siempre y el sistema
+ * funcionaba igual, **sin que nada avisara**. Un cifrado que es opcional no es
+ * una medida de seguridad, es una intención.
+ *
+ * Ahora falla, y el mensaje dice qué correr. Una factura que no sale queda en
+ * `billing_errors` y se reintenta; una credencial en claro no se arregla sola.
+ *
+ * @param queEs nombre del campo, para que el error diga dónde mirar.
+ */
+export function descifrarCredencial(
+  value: string | null | undefined,
+  queEs = 'la credencial',
+): string | null {
   if (!value) return null;
-  if (isEncrypted(value)) return decrypt(value);
-  return value;
+
+  if (!isEncrypted(value)) {
+    throw new CredencialIlegible(
+      `${queEs} está guardada en texto plano. Ciframe con: npm run db:encrypt-billing-keys ` +
+        '(en producción: docker compose exec backend npm run db:encrypt-billing-keys:prod).',
+    );
+  }
+
+  try {
+    return decrypt(value);
+  } catch {
+    // El error de GCM ("unable to authenticate data") no le dice nada a nadie.
+    // Las dos causas reales son éstas, y conviene nombrarlas.
+    throw new CredencialIlegible(
+      `${queEs} no se pudo descifrar. O ENCRYPTION_KEY no es la que se usó para ` +
+        'cifrarla —revisa si se rotó sin correr db:rotate-key— o el valor guardado no es ' +
+        'un cifrado válido.',
+    );
+  }
 }

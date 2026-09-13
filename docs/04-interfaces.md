@@ -61,7 +61,7 @@ que emite `pino` para poder correlacionar.
 
 ### Endpoints
 
-78 en 14 módulos. Los agrupados por recurso:
+79 en 14 módulos. Los agrupados por recurso:
 
 <details>
 <summary><strong>auth</strong> (4)</summary>
@@ -112,7 +112,7 @@ CRUD estándar, más:
 </details>
 
 <details>
-<summary><strong>billing</strong> (9)</summary>
+<summary><strong>billing</strong> (10)</summary>
 
 | Método | Ruta |
 |---|---|
@@ -121,6 +121,7 @@ CRUD estándar, más:
 | POST | `/billing/retry/:paymentId` |
 | POST | `/billing/credit-note/:paymentId` |
 | GET | `/billing/invoices`, `/pending`, `/config` |
+| PUT | `/billing/config/credentials` — las guarda cifradas; no devuelve el valor |
 | POST | `/billing/config/test`, `/sync-services` |
 </details>
 

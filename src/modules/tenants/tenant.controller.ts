@@ -3,6 +3,7 @@ import * as db from '../../shared/db';
 import { AppError } from '../../shared/middleware/errorHandler';
 import { getTenantUsage } from '../../shared/middleware/planLimits';
 import { getTenantToday } from '../../shared/utils/dateUtils';
+import { valorDeCampo } from '../../shared/utils/telefono';
 import type { TenantRow, UserRow } from '../../types/entities';
 
 // ─── Campos permitidos para PATCH /api/tenants/me ────────────────────────────
@@ -41,7 +42,10 @@ export async function updateCurrent(req: Request, res: Response): Promise<void> 
   for (const field of ALLOWED_FIELDS) {
     if (body[field] !== undefined) {
       updates.push(`${field} = $${paramIndex}`);
-      values.push(body[field]);
+      // `phone` y `whatsapp_phone` se canonizan: esta ruta no pasa por Zod, y
+      // un whatsapp_phone mal escrito deja al bot respondiendo "Tenant no
+      // encontrado" a todo, con el error apuntando al backend y no acá.
+      values.push(valorDeCampo(field, body[field]));
       paramIndex++;
     }
   }

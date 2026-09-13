@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import * as db from '../../shared/db';
 import { AppError } from '../../shared/middleware/errorHandler';
 import { anonimizarCliente } from '../../shared/db/retencion';
-import { normalizarTelefono } from '../../shared/utils/telefono';
+import { valorDeCampo } from '../../shared/utils/telefono';
 import type { CustomerRow, VehicleRow } from '../../types/entities';
 import type { CustomerCreateBody } from '../../shared/middleware/validate';
 
@@ -110,8 +110,7 @@ export async function update(req: Request, res: Response): Promise<void> {
       // una edición desde el panel puede desenlazar al cliente de su WhatsApp
       // —exactamente el bug que `normalizarTelefono` viene a cerrar— y encima
       // sólo en la edición, que es donde menos se va a buscar.
-      const valor = jsKey === 'phone' ? normalizarTelefono(body[jsKey]) : body[jsKey];
-      values.push(valor);
+      values.push(valorDeCampo(dbKey, body[jsKey]));
       idx++;
     }
   }

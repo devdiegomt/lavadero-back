@@ -14,6 +14,7 @@
  *   POST   /api/billing/credit-note/:paymentId — Genera nota crédito (anulación)
  *   POST   /api/billing/retry/:paymentId       — Reintenta factura fallida
  *   GET    /api/billing/config                 — Estado de configuración fiscal
+ *   PUT    /api/billing/config/credentials     — Guarda las credenciales, cifradas
  *   POST   /api/billing/config/test            — Prueba conexión con Alegra
  *   POST   /api/billing/sync-services          — Sincroniza servicios con Alegra
  */
@@ -21,6 +22,7 @@
 import type { Request, Response } from 'express';
 import * as db from '../../shared/db';
 import { AppError } from '../../shared/middleware/errorHandler';
+import { encrypt, isEncrypted } from '../../shared/utils/crypto';
 import type { TenantRow } from '../../types/entities';
 
 // `alegra.client` y `billing.sync` aún viven como .js — usamos firmas mínimas tipadas
@@ -640,6 +642,10 @@ export async function getConfig(req: Request, res: Response): Promise<void> {
   res.json({
     provider:    tenant.billing_provider ?? null,
     isConfigured,
+    // Que la credencial esté cifrada es visible a propósito: mientras no lo
+    // esté, el panel puede decirlo en vez de que nadie se entere. Nunca se
+    // devuelve el valor, ni cifrado.
+    credencialCifrada: tenant.billing_api_key ? isEncrypted(tenant.billing_api_key) : null,
     connectionOk,
     resolution:  tenant.billing_resolution ?? null,
     prefix:      tenant.billing_prefix ?? null,
@@ -653,6 +659,58 @@ export async function getConfig(req: Request, res: Response): Promise<void> {
       resolution:    nt.resolution,
       status:        nt.status,
     })),
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// PUT /api/billing/config/credentials
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Guarda las credenciales de Alegra, **cifradas**.
+ *
+ * Hasta ahora no existía dónde escribirlas: la única forma era un UPDATE por
+ * SQL, y por eso terminaban en texto plano. Cifrar al leer no sirve si no hay
+ * una puerta que cifre al escribir; ésta es esa puerta.
+ *
+ * El valor no se devuelve nunca, ni cifrado ni enmascarado más allá de decir
+ * que quedó guardado.
+ */
+export async function setCredentials(req: Request, res: Response): Promise<void> {
+  const { email, token } = req.body as { email: string; token: string };
+
+  // El formato que espera alegra.client. Los dos pedazos van juntos en una
+  // columna porque así estaba el esquema; separarlos es otra migración.
+  const credencial = `${email}:${token}`;
+
+  const { rows } = await db.query<{ id: string }>(
+    `UPDATE tenants SET billing_provider = 'alegra', billing_api_key = $1, updated_at = NOW()
+     WHERE id = $2 RETURNING id`,
+    [encrypt(credencial), req.tenantId],
+  );
+
+  if (rows.length === 0) throw new AppError('Lavadero no encontrado', 404);
+
+  // Se prueba contra Alegra de una: una credencial mal copiada guardada en
+  // silencio se descubre recién cuando falla la primera factura, que es el
+  // peor momento posible.
+  let conexionOk = false;
+  let motivo: string | null = null;
+  try {
+    const tenant = await getTenant(req.tenantId!);
+    await createAlegraClientForTenant(tenant).getCompanyInfo();
+    conexionOk = true;
+  } catch (err) {
+    motivo = (err as Error).message;
+  }
+
+  res.json({
+    message: 'Credenciales guardadas y cifradas',
+    credencialCifrada: true,
+    conexionOk,
+    // Se guardan igual aunque la conexión falle: puede ser Alegra caída y no la
+    // credencial. Pero se dice, para que nadie asuma que quedó funcionando.
+    ...(conexionOk ? {} : { advertencia: 'Se guardaron, pero Alegra no respondió', motivo }),
   });
 }
 
