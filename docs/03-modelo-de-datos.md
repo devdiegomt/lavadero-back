@@ -256,6 +256,8 @@ npm run db:migrate-wa-lid     # identificación por LID
 npm run db:migrate-consent    # autorización y retención (Ley 1581)
 npm run db:migrate-agenda     # días de apertura y ventana de reserva
 npm run db:migrate-telefonos  # teléfonos a forma canónica
+npm run db:migrate-tipos-vehiculo  # cierra vehicle_type a los tipos con precio
+npm run db:encrypt-billing-keys    # cifra las credenciales de facturación
 # o todas:
 npm run db:migrate-all
 ```

@@ -61,7 +61,7 @@ router.post('/', authenticate, requireTenant, authorize('admin'), crearServicio)
 | Rate limit | 100 peticiones / 15 min sobre `/api/` | Global, por IP — **excepto `/api/wa-bridge`** |
 | Rate limit de `wa-bridge` | 120 / 15 min **por cliente de WhatsApp** | Ver abajo |
 | Body limit | 1 MB | Contra cargas grandes |
-| Validación | Zod en los `POST` de alta, `validarUuid` en todo `:id`, schema de query en los listados | Ver brecha #2 en §7 |
+| Validación | Zod en altas, `PATCH` y query; `validarUuid` en todo `:id`; códigos de PostgreSQL traducidos a 400 | Ver brecha #2 en §7 |
 
 ### Límite específico del login
 
@@ -378,7 +378,7 @@ Ordenadas por relación entre riesgo y esfuerzo.
 
 | # | Brecha | Riesgo | Esfuerzo |
 |---|---|---|---|
-| 2 | **Validación Zod parcial** — los `POST` de alta validan; los cuerpos de `PATCH` y el módulo `whatsapp`, no | Entrada no validada hacia la base | Medio |
+| 2 | **Validación Zod ausente en `whatsapp`** — el resto de los módulos ya valida alta, `PATCH` y query | Entrada no validada hacia la base, pero tras la clave compartida de n8n | Bajo |
 | 3 | **Tokens en `localStorage`** (frontend) | Un XSS expone la sesión | Alto (implica cookies httpOnly y CSRF) |
 | 4 | **Sin auditoría de acciones** — sólo hay `appointment_status_log` | No se puede reconstruir quién cambió qué | Medio |
 | 5 | **Sin RLS en PostgreSQL** | Una consulta mal escrita cruza tenants | Alto |
@@ -386,9 +386,11 @@ Ordenadas por relación entre riesgo y esfuerzo.
 
 ### Notas sobre algunas
 
-**#2 — validación.** Los parámetros llegan directo a las consultas. Están
-parametrizadas, así que no hay inyección SQL, pero sí entra basura: fechas
-inválidas, IDs con formato incorrecto, campos que producen 500 en vez de 400.
+**#2 — validación.** Lo que queda es el módulo `whatsapp`: `wa-bridge` y el
+webhook validan a mano, campo por campo. Baja prioridad y no por descuido —
+detrás de `n8nAuth`, quien llega ahí ya demostró conocer la clave compartida, así
+que no es entrada de un desconocido. Igual conviene: la validación a mano se
+olvida de un caso y el síntoma aparece lejos.
 
 > **Corrección (2026-09).** La entrada describía esto como "Zod ausente en seis
 > módulos", y al medirlo resultó impreciso en las dos direcciones:
@@ -403,10 +405,24 @@ inválidas, IDs con formato incorrecto, campos que producen 500 en vez de 400.
 >   resuelta.
 >
 > Las tres clases de 500 —ids que no son UUID, query malformado, cuerpos que no
-> calzan con la columna— están cerradas y hay una prueba que recorre las rutas
-> con basura y falla si alguna vuelve a contestar 5xx. Lo que queda de la brecha
-> es el contenido de los cuerpos de `PATCH`, que siguen pasando por listas de
-> campos permitidos en vez de por un schema.
+> calzan con la columna— están cerradas, y hay una prueba que recorre las rutas
+> con basura y falla si alguna vuelve a contestar 5xx.
+>
+> **Segunda medición (2026-09).** Al sondear los cuerpos de `PATCH` aparecieron
+> nueve 500 más y, peor, cosas que se guardaban con un 200: un email que no es
+> email —en `users` es con lo que se inicia sesión— y un `vehicle_type`
+> inventado. Ese último no era cosmético: `getServicePrice` cae a `price_sedan`
+> cuando el tipo no está en el mapa, así que **una camioneta mal tipeada se
+> cobraba como sedán**, sin error y sin aviso.
+>
+> Los cinco `PATCH` validan ahora con schema, `vehicle_type` tiene `CHECK` en la
+> base —de ese campo depende cuánta plata se cobra, y eso no debería apoyarse en
+> que todas las rutas se acuerden de validar— y los códigos de PostgreSQL que
+> significan "entrada inválida" se traducen a 400 en el `errorHandler`, que cubre
+> también las rutas que se agreguen después.
+>
+> Lo que queda es el módulo `whatsapp`, que sigue validando a mano. Es la brecha
+> #2 de abajo, ya sin los demás módulos.
 >
 > La lección, otra vez la de la [metodología §2](07-metodologia.md): medir antes
 > de describir. La tabla llevaba meses afirmando algo que una sonda de veinte

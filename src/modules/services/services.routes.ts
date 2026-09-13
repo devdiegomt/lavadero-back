@@ -11,7 +11,7 @@ router.use(authenticate, requireTenant);
 router.get('/',           asyncHandler(ctrl.list));
 router.get('/:id',        validarUuid('id'), asyncHandler(ctrl.getById));
 router.post('/',          authorize('admin'), planLimit('services'), validate(schemas.serviceCreate), asyncHandler(ctrl.create));
-router.patch('/:id',      validarUuid('id'), authorize('admin'), asyncHandler(ctrl.update));
+router.patch('/:id',      validarUuid('id'), authorize('admin'), validate(schemas.serviceUpdate), asyncHandler(ctrl.update));
 router.patch('/:id/toggle', validarUuid('id'), authorize('admin'), asyncHandler(ctrl.toggle));
 
 export default router;

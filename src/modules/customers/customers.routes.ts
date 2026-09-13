@@ -10,7 +10,7 @@ router.use(authenticate, requireTenant);
 router.get('/',                validate(schemas.queryListado, 'query'), asyncHandler(ctrl.list));
 router.get('/:id',             validarUuid('id'), asyncHandler(ctrl.getById));
 router.post('/',               validate(schemas.customerCreate), asyncHandler(ctrl.create));
-router.patch('/:id',           validarUuid('id'), asyncHandler(ctrl.update));
+router.patch('/:id',           validarUuid('id'), validate(schemas.customerUpdate), asyncHandler(ctrl.update));
 router.delete('/:id',          validarUuid('id'), asyncHandler(ctrl.remove));
 // Supresion de datos personales (Ley 1581). Es irreversible y distinta del
 // DELETE de arriba, que solo hace borrado logico y conserva los datos.
