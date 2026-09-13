@@ -10,7 +10,7 @@ router.use(authenticate, requireTenant);
 
 router.get('/',                   asyncHandler(ctrl.list));
 router.post('/',  authorize('admin'), planLimit('operators'), validate(schemas.userCreate), asyncHandler(ctrl.create));
-router.patch('/:id',              validarUuid('id'), authorize('admin'), asyncHandler(ctrl.update));
+router.patch('/:id',              validarUuid('id'), authorize('admin'), validate(schemas.userUpdate), asyncHandler(ctrl.update));
 router.patch('/:id/toggle',       validarUuid('id'), authorize('admin'), asyncHandler(ctrl.toggle));
 router.patch('/:id/password',     validarUuid('id'), validate(schemas.changePassword), asyncHandler(ctrl.changePassword));
 

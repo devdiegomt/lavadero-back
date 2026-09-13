@@ -145,7 +145,7 @@ WhatsApp, y autorización y retención de datos personales según la Ley 1581.
 | RNF-MAN-1 | Todo el backend en TypeScript con `strict` | ✅ |
 | RNF-MAN-2 | Los módulos siguen la misma estructura | ✅ 14 módulos, `controller` + `routes` |
 | RNF-MAN-3 | Las decisiones estructurales quedan en un ADR | ✅ Ver `adr/` |
-| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 286 tests |
+| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 294 tests |
 
 ### Compatibilidad
 

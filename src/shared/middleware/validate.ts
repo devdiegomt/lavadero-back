@@ -68,6 +68,39 @@ const optStr = (max = 150) =>
     .nullable()
     .transform((v) => v || null);
 
+/**
+ * Versiones de `optStr` y `optEmail` para los `PATCH`.
+ *
+ * **No son un detalle de estilo.** `optStr` termina en
+ * `.optional().nullable().transform(v => v || null)`, y ese transform corre
+ * también cuando el campo **no vino**: convierte ausente en `null`. En un alta
+ * está bien —lo que no se manda queda vacío— pero en un `PATCH` significa que
+ * pedir un cambio de nombre **borra de paso** apellido, email, documento y
+ * notas, porque el controller ve la clave presente con valor `null` y la
+ * escribe.
+ *
+ * Acá el `.optional()` va afuera y no hay transform después, así que el campo
+ * ausente sigue ausente. Mandar `null` explícito sí lo vacía, que es lo que se
+ * espera de un `PATCH`.
+ *
+ * Se descubrió con la prueba "un PATCH no pisa los campos que no se mandaron",
+ * escrita justamente porque era lo que podía salir mal sin hacer ruido.
+ */
+const optStrParche = (max = 150) =>
+  z
+    .string()
+    .max(max)
+    .transform((v) => v.trim())
+    .nullable()
+    .optional();
+
+const optEmailParche = z
+  .string()
+  .email('Email inválido')
+  .transform((v) => v.toLowerCase().trim())
+  .nullable()
+  .optional();
+
 const priceCents = z.number().int().min(0, 'El precio no puede ser negativo').default(0);
 
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD');
@@ -301,15 +334,102 @@ export const schemas = {
     date: fechaReal.optional(),
   }),
 
-  // ── PATCH /api/tenants/me ─────────────────────────────────────────────────
-  // Se validan sólo los campos que hoy revientan: los que van a columnas
-  // numéricas o de tipo TIME. El resto sigue pasando por la lista de campos
-  // permitidos del controller, que es la que decide qué se puede tocar.
+  // ── Cuerpos de PATCH ──────────────────────────────────────────────────────
+  //
+  // Los `POST` de alta validaban desde siempre; los `PATCH` no, y por ahí
+  // entraba lo que el alta rechazaba: un nombre de 5.000 caracteres (500 contra
+  // `VARCHAR(80)`), un email que no es email, un tipo de vehículo inventado.
+  //
+  // Tres reglas que valen para los cinco:
+  //
+  // 1. **Ningún `.default()`.** En un PATCH un default escribiría un campo que
+  //    nadie mandó: pedir un cambio de teléfono terminaría además reseteando el
+  //    tipo de documento. Por eso no se derivan de los schemas de alta con
+  //    `.partial()`, que arrastraría sus defaults.
+  // 2. **`passthrough`.** Cada controller ya tiene su lista de campos
+  //    permitidos, que es la que decide qué se puede tocar. Si acá se
+  //    descartaran las claves no nombradas, un campo que este schema olvide
+  //    dejaría de guardarse **en silencio** — y eso es peor que un 400.
+  // 3. **Los mismos límites que el alta**, reusando los mismos helpers. Dos
+  //    definiciones del mismo campo son una definición mal.
+
+  customerUpdate: z
+    .object({
+      firstName: str(80).optional(),
+      lastName: optStrParche(80),
+      // Se permite vaciarlo: un cliente que llegó por WhatsApp se identifica por
+      // su LID. Si no tiene ninguno de los dos, el CHECK de la base lo rechaza y
+      // el errorHandler lo traduce a un 400 que explica por qué.
+      phone: phone.optional().nullable(),
+      email: optEmailParche,
+      documentType: z.enum(['CC', 'NIT', 'CE', 'PP', 'TI']).optional(),
+      documentNumber: optStrParche(20),
+      notes: optStrParche(1000),
+    })
+    .passthrough(),
+
+  vehicleUpdate: z
+    .object({
+      plate: plate.optional(),
+      // Cerrado a propósito: `getServicePrice` cae a `price_sedan` cuando el
+      // tipo no está en el mapa, así que una camioneta mal tipeada se cobraría
+      // como sedán. Es plata, no cosmética.
+      vehicleType: z.enum(['sedan', 'suv', 'camioneta', 'moto', 'pickup']).optional(),
+      brand: optStrParche(50),
+      model: optStrParche(50),
+      color: optStrParche(30),
+      year: z.number().int().min(1900).max(2100).optional().nullable(),
+      notes: optStrParche(500),
+    })
+    .passthrough(),
+
+  serviceUpdate: z
+    .object({
+      name: str(100).optional(),
+      description: optStrParche(500),
+      priceSedan: priceCents.optional(),
+      priceSuv: priceCents.optional(),
+      priceCamioneta: priceCents.optional(),
+      priceMoto: priceCents.optional(),
+      pricePickup: priceCents.optional(),
+      estimatedMinutes: z.number().int().min(5).max(600).optional(),
+      sortOrder: z.number().int().min(0).max(100).optional(),
+    })
+    .passthrough(),
+
+  userUpdate: z
+    .object({
+      // El email es con lo que se inicia sesión: uno inválido deja la cuenta
+      // sin forma de entrar ni de recuperarse.
+      email: z
+        .string()
+        .email('Email inválido')
+        .transform((v) => v.toLowerCase().trim())
+        .optional(),
+      firstName: str(80).optional(),
+      lastName: optStrParche(80),
+      phone: phone.optional().nullable(),
+      role: z.enum(['admin', 'operator']).optional(),
+    })
+    .passthrough(),
+
+  // Las claves van en snake_case porque la lista de campos permitidos de este
+  // controller usa los nombres de las columnas, no los del resto de la API.
   tenantUpdate: z
     .object({
-      bays_count: z.number().int().min(1).max(20).optional(),
+      name: str(150).optional(),
+      nit: optStrParche(20),
+      owner_name: optStrParche(150),
+      phone: phone.optional().nullable(),
+      email: optEmailParche,
+      address: optStrParche(300),
+      city: optStrParche(100),
       opening_time: timeStr,
       closing_time: timeStr,
+      bays_count: z.number().int().min(1).max(20).optional(),
+      whatsapp_enabled: z.boolean().optional(),
+      whatsapp_phone: phone.optional().nullable(),
+      whatsapp_provider: optStrParche(20),
     })
     .passthrough(),
 

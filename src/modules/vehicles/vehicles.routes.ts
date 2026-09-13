@@ -11,7 +11,7 @@ router.get('/',              validate(schemas.queryListado, 'query'), asyncHandl
 router.get('/plate/:plate',  asyncHandler(ctrl.getByPlate));
 router.get('/:id',           validarUuid('id'), asyncHandler(ctrl.getById));
 router.post('/',             validate(schemas.vehicleCreate), asyncHandler(ctrl.create));
-router.patch('/:id',         validarUuid('id'), asyncHandler(ctrl.update));
+router.patch('/:id',         validarUuid('id'), validate(schemas.vehicleUpdate), asyncHandler(ctrl.update));
 router.delete('/:id',        validarUuid('id'), asyncHandler(ctrl.remove));
 router.get('/:id/history',   validarUuid('id'), asyncHandler(ctrl.getHistory));
 

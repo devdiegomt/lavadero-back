@@ -147,6 +147,157 @@ describe('cuerpos que no calzan con la columna dan 400', () => {
   });
 });
 
+// ─── Contenido de los cuerpos de PATCH ────────────────────────────────────────
+
+describe('lo que el alta rechazaba, el PATCH también', () => {
+  // Los `POST` de alta validaban desde siempre. Los `PATCH` no, así que por ahí
+  // entraba justo lo que el alta rechazaba. Se midió igual que el resto: nueve
+  // casos más devolvían 500, y otros guardaban basura con un 200.
+  let customerId: string;
+  let vehicleId: string;
+  let serviceId: string;
+  let userId: string;
+
+  // Cliente y vehículo **propios**, no los del seed. Estas pruebas escriben, y
+  // la primera versión renombraba al cliente del seed: dos suites que lo leen
+  // empezaron a fallar sin relación aparente con este cambio. Es el mismo
+  // problema que ya había dejado el reloj del tenant en una zona ajena.
+  beforeAll(async () => {
+    const { rows: t } = await db.query<{ id: string }>(
+      `SELECT id FROM tenants WHERE slug = 'el-brillante' LIMIT 1`,
+    );
+    const tenantId = t[0].id;
+
+    const { rows: c } = await db.query<{ id: string }>(
+      `INSERT INTO customers (tenant_id, first_name, last_name, phone)
+       VALUES ($1, 'Entrada', 'Invalida', '+573009998877') RETURNING id`,
+      [tenantId],
+    );
+    customerId = c[0].id;
+
+    const { rows: v } = await db.query<{ id: string }>(
+      `INSERT INTO vehicles (tenant_id, customer_id, plate, vehicle_type)
+       VALUES ($1, $2, 'INV999', 'sedan') RETURNING id`,
+      [tenantId, customerId],
+    );
+    vehicleId = v[0].id;
+
+    // Éstos sólo se leen: todos los casos que los tocan esperan 400.
+    const { rows: s } = await db.query<{ id: string }>(
+      `SELECT id FROM services WHERE tenant_id = $1 LIMIT 1`, [tenantId],
+    );
+    serviceId = s[0].id;
+    const { rows: u } = await db.query<{ id: string }>(
+      `SELECT id FROM users WHERE role = 'operator' AND tenant_id = $1 LIMIT 1`, [tenantId],
+    );
+    userId = u[0].id;
+  });
+
+  afterAll(async () => {
+    await db.query(`DELETE FROM vehicles WHERE id = $1`, [vehicleId]);
+    await db.query(`DELETE FROM customers WHERE id = $1`, [customerId]);
+  });
+
+  const LARGO = 'X'.repeat(5000);
+
+  it('un texto más largo que la columna da 400, no 500', async () => {
+    for (const ruta of [
+      () => `/api/customers/${customerId}`,
+      () => `/api/services/${serviceId}`,
+      () => `/api/users/${userId}`,
+    ]) {
+      const res = await pedir({ metodo: 'patch', ruta: ruta(), body: { firstName: LARGO, name: LARGO } });
+      expect(res.status).toBe(400);
+    }
+
+    const tenant = await pedir({ metodo: 'patch', ruta: '/api/tenants/me', body: { name: LARGO } });
+    expect(tenant.status).toBe(400);
+  });
+
+  it('un email que no es email ya no se guarda', async () => {
+    // Antes respondía 200 y lo guardaba. En `users` el email es con lo que se
+    // inicia sesión: uno inválido deja la cuenta sin forma de entrar.
+    for (const ruta of [`/api/customers/${customerId}`, `/api/users/${userId}`, '/api/tenants/me']) {
+      const res = await pedir({ metodo: 'patch', ruta, body: { email: 'no-es-email' } });
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it('un tipo de vehículo inventado se rechaza: de eso depende el precio', async () => {
+    // Antes respondía 200. `getServicePrice` cae a `price_sedan` cuando el tipo
+    // no está en el mapa, así que una camioneta mal tipeada se cobraba como
+    // sedán, sin error y sin aviso.
+    const res = await pedir({
+      metodo: 'patch',
+      ruta: `/api/vehicles/${vehicleId}`,
+      body: { vehicleType: 'submarino' },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('y la base también lo rechaza, no sólo la ruta', async () => {
+    // El borde se valida ruta por ruta y es fácil que una quede sin validar.
+    // De este campo depende cuánta plata se cobra, así que el invariante vive
+    // también en la base.
+    await expect(
+      db.query(`UPDATE vehicles SET vehicle_type = 'helicoptero' WHERE id = $1`, [vehicleId]),
+    ).rejects.toThrow(/chk_vehicles_tipo/);
+  });
+
+  it('un año que no es número da 400', async () => {
+    const res = await pedir({
+      metodo: 'patch',
+      ruta: `/api/vehicles/${vehicleId}`,
+      body: { year: 'mil novecientos' },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('un precio negativo se rechaza', async () => {
+    const res = await pedir({
+      metodo: 'patch',
+      ruta: `/api/services/${serviceId}`,
+      body: { priceSedan: -5000 },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('dejar a un cliente sin teléfono ni WhatsApp da 400 y explica por qué', async () => {
+    // Lo rechaza el CHECK de la base. Lo que importa acá es que el mensaje sirva:
+    // antes era "Error interno del servidor".
+    const res = await pedir({
+      metodo: 'patch',
+      ruta: `/api/customers/${customerId}`,
+      body: { phone: null },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/tel[eé]fono|WhatsApp/i);
+    // Y apunta a la supresión, que es lo que esa persona probablemente quería.
+    expect(res.body.error).toMatch(/supresi[oó]n/i);
+  });
+
+  it('un PATCH no pisa los campos que no se mandaron', async () => {
+    // El riesgo de derivar estos schemas del alta con `.partial()`: los
+    // `.default()` se colarían y un cambio de nombre resetearía el tipo de
+    // documento de paso.
+    await db.query(
+      `UPDATE customers SET document_type = 'NIT', notes = 'no me toques' WHERE id = $1`,
+      [customerId],
+    );
+
+    const res = await pedir({
+      metodo: 'patch',
+      ruta: `/api/customers/${customerId}`,
+      body: { firstName: 'Renombrado' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.document_type).toBe('NIT');
+    expect(res.body.notes).toBe('no me toques');
+  });
+});
+
 // ─── Lo que NO debe cambiar ───────────────────────────────────────────────────
 
 describe('lo que seguía funcionando sigue funcionando', () => {
