@@ -6,6 +6,7 @@
  */
 
 const db = require('../../shared/db');
+const { normalizarTelefono } = require('../../shared/utils/telefono');
 const { SessionManager } = require('./session');
 const { createSenderForTenant } = require('./sender');
 
@@ -309,21 +310,25 @@ async function getStats(req, res) {
 function extractMessageData(req) {
   const body = req.body;
 
-  // Twilio format
+  // El telefono se canoniza aca, en la unica puerta por la que entra: de aca
+  // sale hacia la clave de sesion, la busqueda del cliente, la auditoria y los
+  // flujos. Si cada uno lo normalizara por su cuenta, bastaria con que a uno se
+  // le olvide para que la sesion y el cliente dejen de coincidir.
   if (body.From && body.Body) {
+    // Twilio
     return {
-      phone: body.From.replace('whatsapp:', ''),
+      phone: normalizarTelefono(body.From.replace('whatsapp:', '')),
       text: body.Body,
       tenantPhone: body.To?.replace('whatsapp:', ''),
     };
   }
 
-  // 360dialog / Meta Cloud API format
+  // 360dialog / Meta Cloud API
   if (body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]) {
     const change = body.entry[0].changes[0].value;
     const msg = change.messages[0];
     return {
-      phone: '+' + msg.from,
+      phone: normalizarTelefono(msg.from),
       text: msg.text?.body || '',
       tenantPhone: '+' + change.metadata?.display_phone_number?.replace(/\D/g, ''),
     };
@@ -345,13 +350,16 @@ function sanitize(text) {
  * Busca el tenant por número de WhatsApp.
  */
 async function getTenantByPhone(phone) {
-  // Normalizar número
-  const normalized = phone.replace(/[\s\-\(\)]/g, '');
+  // Las dos formas, por lo mismo que en wa-bridge.routes.ts: la canónica y la
+  // que se usaba antes, para que el codigo no dependa de que la migracion de
+  // telefonos ya haya corrido.
+  const canonico = normalizarTelefono(phone);
+  const comoAntes = phone.replace(/[\s\-\(\)]/g, '');
   const { rows } = await db.query(
     `SELECT * FROM tenants
-     WHERE whatsapp_phone = $1 AND is_active = true
+     WHERE whatsapp_phone IN ($1, $2) AND is_active = true
      LIMIT 1`,
-    [normalized]
+    [canonico ?? comoAntes, comoAntes]
   );
   return rows[0] || null;
 }

@@ -17,6 +17,7 @@
 import { z } from 'zod';
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import { AppError } from './errorHandler';
+import { normalizarTelefono } from '../utils/telefono';
 
 // ─── Helpers reutilizables ────────────────────────────────────────────────────
 
@@ -30,11 +31,20 @@ const plate = z
   .transform((v) => v.toUpperCase().replace(/[\s-]/g, ''))
   .refine((v) => /^[A-Z]{3}\d{2,3}[A-Z]?$/.test(v), 'Formato de placa inválido');
 
+/**
+ * Teléfono en forma canónica. Se normaliza al entrar, igual que la placa: que
+ * el mismo número escrito de dos maneras quede como dos clientes distintos es
+ * un bug que ya pasó. Ver `utils/telefono.ts`.
+ */
 const phone = z
   .string()
   .min(7, 'Teléfono muy corto')
   .max(20, 'Teléfono muy largo')
-  .transform((v) => v.trim());
+  .transform((v) => normalizarTelefono(v) ?? '')
+  .refine((v) => v !== '', 'Teléfono sin dígitos')
+  // La normalización casi siempre acorta, pero un valor raro podría no hacerlo
+  // y `phone` es VARCHAR(20): mejor 400 que un 500 desde la base.
+  .refine((v) => v.length <= 20, 'Teléfono muy largo');
 
 const optEmail = z
   .string()

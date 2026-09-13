@@ -8,6 +8,7 @@ import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import * as db from '../../shared/db';
 import { leerIdentidad } from './wa-identity';
+import { normalizarTelefono } from '../../shared/utils/telefono';
 import { bookingStep } from './wa-bridge.booking';
 import * as ctrl from './wa-bridge.controller';
 
@@ -49,15 +50,22 @@ async function resolveTenant(req: Request, res: Response, next: NextFunction): P
       return;
     }
 
-    const normalized = tenantPhone.replace(/[\s\-()]/g, '');
+    const canonico = normalizarTelefono(tenantPhone);
+    // Se buscan las dos formas a propósito: la canónica y la que usaba este
+    // middleware antes de que existiera `normalizarTelefono`. Así el código
+    // funciona igual antes y después de `db:migrate-telefonos`, y un despliegue
+    // que se adelante a la migración no deja al lavadero respondiendo
+    // "Tenant no encontrado" a todo.
+    const comoAntes = tenantPhone.replace(/[\s\-()]/g, '');
 
     const { rows } = await db.query<{ id: string }>(
-      `SELECT id FROM tenants WHERE whatsapp_phone = $1 AND is_active = true LIMIT 1`,
-      [normalized],
+      `SELECT id FROM tenants
+       WHERE whatsapp_phone IN ($1, $2) AND is_active = true LIMIT 1`,
+      [canonico ?? comoAntes, comoAntes],
     );
 
     if (!rows[0]) {
-      res.status(404).json({ error: `Tenant no encontrado para phone: ${normalized}` });
+      res.status(404).json({ error: `Tenant no encontrado para phone: ${canonico ?? comoAntes}` });
       return;
     }
 

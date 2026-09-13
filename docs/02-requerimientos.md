@@ -40,6 +40,7 @@ Nomenclatura: `RF-<módulo>-<n>`.
 | RF-CLI-3 | Se busca un vehículo por placa | `GET /api/vehicles/plate/:plate` |
 | RF-CLI-4 | Se consulta el historial de un vehículo o de un cliente | `/api/history/*` |
 | RF-CLI-5 | Un cliente se identifica por teléfono **o** por LID de WhatsApp; debe tener al menos uno | `chk_customers_identidad` |
+| RF-CLI-7 | El teléfono se guarda en una sola forma (E.164), así el cliente del panel y el de WhatsApp son el mismo | `normalizarTelefono()` |
 | RF-CLI-6 | Un cliente se puede anonimizar conservando sus turnos como historial de negocio | `anonimizarCliente()` |
 
 ### Servicios y precios
@@ -143,7 +144,7 @@ retención de datos personales según la Ley 1581.
 | RNF-MAN-1 | Todo el backend en TypeScript con `strict` | ✅ |
 | RNF-MAN-2 | Los módulos siguen la misma estructura | ✅ 14 módulos, `controller` + `routes` |
 | RNF-MAN-3 | Las decisiones estructurales quedan en un ADR | ✅ Ver `adr/` |
-| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 199 tests |
+| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 220 tests |
 
 ### Compatibilidad
 

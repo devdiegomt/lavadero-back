@@ -112,6 +112,19 @@ La tercera rama del `CHECK` es lo que hace posible anonimizar: un cliente
 anonimizado no tiene ni teléfono ni LID, y sin esa salida la restricción lo
 prohibiría. Ver [Seguridad §5](05-seguridad.md#retención).
 
+**El teléfono se guarda en una sola forma: E.164** (`+573001234567`, sin
+espacios ni guiones). No es cosmética — el enlace entre el cliente del panel y
+el de WhatsApp se hace comparando `phone` **como texto**, así que `3223772019`
+y `+573223772019` eran dos personas para la base. Pasó: un cliente quedó
+duplicado, con el historial partido y `visit_count` contando la mitad en cada
+fila.
+
+`normalizarTelefono()` (`shared/utils/telefono.ts`) canoniza todo lo que entra
+—panel, bot, webhooks— y `npm run db:migrate-telefonos` reescribe lo que ya
+estaba guardado. Lo que **no** hace es adivinar: a un fijo del formato viejo,
+de siete dígitos y sin indicativo de área, no se le pone `+57` delante. Un
+teléfono mal escrito se nota y se corrige; uno inventado parece correcto.
+
 `visit_count` y `last_visit_at` son denormalizaciones para no contar turnos en
 cada consulta. `last_visit_at` es además lo que mide la inactividad para la
 retención.
@@ -240,12 +253,21 @@ npm run db:migrate            # esquema base
 npm run db:migrate-billing    # facturación
 npm run db:migrate-mt         # multi-tenant: planes y límites
 npm run db:migrate-wa-lid     # identificación por LID
-# o las cuatro:
+npm run db:migrate-consent    # autorización y retención (Ley 1581)
+npm run db:migrate-agenda     # días de apertura y ventana de reserva
+npm run db:migrate-telefonos  # teléfonos a forma canónica
+# o todas:
 npm run db:migrate-all
 ```
 
-Todos usan `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`, así que correrlos dos
-veces no rompe nada.
+Las que tocan el esquema usan `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`, así
+que correrlas dos veces no rompe nada.
+
+`db:migrate-telefonos` es distinta: no cambia el esquema, **reescribe datos**.
+Es idempotente igual —la segunda corrida reporta cero filas, porque lo canónico
+ya está canónico— pero por eso su lógica vive en TypeScript y no en SQL: la
+regla de qué se puede normalizar y qué no ya está escrita y probada en
+`utils/telefono.ts`, y tenerla dos veces es tenerla mal una de las dos.
 
 **Limitación conocida:** no hay control de versión del esquema ni rollback. Con
 un solo desarrollador alcanza; con más de uno, o con varios entornos, conviene
