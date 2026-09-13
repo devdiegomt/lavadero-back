@@ -8,12 +8,33 @@ import bcrypt from 'bcryptjs';
 import { pool } from './index';
 import { hashPassword } from '../utils/password';
 
+
+/**
+ * Una sola conexión con el bypass de RLS puesto, para todo el script.
+ *
+ * Los seeds escriben en tablas de varios tenants —y `users` incluye al
+ * superadministrador, cuyo `tenant_id` es `NULL`—. Bajo RLS eso no se puede: la
+ * política dice `tenant_id = current_setting('app.tenant_id')`, y en SQL
+ * `NULL = cualquier cosa` no es verdadero. Con `pool.query` el script muere con
+ * `new row violates row-level security policy`, o —peor, en un DELETE— no borra
+ * nada y no dice nada.
+ *
+ * Va en una conexión sola y no con `queryAdmin` llamada por llamada porque el
+ * ajuste es por conexión: así queda puesto una vez para todo el script.
+ */
+async function abrirConexionConBypass() {
+  const cliente = await pool.connect();
+  await cliente.query(`SELECT set_config('app.bypass_rls', 'on', false)`);
+  return cliente;
+}
+
 async function seed() {
+  const cliente = await abrirConexionConBypass();
   console.log('🌱 Insertando datos de prueba...');
 
   try {
     // Limpiar datos existentes (en orden por foreign keys)
-    await pool.query(`
+    await cliente.query(`
       DELETE FROM payments;
       DELETE FROM appointment_status_log;
       DELETE FROM appointments;
@@ -27,7 +48,7 @@ async function seed() {
 
     // Tenant de prueba
     const tenantId = 'a0000000-0000-0000-0000-000000000001';
-    await pool.query(`
+    await cliente.query(`
       INSERT INTO tenants (id, name, slug, nit, owner_name, phone, email, address, city, bays_count, whatsapp_phone, whatsapp_enabled)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
     `, [
@@ -51,7 +72,7 @@ async function seed() {
     // Usuarios
     const passwordHash = await hashPassword('admin123');
 
-    await pool.query(`
+    await cliente.query(`
       INSERT INTO users (id, tenant_id, email, password_hash, first_name, last_name, phone, role)
       VALUES
         ('b0000000-0000-0000-0000-000000000001', $1, 'admin@elbrillante.co', $2, 'Carlos', 'Rodríguez', '+573001234567', 'admin'),
@@ -60,7 +81,7 @@ async function seed() {
     `, [tenantId, passwordHash]);
 
     // Servicios
-    await pool.query(`
+    await cliente.query(`
       INSERT INTO services (tenant_id, name, description, price_sedan, price_suv, price_camioneta, price_moto, price_pickup, estimated_minutes, sort_order)
       VALUES
         ($1, 'Lavado Básico', 'Lavado exterior con agua, jabón y secado manual', 2500000, 3500000, 3500000, 1500000, 3500000, 30, 1),
@@ -71,7 +92,7 @@ async function seed() {
     `, [tenantId]);
 
     // Clientes
-    await pool.query(`
+    await cliente.query(`
       INSERT INTO customers (id, tenant_id, first_name, last_name, phone, email, document_type, document_number,
                              consent_at, consent_version, consent_source)
       VALUES
@@ -87,7 +108,7 @@ async function seed() {
     `, [tenantId, VERSION_AVISO]);
 
     // Vehículos
-    await pool.query(`
+    await cliente.query(`
       INSERT INTO vehicles (id, tenant_id, customer_id, plate, vehicle_type, brand, model, color, year)
       VALUES
         ('d0000000-0000-0000-0000-000000000001', $1, 'c0000000-0000-0000-0000-000000000001', 'ABC123', 'sedan', 'Chevrolet', 'Spark GT', 'Blanco', 2021),
@@ -114,6 +135,7 @@ async function seed() {
     console.error('❌ Error en seed:', (err as Error).message);
     process.exit(1);
   } finally {
+    cliente.release();
     await pool.end();
   }
 }

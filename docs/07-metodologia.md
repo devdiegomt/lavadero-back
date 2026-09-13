@@ -137,6 +137,15 @@ ciegas ante síntomas mal entendidos. Los casos concretos:
   externo falla, la pregunta que queda es por qué nos tumbó** — y esa parte sí es
   nuestra.
 
+- Se dio por terminado el trabajo de RLS con `npm run test:rls` en verde: la
+  suite entera contra el rol al que sí se le aplican las políticas. Pero **esa
+  suite entra siempre por HTTP**, donde el contexto lo abre `requireTenant`. Lo
+  que corre fuera de una petición —seeds y crons— no lo cubría nada, y activar
+  RLS habría roto los seeds con un error y dejado la limpieza de `billing_errors`
+  **borrando cero filas sin decir nada**. Apareció cuando alguien intentó usarlo
+  de verdad. **Una suite en verde delimita lo que ejercita**, y la pregunta útil
+  no es cuántas pruebas pasan sino por dónde no entra ninguna.
+
 **La regla que sale de ahí:** antes de cambiar código, conseguir el dato que
 distingue entre las causas posibles. Un log, una ejecución, una petición
 reproducida. Si no se puede reproducir, el primer trabajo es hacerlo

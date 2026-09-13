@@ -82,7 +82,28 @@ function tryDecrypt(ciphertext: string, key: Buffer): string | null {
   }
 }
 
+
+/**
+ * Una sola conexión con el bypass de RLS puesto, para todo el script.
+ *
+ * Los seeds escriben en tablas de varios tenants —y `users` incluye al
+ * superadministrador, cuyo `tenant_id` es `NULL`—. Bajo RLS eso no se puede: la
+ * política dice `tenant_id = current_setting('app.tenant_id')`, y en SQL
+ * `NULL = cualquier cosa` no es verdadero. Con `pool.query` el script muere con
+ * `new row violates row-level security policy`, o —peor, en un DELETE— no borra
+ * nada y no dice nada.
+ *
+ * Va en una conexión sola y no con `queryAdmin` llamada por llamada porque el
+ * ajuste es por conexión: así queda puesto una vez para todo el script.
+ */
+async function abrirConexionConBypass() {
+  const cliente = await pool.connect();
+  await cliente.query(`SELECT set_config('app.bypass_rls', 'on', false)`);
+  return cliente;
+}
+
 async function rotate() {
+  const cliente = await abrirConexionConBypass();
   console.log('🔁 Rotando ENCRYPTION_KEY...\n');
 
   const oldKey = loadKey('ENCRYPTION_KEY');
@@ -92,7 +113,7 @@ async function rotate() {
     throw new Error('ENCRYPTION_KEY y NEW_ENCRYPTION_KEY son iguales. No hay nada que rotar.');
   }
 
-  const { rows } = await pool.query(
+  const { rows } = await cliente.query(
     `SELECT id, name, billing_api_key
      FROM tenants
      WHERE billing_api_key IS NOT NULL`
@@ -119,7 +140,7 @@ async function rotate() {
     }
 
     const newCipher = encrypt(plaintext, newKey);
-    await pool.query(
+    await cliente.query(
       `UPDATE tenants SET billing_api_key = $1 WHERE id = $2`,
       [newCipher, tenant.id]
     );
@@ -141,6 +162,7 @@ async function rotate() {
   console.log(`   3. Reinicia el backend`);
   console.log(`   4. Borra cualquier copia de la key vieja de tu password manager`);
 
+  cliente.release();
   return failed === 0;
 }
 

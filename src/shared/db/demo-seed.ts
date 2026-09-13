@@ -40,7 +40,28 @@ const DEMO_VEHICLES = [
   { plate: 'LMN901', type: 'suv', brand: 'Ford', model: 'Territory', color: 'Azul', year: 2023, ci: 9 },
 ];
 
+
+/**
+ * Una sola conexión con el bypass de RLS puesto, para todo el script.
+ *
+ * Los seeds escriben en tablas de varios tenants —y `users` incluye al
+ * superadministrador, cuyo `tenant_id` es `NULL`—. Bajo RLS eso no se puede: la
+ * política dice `tenant_id = current_setting('app.tenant_id')`, y en SQL
+ * `NULL = cualquier cosa` no es verdadero. Con `pool.query` el script muere con
+ * `new row violates row-level security policy`, o —peor, en un DELETE— no borra
+ * nada y no dice nada.
+ *
+ * Va en una conexión sola y no con `queryAdmin` llamada por llamada porque el
+ * ajuste es por conexión: así queda puesto una vez para todo el script.
+ */
+async function abrirConexionConBypass() {
+  const cliente = await pool.connect();
+  await cliente.query(`SELECT set_config('app.bypass_rls', 'on', false)`);
+  return cliente;
+}
+
 async function demoSeed() {
+  const cliente = await abrirConexionConBypass();
   console.log('🎭 Generando datos demo para presentación...\n');
 
   const today = new Date().toISOString().split('T')[0];
@@ -49,12 +70,12 @@ async function demoSeed() {
 
   try {
     // Clean previous demo data (keep seed data)
-    await pool.query("DELETE FROM payments WHERE tenant_id = $1", [TENANT_ID]);
-    await pool.query("DELETE FROM appointment_status_log WHERE appointment_id IN (SELECT id FROM appointments WHERE tenant_id = $1)", [TENANT_ID]);
-    await pool.query("DELETE FROM appointments WHERE tenant_id = $1", [TENANT_ID]);
+    await cliente.query("DELETE FROM payments WHERE tenant_id = $1", [TENANT_ID]);
+    await cliente.query("DELETE FROM appointment_status_log WHERE appointment_id IN (SELECT id FROM appointments WHERE tenant_id = $1)", [TENANT_ID]);
+    await cliente.query("DELETE FROM appointments WHERE tenant_id = $1", [TENANT_ID]);
 
     // Get services
-    const { rows: services } = await pool.query(
+    const { rows: services } = await cliente.query(
       'SELECT * FROM services WHERE tenant_id = $1 AND is_active = true ORDER BY sort_order',
       [TENANT_ID]
     );
@@ -62,7 +83,7 @@ async function demoSeed() {
     // Create demo customers
     const customerIds = [];
     for (const c of DEMO_CUSTOMERS) {
-      const { rows } = await pool.query(
+      const { rows } = await cliente.query(
         `INSERT INTO customers (tenant_id, first_name, last_name, phone, document_type, document_number)
          VALUES ($1, $2, $3, $4, 'CC', $5)
          ON CONFLICT DO NOTHING
@@ -71,7 +92,7 @@ async function demoSeed() {
       );
       // If conflict, just find existing
       if (rows.length === 0) {
-        const { rows: existing } = await pool.query(
+        const { rows: existing } = await cliente.query(
           'SELECT id FROM customers WHERE phone = $1 AND tenant_id = $2 AND deleted_at IS NULL LIMIT 1',
           [c.phone, TENANT_ID]
         );
@@ -86,7 +107,7 @@ async function demoSeed() {
     for (const v of DEMO_VEHICLES) {
       const custId = customerIds[v.ci];
       if (!custId) continue;
-      const { rows } = await pool.query(
+      const { rows } = await cliente.query(
         `INSERT INTO vehicles (tenant_id, customer_id, plate, vehicle_type, brand, model, color, year)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT DO NOTHING
@@ -94,7 +115,7 @@ async function demoSeed() {
         [TENANT_ID, custId, v.plate, v.type, v.brand, v.model, v.color, v.year]
       );
       if (rows.length === 0) {
-        const { rows: existing } = await pool.query(
+        const { rows: existing } = await cliente.query(
           "SELECT id, vehicle_type FROM vehicles WHERE UPPER(plate) = $1 AND tenant_id = $2 AND deleted_at IS NULL LIMIT 1",
           [v.plate, TENANT_ID]
         );
@@ -119,7 +140,7 @@ async function demoSeed() {
         const price = getPrice(svc, veh.vehicle_type);
         const hour = 7 + i;
 
-        const { rows: apt } = await pool.query(
+        const { rows: apt } = await cliente.query(
           `INSERT INTO appointments
             (tenant_id, customer_id, vehicle_id, service_id, scheduled_date, scheduled_time,
              assigned_to, bay_number, price, status, source,
@@ -134,7 +155,7 @@ async function demoSeed() {
 
         // Payment for each delivered
         const methods = ['cash', 'nequi', 'daviplata', 'transfer', 'card'];
-        await pool.query(
+        await cliente.query(
           `INSERT INTO payments (tenant_id, appointment_id, amount, payment_method, received_by)
            VALUES ($1, $2, $3, $4, $5)`,
           [TENANT_ID, apt[0].id, price, methods[i % methods.length],
@@ -191,7 +212,7 @@ async function demoSeed() {
         deliveredAt = d.toISOString();
       }
 
-      const { rows } = await pool.query(
+      const { rows } = await cliente.query(
         `INSERT INTO appointments
           (tenant_id, customer_id, vehicle_id, service_id, scheduled_date, scheduled_time,
            assigned_to, bay_number, price, status, source,
@@ -204,32 +225,32 @@ async function demoSeed() {
       );
 
       // Status log
-      await pool.query(
+      await cliente.query(
         `INSERT INTO appointment_status_log (appointment_id, new_status, changed_by) VALUES ($1, 'pending', $2)`,
         [rows[0].id, ADMIN_ID]
       );
       if (['in_progress', 'done', 'delivered'].includes(apt.status)) {
-        await pool.query(
+        await cliente.query(
           `INSERT INTO appointment_status_log (appointment_id, previous_status, new_status, changed_by)
            VALUES ($1, 'pending', 'in_progress', $2)`,
           [rows[0].id, apt.op || ADMIN_ID]
         );
       }
       if (['done', 'delivered'].includes(apt.status)) {
-        await pool.query(
+        await cliente.query(
           `INSERT INTO appointment_status_log (appointment_id, previous_status, new_status, changed_by)
            VALUES ($1, 'in_progress', 'done', $2)`,
           [rows[0].id, apt.op || ADMIN_ID]
         );
       }
       if (apt.status === 'delivered') {
-        await pool.query(
+        await cliente.query(
           `INSERT INTO appointment_status_log (appointment_id, previous_status, new_status, changed_by)
            VALUES ($1, 'done', 'delivered', $2)`,
           [rows[0].id, apt.op || ADMIN_ID]
         );
         // Payment
-        await pool.query(
+        await cliente.query(
           `INSERT INTO payments (tenant_id, appointment_id, amount, payment_method, received_by)
            VALUES ($1, $2, $3, $4, $5)`,
           [TENANT_ID, rows[0].id, price, apt.method || 'cash', apt.op || ADMIN_ID]
@@ -238,7 +259,7 @@ async function demoSeed() {
     }
 
     // Update customer visit counts
-    await pool.query(`
+    await cliente.query(`
       UPDATE customers c SET
         visit_count = (SELECT COUNT(*) FROM appointments a WHERE a.customer_id = c.id AND a.status = 'delivered'),
         last_visit_at = (SELECT MAX(delivered_at) FROM appointments a WHERE a.customer_id = c.id AND a.status = 'delivered')
@@ -246,10 +267,10 @@ async function demoSeed() {
     `, [TENANT_ID]);
 
     // Refresh materialized view
-    await pool.query('REFRESH MATERIALIZED VIEW mv_daily_summary');
+    await cliente.query('REFRESH MATERIALIZED VIEW mv_daily_summary');
 
     // Count results
-    const { rows: counts } = await pool.query(`
+    const { rows: counts } = await cliente.query(`
       SELECT
         (SELECT COUNT(*) FROM customers WHERE tenant_id = $1 AND deleted_at IS NULL) as customers,
         (SELECT COUNT(*) FROM vehicles WHERE tenant_id = $1 AND deleted_at IS NULL) as vehicles,
@@ -272,6 +293,7 @@ async function demoSeed() {
     console.error(err);
     process.exit(1);
   } finally {
+    cliente.release();
     await pool.end();
   }
 }

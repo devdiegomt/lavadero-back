@@ -36,9 +36,21 @@
  * (Lo otro también se arregló: `PATCH /api/auth/password` sirve para cualquier
  * usuario, superadministrador incluido. Este script queda para el arranque y
  * para cuando nadie recuerda la contraseña.)
+ *
+ * ## Por qué `queryAdmin` y no `pool.query`
+ *
+ * Este usuario tiene `tenant_id = NULL`, y la política de RLS sobre `users` dice
+ * `tenant_id = current_setting('app.tenant_id')`. En SQL, `NULL = cualquier
+ * cosa` no es verdadero: **es imposible insertar esta fila sin el bypass.** Con
+ * `pool.query` el script muere con
+ * `new row violates row-level security policy for table "users"` en cuanto RLS
+ * se aplique de verdad.
+ *
+ * Lo descubrió alguien intentando rotar la contraseña contra una base donde RLS
+ * ya estaba activo, no una prueba. Ver la §3 de docs/05-seguridad.md.
  */
 import 'dotenv/config';
-import { pool } from './index';
+import { pool, queryAdmin } from './index';
 import { hashPassword } from '../utils/password';
 
 const MINIMO = 8;
@@ -64,13 +76,13 @@ async function seedSuperAdmin(): Promise<void> {
   try {
     const passwordHash = await hashPassword(password);
 
-    const { rows: existentes } = await pool.query<{ id: string }>(
+    const { rows: existentes } = await queryAdmin<{ id: string }>(
       "SELECT id FROM users WHERE email = $1 AND role = 'super_admin'",
       [email],
     );
 
     if (existentes.length > 0) {
-      await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [
+      await queryAdmin('UPDATE users SET password_hash = $1 WHERE id = $2', [
         passwordHash,
         existentes[0].id,
       ]);
@@ -81,7 +93,7 @@ async function seedSuperAdmin(): Promise<void> {
       return;
     }
 
-    await pool.query(
+    await queryAdmin(
       `INSERT INTO users (tenant_id, email, password_hash, first_name, last_name, role)
        VALUES (NULL, $1, $2, 'Super', 'Admin', 'super_admin')`,
       [email, passwordHash],

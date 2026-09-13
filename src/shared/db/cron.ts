@@ -39,24 +39,23 @@ export async function cleanExpiredTokens(): Promise<void> {
   }
 }
 
-/**
- * Refresca la materialized view mv_daily_summary.
- * Ejecutar cada 15 minutos.
- *
- * Intenta CONCURRENTLY primero (no bloquea reads); si falla
- * (por ej. la vista no tiene índice único todavía), cae al refresh normal.
- */
-export async function refreshDailySummary(): Promise<void> {
-  try {
-    await db.query('REFRESH MATERIALIZED VIEW CONCURRENTLY mv_daily_summary');
-  } catch {
-    try {
-      await db.query('REFRESH MATERIALIZED VIEW mv_daily_summary');
-    } catch (err) {
-      logger.error({ err }, 'Error refrescando mv_daily_summary');
-    }
-  }
-}
+// `refreshDailySummary` vivía acá y refrescaba `mv_daily_summary` cada quince
+// minutos. Se quitó porque **nadie lee esa vista**: no la consulta ningún
+// controller, ninguna prueba y ningún reporte del panel. Se creaba en la
+// migración, se indexaba y se refrescaba, y el resultado no se usaba para nada.
+//
+// Además se iba a romper. `REFRESH MATERIALIZED VIEW` exige ser dueño de la
+// vista, y el rol de la aplicación no lo es:
+//
+//     ERROR: must be owner of materialized view mv_daily_summary
+//
+// O sea que en cuanto `DATABASE_URL` apunte a `carwash_app` —el paso pendiente
+// que activa RLS— esto pasaría a anotar un error cada quince minutos por un
+// trabajo que nadie aprovecha.
+//
+// La vista sigue en el esquema. Si alguien la va a usar, hace falta decidir
+// quién la refresca: con RLS aplicándose, el refresco tiene que correr con
+// bypass o la vista se llena vacía.
 
 /**
  * Limpia billing_errors resueltos de más de 30 días.
@@ -128,9 +127,18 @@ export function initCronJobs(): void {
   const HORA = 60 * 60 * 1_000;
   const MINUTO = 60 * 1_000;
 
+  // `refresh_tokens` es una de las tres tablas sin RLS a propósito —se consulta
+  // por el hash antes de saber de qué tenant es la sesión— así que ésta no
+  // necesita bypass.
   programar('cleanExpiredTokens', 6 * HORA, cleanExpiredTokens);
-  programar('refreshDailySummary', 15 * MINUTO, refreshDailySummary);
-  programar('cleanOldBillingErrors', 24 * HORA, cleanOldBillingErrors);
+
+  // Ésta sí: `billing_errors` está bajo RLS y esto recorre todos los tenants.
+  // Sin el bypass, el DELETE no falla — **borra cero filas y no dice nada**. Se
+  // comprobó contra la base: la fila candidata seguía ahí después de correrlo.
+  // Un error se ve en el log; un no-op silencioso no se ve nunca.
+  programar('cleanOldBillingErrors', 24 * HORA, () =>
+    conBypassRlsFueraDePeticion(() => cleanOldBillingErrors()),
+  );
 
   // Recordatorios de turno. La consulta busca los que caen entre 25 y 35
   // minutos por delante, asi que hay que pasar por esa ventana: cada 5 min
