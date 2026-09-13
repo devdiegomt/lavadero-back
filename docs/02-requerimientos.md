@@ -253,7 +253,7 @@ WhatsApp, y autorización y retención de datos personales según la Ley 1581.
 | ID | Requerimiento | Estado |
 |---|---|---|
 | RNF-LEG-1 | Cumplir la Ley 1581 sobre datos personales | ⚠️ Parcial — autorización, retención, acceso y supresión resueltos; falta publicar el aviso completo y el registro ante la SIC. Ver [Seguridad §5](05-seguridad.md#5-datos-personales-ley-1581) |
-| RNF-LEG-2 | Facturar según las reglas de la DIAN | ✅ Delegado en Alegra |
+| RNF-LEG-2 | Facturar según las reglas de la DIAN | ✅ Delegado en Alegra. Delegarlo es **una** de las tres formas que admite la DIAN; las otras dos y lo que implican están en [ADR-0010](adr/0010-como-se-emite-la-factura-electronica.md) |
 | RNF-LEG-3 | Conservar facturas 5 años | ⚠️ Parcial — se archiva copia propia del PDF y del registro, con hash verificable. Falta el XML firmado, que Alegra no expone por API. Ver [ADR-0009](adr/0009-archivo-de-facturas.md) |
 
 ## 3. Fuera de alcance (por ahora)

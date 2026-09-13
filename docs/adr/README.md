@@ -31,6 +31,7 @@ qué se cambió de opinión vale más que la foto actual.
 | [0007](0007-zona-horaria-del-tenant.md) | Los horarios se calculan en la zona del tenant | Vigente |
 | [0008](0008-migraciones-sin-framework.md) | Migraciones como scripts idempotentes | Vigente, con fecha de vencimiento |
 | [0009](0009-archivo-de-facturas.md) | Las facturas se archivan en PostgreSQL | Vigente, con techo anotado |
+| [0010](0010-como-se-emite-la-factura-electronica.md) | Cómo se emite la factura electrónica | **Pendiente** — contexto reunido, decisión abierta |
 
 ## Plantilla
 

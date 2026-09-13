@@ -19,6 +19,7 @@ Después, según lo que vayas a tocar:
 | El bot de WhatsApp | [Arquitectura §4](01-arquitectura.md#4-el-subsistema-de-whatsapp) |
 | Algo que toque datos de clientes | [Seguridad §5](05-seguridad.md#5-datos-personales-ley-1581) |
 | Facturación | [Seguridad §6](05-seguridad.md#6-facturación-electrónica-dian) |
+| Un cliente pide factura electrónica | [ADR-0010](adr/0010-como-se-emite-la-factura-electronica.md) — quién está obligado, y las tres formas de emitirla |
 | Decidir algo estructural | [ADRs](adr/) — y escribí uno nuevo |
 
 ## Índice
