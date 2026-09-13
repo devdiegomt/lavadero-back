@@ -146,11 +146,15 @@ describe('workflow n8n: agendamiento multi-turno', () => {
     expect(r.camino).not.toContain('Preparar Solicitud Claude');
     expect(r.reply).toContain('ABC123');
 
+    // Servicio: ahora el flujo pregunta por el día antes que por la hora.
     r = await runWorkflow(conv('1'), claude('unknown'));
     expect(r.camino).not.toContain('Preparar Solicitud Claude');
+    expect(r.reply).toMatch(/qué día/i);
+
+    r = await runWorkflow(conv('1'), claude('unknown'));   // día
     expect(r.reply).toMatch(/horarios/i);
 
-    r = await runWorkflow(conv('1'), claude('unknown'));
+    r = await runWorkflow(conv('1'), claude('unknown'));   // horario
     expect(r.reply).toMatch(/confirm/i);
 
     r = await runWorkflow(conv('SI'), claude('unknown'));

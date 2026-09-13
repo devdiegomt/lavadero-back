@@ -91,6 +91,59 @@ export function sumarDias(fecha: string, dias: number): string {
 }
 
 /**
+ * Día de la semana de una fecha `YYYY-MM-DD`. 0 = domingo … 6 = sábado.
+ *
+ * Se ancla al mediodía UTC para que ningún cambio de horario de verano mueva
+ * el resultado al día vecino. La numeración coincide con la de PostgreSQL
+ * (`EXTRACT(DOW)`) y con la de `tenants.closed_weekdays`.
+ */
+export function diaDeLaSemana(fecha: string): number {
+  return new Date(`${fecha}T12:00:00Z`).getUTCDay();
+}
+
+/**
+ * Los días en que se puede reservar, empezando por `hoy`.
+ *
+ * Devuelve fechas `YYYY-MM-DD` **abiertas**, saltándose los días de cierre. La
+ * ventana se cuenta en días de calendario, no en días abiertos: «hasta 7 días»
+ * significa «hasta el mismo día de la semana que viene», no «los próximos 7
+ * días que abramos». Es lo que entiende un cliente cuando se le dice «puedes
+ * reservar con una semana de anticipación».
+ *
+ * @param hoy        fecha de hoy EN LA ZONA DEL LAVADERO, no la del servidor
+ * @param diasVentana días de calendario que abarca, contando hoy
+ * @param cerrados   días sin atención (0 = domingo)
+ */
+export function diasAgendables(
+  hoy: string,
+  diasVentana: number,
+  cerrados: number[] = [],
+): string[] {
+  const dias: string[] = [];
+  for (let i = 0; i < Math.max(0, diasVentana); i++) {
+    const f = sumarDias(hoy, i);
+    if (!cerrados.includes(diaDeLaSemana(f))) dias.push(f);
+  }
+  return dias;
+}
+
+/**
+ * Cómo se le nombra un día al cliente: «Hoy», «Mañana», o «Viernes 19».
+ *
+ * Los dos primeros van por nombre porque es como se habla; a partir del tercero
+ * el nombre solo no basta —«el viernes» puede ser este o el siguiente— así que
+ * lleva el número del día.
+ */
+export function etiquetaDeDia(fecha: string, hoy: string): string {
+  if (fecha === hoy) return 'Hoy';
+  if (fecha === sumarDias(hoy, 1)) return 'Mañana';
+
+  const nombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  const dia = Number(fecha.split('-')[2]);
+  return `${nombres[diaDeLaSemana(fecha)]} ${dia}`;
+}
+
+/**
  * Hora actual en una timezone, como minutos desde medianoche.
  *
  * Necesario para comparar contra horarios de atención: el servidor corre en

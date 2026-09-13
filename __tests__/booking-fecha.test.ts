@@ -12,7 +12,10 @@
  * en una zona que cae en esa franja: con la del seed pasarían por casualidad.
  */
 import * as db from '../src/shared/db';
-import { sumarDias, getTenantToday, olvidarTimezone } from '../src/shared/utils/dateUtils';
+import {
+  sumarDias, getTenantToday, olvidarTimezone, diaDeLaSemana,
+  diasAgendables, etiquetaDeDia,
+} from '../src/shared/utils/dateUtils';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const booking = require('../src/modules/whatsapp/flows/booking');
@@ -149,6 +152,48 @@ describe('sumarDias', () => {
   });
 });
 
+describe('qué días se pueden agendar', () => {
+  // 2026-09-12 es sábado; el 13, domingo.
+  const SABADO = '2026-09-12';
+
+  it('salta los días de cierre', () => {
+    const dias = diasAgendables(SABADO, 7, [0]);
+    expect(dias).not.toContain('2026-09-13');
+    expect(dias[0]).toBe(SABADO);
+    expect(dias[1]).toBe('2026-09-14');
+  });
+
+  it('la ventana se cuenta en días de calendario, no en días abiertos', () => {
+    // "Hasta 7 días" es "hasta el mismo día de la semana que viene", que es lo
+    // que entiende un cliente. Con domingo cerrado quedan 6 días abiertos.
+    const dias = diasAgendables(SABADO, 7, [0]);
+    expect(dias).toHaveLength(6);
+    expect(dias[dias.length - 1]).toBe('2026-09-18');
+  });
+
+  it('sin días de cierre devuelve la ventana entera', () => {
+    expect(diasAgendables(SABADO, 7, [])).toHaveLength(7);
+  });
+
+  it('un lavadero que cierra otro día no queda atado al domingo', () => {
+    // El motivo de que esto sea configuración del tenant y no una constante.
+    const cierraLunes = diasAgendables(SABADO, 7, [1]);
+    expect(cierraLunes).toContain('2026-09-13'); // domingo, abre
+    expect(cierraLunes).not.toContain('2026-09-14'); // lunes, cierra
+  });
+
+  it('una ventana de un día deja sólo hoy', () => {
+    expect(diasAgendables(SABADO, 1, [0])).toEqual([SABADO]);
+  });
+
+  it('etiqueta hoy y mañana por su nombre, y el resto con el número', () => {
+    expect(etiquetaDeDia(SABADO, SABADO)).toBe('Hoy');
+    expect(etiquetaDeDia('2026-09-13', SABADO)).toBe('Mañana');
+    // "El viernes" a secas sería ambiguo entre este y el siguiente.
+    expect(etiquetaDeDia('2026-09-18', SABADO)).toBe('Viernes 18');
+  });
+});
+
 describe('la fecha, cuando el lavadero y UTC están en días distintos', () => {
   it('la zona elegida realmente pone al lavadero en otro día', async () => {
     // Guardia del propio test: si esto no se cumple, las pruebas siguientes
@@ -175,20 +220,97 @@ describe('la fecha, cuando el lavadero y UTC están en días distintos', () => {
 
     expect(r.data.bookingDate).toBe(hoyLavadero);
   });
+});
 
-  it('mañana es el día siguiente al del lavadero', async () => {
-    const hoyLavadero = await ponerLavaderoEnOtroDia();
+describe('elegir el día', () => {
+  it('tras el servicio pregunta por el día, dentro de la ventana y sin domingos', async () => {
+    await ponerLavaderoALasHoras(9);
+    const hoy = await getTenantToday(tenant.id);
 
     const r = await booking.handle({
-      ...sesionEnHorarios(hoyLavadero),
-      text: 'M',
+      tenant,
+      waLid: '99900055500001@lid',
+      text: '1',
+      session: { step: 'awaiting_service', data: { plate: 'DIA001', services: [servicio] } },
     });
 
-    // Puede no quedar cupo mañana; lo que importa es contra qué día se calculó.
-    if (r.data.bookingDate) {
-      expect(r.data.bookingDate).toBe(sumarDias(hoyLavadero, 1));
-    }
-    expect(r.messages.join('\n')).toContain('mañana');
+    expect(r.nextStep).toBe('awaiting_date');
+    expect(r.messages.join('\n')).toMatch(/qué día/i);
+
+    const fechas = r.data.diasOfrecidos.map((d: { fecha: string }) => d.fecha);
+    // Ninguno cae en domingo, que es el día de cierre por defecto del tenant.
+    for (const f of fechas) expect(diaDeLaSemana(f)).not.toBe(0);
+    // Ninguno se sale de la ventana de 7 días.
+    for (const f of fechas) expect(f <= sumarDias(hoy, 6)).toBe(true);
+  });
+
+  it('el día se elige por número o por su nombre', async () => {
+    await ponerLavaderoALasHoras(9);
+    const paso1 = await booking.handle({
+      tenant,
+      waLid: '99900055500002@lid',
+      text: '1',
+      session: { step: 'awaiting_service', data: { plate: 'DIA002', services: [servicio] } },
+    });
+
+    const segundo = paso1.data.diasOfrecidos[1];
+    const porNombre = await booking.handle({
+      tenant,
+      waLid: '99900055500002@lid',
+      text: segundo.etiqueta,
+      session: { step: 'awaiting_date', data: paso1.data },
+    });
+
+    expect(porNombre.nextStep).toBe('awaiting_time');
+    expect(porNombre.data.bookingDate).toBe(segundo.fecha);
+  });
+
+  it('un día que no se ofreció hace repreguntar', async () => {
+    await ponerLavaderoALasHoras(9);
+    const paso1 = await booking.handle({
+      tenant,
+      waLid: '99900055500003@lid',
+      text: '1',
+      session: { step: 'awaiting_service', data: { plate: 'DIA003', services: [servicio] } },
+    });
+
+    const r = await booking.handle({
+      tenant,
+      waLid: '99900055500003@lid',
+      text: '99',
+      session: { step: 'awaiting_date', data: paso1.data },
+    });
+
+    expect(r.nextStep).toBe('awaiting_date');
+    expect(r.retry).toBe(true);
+  });
+
+  it('la confirmación nombra el día elegido, no siempre "Hoy" o "Mañana"', async () => {
+    await ponerLavaderoALasHoras(9);
+    const paso1 = await booking.handle({
+      tenant,
+      waLid: '99900055500004@lid',
+      text: '1',
+      session: { step: 'awaiting_service', data: { plate: 'DIA004', services: [servicio] } },
+    });
+    const ultimo = paso1.data.diasOfrecidos[paso1.data.diasOfrecidos.length - 1];
+
+    const conHorarios = await booking.handle({
+      tenant,
+      waLid: '99900055500004@lid',
+      text: ultimo.etiqueta,
+      session: { step: 'awaiting_date', data: paso1.data },
+    });
+    const confirmar = await booking.handle({
+      tenant,
+      waLid: '99900055500004@lid',
+      text: '1',
+      session: { step: 'awaiting_time', data: conHorarios.data },
+    });
+
+    // Antes la etiqueta salía de un ternario Hoy/Mañana, así que con una
+    // ventana de varios días habría dicho "Mañana" para el viernes.
+    expect(confirmar.messages.join('\n')).toContain(ultimo.etiqueta);
   });
 });
 
@@ -196,9 +318,6 @@ describe('el flujo acepta la opción escrita, no sólo el número', () => {
   it('«Sedan» avanza igual que «1»', async () => {
     // El caso literal de la prueba en producción: el cliente respondió con la
     // palabra que el menú acababa de mostrarle y el bot le pidió un número.
-    // Placas distintas: el paso da de alta el vehiculo y la placa es unica por
-    // tenant, asi que repetirla haria fallar el segundo alta y la prueba
-    // acusaria al codigo de algo que es del montaje.
     const sesion = (text: string, plate: string, lid: string) => ({
       tenant,
       waLid: lid,
@@ -212,7 +331,6 @@ describe('el flujo acepta la opción escrita, no sólo el número', () => {
     const conPalabra = await booking.handle(sesion('Sedan', 'PAL001', '99900044400001@lid'));
     const conNumero = await booking.handle(sesion('1', 'PAL011', '99900044400011@lid'));
 
-    // Ambos pasan del tipo de vehículo a elegir servicio.
     expect(conPalabra.nextStep).toBe('awaiting_service');
     expect(conNumero.nextStep).toBe('awaiting_service');
   });
@@ -230,7 +348,6 @@ describe('el flujo acepta la opción escrita, no sólo el número', () => {
 
     expect(r.nextStep).toBe('awaiting_vehicle_type');
     expect(r.retry).toBe(true);
-    // El mensaje de error ahora ofrece las dos formas.
     expect(r.messages.join('\n')).toMatch(/sedán/i);
   });
 
@@ -249,42 +366,5 @@ describe('el flujo acepta la opción escrita, no sólo el número', () => {
     });
 
     expect(r.data.selectedService.name).toBe('Detailing');
-  });
-});
-
-describe('la opción de mañana se anuncia', () => {
-  const elegirServicio = {
-    tenant: null as unknown,
-    waLid: '99900033300003@lid',
-    text: '1',
-    session: { step: 'awaiting_service', data: { plate: 'FEC003', services: [] as unknown[] } },
-  };
-
-  /** El mismo paso, con el servicio ya cargado en la sesión. */
-  function pedirHorarios() {
-    return { ...elegirServicio, tenant, session: { ...elegirServicio.session, data: { plate: 'FEC003', services: [servicio] } } };
-  }
-
-  it('cuando hay cupos hoy, junto a la lista de horarios', async () => {
-    await ponerLavaderoALasHoras(9);   // recién abierto: quedan cupos
-
-    const r = await booking.handle(pedirHorarios());
-
-    expect(r.data.availableSlots.length).toBeGreaterThan(0);
-    // Existía desde siempre y ningún mensaje la nombraba: un cliente preguntó
-    // si sólo se podía agendar para el mismo día.
-    expect(r.messages.join('\n')).toContain('*M*');
-  });
-
-  it('cuando ya no quedan cupos hoy, que es cuando más sirve', async () => {
-    await ponerLavaderoALasHoras(18);  // media hora antes del cierre
-
-    const r = await booking.handle(pedirHorarios());
-
-    expect(r.data.availableSlots).toHaveLength(0);
-    expect(r.messages.join('\n')).toContain('*M*');
-    // Y se queda en el paso que entiende la M, en vez de volver a los
-    // servicios: antes quedarse sin cupo hoy dejaba al cliente sin salida.
-    expect(r.nextStep).toBe('awaiting_time');
   });
 });

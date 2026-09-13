@@ -24,6 +24,8 @@ const {
   getTenantToday,
   getTenantTimezone,
   sumarDias,
+  diasAgendables,
+  etiquetaDeDia,
   getDateInTimezone,
   getMinutesOfDayInTimezone,
 } = require('../../../shared/utils/dateUtils');
@@ -103,6 +105,52 @@ function formatTime(timeStr) {
   const ampm = hour >= 12 ? 'PM' : 'AM';
   const h12 = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
   return `${h12}:${m} ${ampm}`;
+}
+
+/**
+ * Los dias en que este servicio se puede agendar, con sus cupos ya resueltos.
+ *
+ * Se consultan los cupos de cada dia por adelantado y se descartan los que no
+ * tienen ninguno: ofrecer un dia para despues decir "no hay nada" hace que el
+ * cliente recorra el menu a ciegas. La ventana y los dias de cierre salen de
+ * la configuracion del lavadero, no de una constante.
+ */
+async function diasParaAgendar(tenantId, minutosServicio) {
+  const { rows } = await db.query(
+    `SELECT COALESCE(booking_days_ahead, 7) AS ventana,
+            COALESCE(closed_weekdays, '{}') AS cerrados
+     FROM tenants WHERE id = $1`,
+    [tenantId],
+  );
+  const ventana = rows[0]?.ventana ?? 7;
+  const cerrados = rows[0]?.cerrados ?? [];
+
+  const hoy = await getTenantToday(tenantId);
+  const candidatos = diasAgendables(hoy, ventana, cerrados);
+
+  const dias = [];
+  for (const fecha of candidatos) {
+    const slots = await getAvailableSlots(tenantId, fecha, minutosServicio);
+    if (slots.length > 0) {
+      dias.push({ fecha, etiqueta: etiquetaDeDia(fecha, hoy), slots });
+    }
+  }
+  return dias;
+}
+
+/** La lista de horarios de un dia concreto, ya elegido. */
+function respuestaConHorarios(dia, slots, data) {
+  const lista = slots.map((s, i) => `${i + 1}️⃣ ${formatTime(s)}`).join('\n');
+  return {
+    messages: [
+      `⏰ *Horarios para ${dia.etiqueta.toLowerCase()}:*\n\n${lista}\n\nEscribe el *número* del horario.`,
+    ],
+    nextFlow: 'booking',
+    nextStep: 'awaiting_time',
+    // La fecha viaja explicita: cada paso posterior la usa en vez de
+    // recalcularla con el reloj del servidor, que corre en UTC.
+    data: { ...data, availableSlots: slots, bookingDate: dia.fecha, etiquetaDia: dia.etiqueta },
+  };
 }
 
 async function handle(ctx) {
@@ -418,78 +466,80 @@ async function handle(ctx) {
     }
 
     const service = data.services[idx];
-    const todayDate = await getTenantToday(tenant.id);
-    const slots = await getAvailableSlots(tenant.id, todayDate, service.minutes);
 
-    if (slots.length === 0) {
-      // Se queda en awaiting_time, no vuelve a awaiting_service: es el unico
-      // paso que entiende la M, y quedarse sin cupo hoy es exactamente cuando
-      // ofrecer mañana sirve de algo. Antes el cliente solo podia cambiar de
-      // servicio o irse.
+    // Antes se saltaba directo a los horarios de HOY, y "mañana" era una M sin
+    // anunciar. Ahora el dia se elige explicitamente, dentro de la ventana que
+    // configure el lavadero y saltandose sus dias de cierre.
+    const dias = await diasParaAgendar(tenant.id, service.minutes);
+
+    if (dias.length === 0) {
       return {
         messages: [
-          `😔 No quedan horarios para hoy.\n\nEscribe *M* para ver los de mañana, o *0* para volver al menú.`,
+          `😔 No tenemos horarios disponibles en los próximos días.\n\nEscribe *0* para volver al menú, o pide *ASESOR* y lo vemos contigo.`,
         ],
-        nextFlow: 'booking',
-        nextStep: 'awaiting_time',
-        data: { ...data, selectedService: service, availableSlots: [], bookingDate: todayDate },
+        nextFlow: null,
+        nextStep: null,
+        data: {},
       };
     }
 
-    const slotList = slots.map((s, i) => `${i + 1}️⃣ ${formatTime(s)}`).join('\n');
+    // Con un solo dia disponible, preguntar cual seria una pregunta con una
+    // sola respuesta: se salta el paso y se ofrecen los horarios directamente.
+    if (dias.length === 1) {
+      return respuestaConHorarios(dias[0], dias[0].slots, { ...data, selectedService: service });
+    }
 
-    // La opcion M existia desde siempre y no se anunciaba en ningun mensaje:
-    // una funcion que nadie podia descubrir. Un cliente pregunto si solo se
-    // podia agendar para hoy.
+    const listaDias = dias
+      .map((d, i) => `${i + 1}️⃣ ${d.etiqueta}`)
+      .join('\n');
+
     return {
       messages: [
-        `⏰ *Horarios disponibles para hoy:*\n\n${slotList}\n\nEscribe el *número* del horario, o *M* para ver los de mañana.`,
+        `📅 *¿Para qué día?*\n\n${listaDias}\n\nEscribe el *número* del día.`,
       ],
       nextFlow: 'booking',
-      nextStep: 'awaiting_time',
-      // La fecha viaja explicita desde aca. Antes se dejaba sin definir y cada
-      // paso posterior la recalculaba con el reloj del servidor, que corre en
-      // UTC y no coincide con el dia del lavadero.
-      data: { ...data, selectedService: service, availableSlots: slots, bookingDate: todayDate },
+      nextStep: 'awaiting_date',
+      data: { ...data, selectedService: service, diasOfrecidos: dias },
     };
   }
 
-  // ─── AWAITING TIME ───
-  if (step === 'awaiting_time') {
-    // Soporte para "M" = mañana
-    if (text.trim().toLowerCase() === 'm') {
-      // Mañana es el dia siguiente al del lavadero, no al del servidor.
-      const tomorrowDate = sumarDias(await getTenantToday(tenant.id), 1);
-      const slots = await getAvailableSlots(tenant.id, tomorrowDate, data.selectedService.minutes);
+  // ─── AWAITING DATE ───
+  if (step === 'awaiting_date') {
+    const dias = data.diasOfrecidos ?? [];
+    // Numero o el nombre del dia: "martes" y "2" valen igual. Ver menu.ts.
+    const idx = elegirOpcion(text, dias.map((d) => ({ claves: [d.etiqueta] })));
 
-      if (slots.length === 0) {
-        return {
-          messages: [`😔 Tampoco hay horarios disponibles para mañana.\n\n_Escribe 0 para volver al menú._`],
-          nextFlow: null,
-          nextStep: null,
-          data: {},
-        };
-      }
-
-      const slotList = slots.map((s, i) => `${i + 1}️⃣ ${formatTime(s)}`).join('\n');
+    if (idx === null) {
       return {
-        messages: [`⏰ *Horarios disponibles para mañana:*\n\n${slotList}\n\nEscribe el *número* del horario.`],
+        messages: [`❌ No reconocí ese día. Escribe el *número* (1 al ${dias.length}) o el nombre del día.`],
         nextFlow: 'booking',
-        nextStep: 'awaiting_time',
-        data: { ...data, bookingDate: tomorrowDate, availableSlots: slots },
+        nextStep: 'awaiting_date',
+        data,
+        retry: true,
       };
     }
 
+    const elegido = dias[idx];
+    return respuestaConHorarios(elegido, elegido.slots, data);
+  }
+
+  // ─── AWAITING TIME ───
+  // La "M" para ver el dia siguiente desaparece: el dia ya se eligio en
+  // awaiting_date, que la deja sin sentido y ademas la supera —permite
+  // cualquier dia de la ventana, no solo mañana—.
+  if (step === 'awaiting_time') {
     const idx = parseInt(text.trim()) - 1;
     const slots = data.availableSlots || [];
 
+    // Defensivo: solo se ofrecen dias que tienen cupos, asi que llegar aca sin
+    // ninguno significa que la sesion quedo a medias. Se reinicia en vez de
+    // dejar al cliente eligiendo de una lista vacia.
     if (slots.length === 0) {
       return {
-        messages: [`Escribe *M* para ver los horarios de mañana, o *0* para volver al menú.`],
-        nextFlow: 'booking',
-        nextStep: 'awaiting_time',
-        data,
-        retry: true,
+        messages: [`Se me perdió el hilo. Escribe *0* y volvemos a empezar. 🙏`],
+        nextFlow: null,
+        nextStep: null,
+        data: {},
       };
     }
 
@@ -506,7 +556,10 @@ async function handle(ctx) {
     const selectedTime = slots[idx];
     const todayDate = await getTenantToday(tenant.id);
     const bookingDate = data.bookingDate || todayDate;
-    const dateLabel = bookingDate === todayDate ? 'Hoy' : 'Mañana';
+    // La etiqueta la calculo el paso del dia; el fallback cubre una sesion
+    // vieja que venga sin ella. Antes solo sabia decir "Hoy" o "Mañana", que
+    // con una ventana de varios dias seria mentira.
+    const dateLabel = data.etiquetaDia || etiquetaDeDia(bookingDate, todayDate);
 
     return {
       messages: [
