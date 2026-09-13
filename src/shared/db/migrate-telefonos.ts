@@ -11,6 +11,11 @@
  * —cuándo poner `+57` y cuándo quedarse quieto— ya está escrita y probada en
  * TypeScript, y tenerla dos veces es tenerla mal una de las dos.
  *
+ * Usa `queryAdmin`, que saltea RLS: recorre las filas de **todos** los tenants.
+ * Con `query()` a secas y RLS activo no vería ninguna y terminaría informando
+ * "0 teléfonos reescritos" sin un solo error — una migración que dice que hizo
+ * su trabajo y no hizo nada.
+ *
  * ## Lo que NO hace: fusionar duplicados
  *
  * Al normalizar, dos filas que eran "distintas" pasan a tener el mismo
@@ -20,7 +25,7 @@
  * responsable del tratamiento, no de un script que corre sin nadie mirando.
  */
 import 'dotenv/config';
-import { pool } from './index';
+import { pool, queryAdmin } from './index';
 import { normalizarTelefono } from '../utils/telefono';
 
 /** Tablas y columnas con teléfono. El orden no importa; se hacen todas. */
@@ -42,7 +47,7 @@ export async function normalizarColumna(tabla: string, columna: string): Promise
   // Se pagina por id para no traerse la tabla entera a memoria ni depender de
   // un OFFSET que se corre a medida que las filas cambian.
   for (;;) {
-    const { rows } = await pool.query<{ id: string; valor: string }>(
+    const { rows } = await queryAdmin<{ id: string; valor: string }>(
       `SELECT id, ${columna} AS valor FROM ${tabla}
        WHERE ${columna} IS NOT NULL AND id::text > $1
        ORDER BY id::text
@@ -64,7 +69,7 @@ export async function normalizarColumna(tabla: string, columna: string): Promise
         continue;
       }
 
-      await pool.query(`UPDATE ${tabla} SET ${columna} = $1 WHERE id = $2`, [canonico, fila.id]);
+      await queryAdmin(`UPDATE ${tabla} SET ${columna} = $1 WHERE id = $2`, [canonico, fila.id]);
       cambiadas++;
     }
   }
@@ -85,7 +90,7 @@ export interface Duplicado {
  * casi siempre es la misma persona cargada dos veces.
  */
 export async function buscarDuplicados(): Promise<Duplicado[]> {
-  const { rows } = await pool.query<Duplicado>(
+  const { rows } = await queryAdmin<Duplicado>(
     `SELECT tenant_id,
             phone,
             count(*)::int                                   AS cuantos,

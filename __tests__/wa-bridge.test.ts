@@ -28,7 +28,7 @@ beforeAll(async () => {
   redis = new Redis(process.env.REDIS_URL as string, { maxRetriesPerRequest: 2 });
   initBooking(redis);
 
-  await db.query(
+  await db.queryAdmin(
     `UPDATE tenants SET whatsapp_phone = $1, is_active = true
      WHERE slug = 'el-brillante'`,
     [TENANT_PHONE],
@@ -136,7 +136,7 @@ describe('wa-bridge: auditoría', () => {
     );
     expect(res.status).toBe(201);
 
-    const { rows } = await db.query<{
+    const { rows } = await db.queryAdmin<{
       external_id: string; flow_step: string; direction: string; content: string;
     }>(
       `SELECT external_id, flow_step, direction, content
@@ -273,7 +273,7 @@ describe('wa-bridge: agendamiento conversacional', () => {
     expect(res.body.reply).toMatch(/agendado/i);
 
     // El turno quedó en la BD con precio real, no en 0
-    const { rows } = await db.query<{
+    const { rows } = await db.queryAdmin<{
       price: number; source: string; status: string; scheduled_date: string; customer_id: string;
     }>(
       `SELECT a.price, a.source, a.status, a.scheduled_date, a.customer_id

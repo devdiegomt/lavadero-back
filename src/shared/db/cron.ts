@@ -11,6 +11,7 @@
 
 import * as db from './index';
 import logger from '../utils/logger';
+import { conBypassRlsFueraDePeticion } from '../middleware/rls';
 import { sendAppointmentReminders } from '../../modules/whatsapp/notifications';
 import {
   purgarMensajesViejos,
@@ -87,14 +88,25 @@ export function initCronJobs(): void {
   // minutos por delante, asi que hay que pasar por esa ventana: cada 5 min
   // la cubre con margen. Sin esto la funcion existia pero nunca se ejecutaba,
   // y el bot prometia un aviso que no llegaba nunca.
-  setInterval(() => { void sendAppointmentReminders(); }, 5 * 60 * 1_000);
+  // Con bypass explícito: recorre TODOS los tenants a propósito, y fuera de una
+  // petición no hay contexto del que partir. Que tenga que pedirlo hace visible
+  // en el código que cruza tenants, en vez de que funcione por casualidad.
+  setInterval(() => {
+    void conBypassRlsFueraDePeticion(() => sendAppointmentReminders());
+  }, 5 * 60 * 1_000);
 
   // Retención de datos personales (Ley 1581). Cada 24h alcanza: los plazos se
   // miden en meses, así que un día de holgura no cambia nada, y correrlo más
   // seguido sólo agrega DELETEs que no borran nada.
-  setInterval(() => { void purgarMensajesViejos(); },        24 * 60 * 60 * 1_000);
-  setInterval(() => { void anonimizarClientesInactivos(); }, 24 * 60 * 60 * 1_000);
-  setInterval(() => { void purgarAuditoriaVieja(); },         24 * 60 * 60 * 1_000);
+  setInterval(() => {
+    void conBypassRlsFueraDePeticion(() => purgarMensajesViejos());
+  }, 24 * 60 * 60 * 1_000);
+  setInterval(() => {
+    void conBypassRlsFueraDePeticion(() => anonimizarClientesInactivos());
+  }, 24 * 60 * 60 * 1_000);
+  setInterval(() => {
+    void conBypassRlsFueraDePeticion(() => purgarAuditoriaVieja());
+  }, 24 * 60 * 60 * 1_000);
 
   // Ejecutar limpieza al inicio
   cleanExpiredTokens();

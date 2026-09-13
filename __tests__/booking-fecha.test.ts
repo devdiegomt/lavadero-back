@@ -12,6 +12,7 @@
  * en una zona que cae en esa franja: con la del seed pasarían por casualidad.
  */
 import * as db from '../src/shared/db';
+import { conTenant } from './helpers/rls';
 import {
   sumarDias, getTenantToday, olvidarTimezone, diaDeLaSemana,
   diasAgendables, etiquetaDeDia, nombreDelDia,
@@ -23,6 +24,16 @@ const booking = require('../src/modules/whatsapp/flows/booking');
 let tenant: { id: string; name: string };
 let tzOriginal: string;
 let servicio: { id: string; name: string; price: number; minutes: number };
+
+/**
+ * Corre la prueba dentro del contexto de tenant, como lo haría una petición.
+ * Con RLS activo, llamar estas funciones sin contexto no ve ninguna fila: las
+ * políticas fallan cerrado a propósito. Ver helpers/rls.ts.
+ */
+const itEnTenant = (nombre: string, fn: () => Promise<void>): void => {
+  it(nombre, () => conTenant(tenant.id, fn));
+};
+
 
 /**
  * Pone al lavadero en una zona cuyo día NO es el de UTC en este momento.
@@ -46,7 +57,7 @@ async function ponerLavaderoEnOtroDia(): Promise<string> {
   // Etc/GMT tiene el signo invertido: Etc/GMT-3 es UTC+3.
   const tz = offset >= 0 ? `Etc/GMT-${offset}` : `Etc/GMT+${-offset}`;
 
-  await db.query(`UPDATE tenants SET timezone = $1 WHERE id = $2`, [tz, tenant.id]);
+  await db.queryAdmin(`UPDATE tenants SET timezone = $1 WHERE id = $2`, [tz, tenant.id]);
   olvidarTimezone(tenant.id); // la cache dura 10 min; sin esto no se vería
 
   const hoyLavadero = await getTenantToday(tenant.id);
@@ -75,7 +86,7 @@ async function ponerLavaderoALasHoras(hora: number): Promise<void> {
   if (offset < -11) offset += 24;
   const tz = offset >= 0 ? `Etc/GMT-${offset}` : `Etc/GMT+${-offset}`;
 
-  await db.query(
+  await db.queryAdmin(
     `UPDATE tenants SET timezone = $1, opening_time = '07:00', closing_time = '19:00'
      WHERE id = $2`,
     [tz, tenant.id],
@@ -102,13 +113,13 @@ function sesionEnHorarios(bookingDate?: string) {
 }
 
 beforeAll(async () => {
-  const { rows } = await db.query<{ id: string; name: string; timezone: string }>(
+  const { rows } = await db.queryAdmin<{ id: string; name: string; timezone: string }>(
     `SELECT id, name, timezone FROM tenants WHERE slug = 'el-brillante' LIMIT 1`,
   );
   tenant = { id: rows[0].id, name: rows[0].name };
   tzOriginal = rows[0].timezone;
 
-  const { rows: srv } = await db.query<{ id: string; name: string }>(
+  const { rows: srv } = await db.queryAdmin<{ id: string; name: string }>(
     `SELECT id, name FROM services WHERE tenant_id = $1 AND is_active = true LIMIT 1`,
     [tenant.id],
   );
@@ -116,16 +127,16 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db.query(`UPDATE tenants SET timezone = $1 WHERE id = $2`, [tzOriginal, tenant.id]);
+  await db.queryAdmin(`UPDATE tenants SET timezone = $1 WHERE id = $2`, [tzOriginal, tenant.id]);
   olvidarTimezone(tenant.id);
 
   // Los pasos que dan de alta crean cliente y vehiculo de verdad. Sin esto la
   // segunda corrida choca contra la placa unica por tenant.
-  await db.query(
+  await db.queryAdmin(
     `DELETE FROM vehicles WHERE tenant_id = $1 AND plate LIKE 'PAL%'`,
     [tenant.id],
   );
-  await db.query(
+  await db.queryAdmin(
     `DELETE FROM customers WHERE tenant_id = $1 AND wa_lid LIKE '999000444%'`,
     [tenant.id],
   );
@@ -195,14 +206,14 @@ describe('qué días se pueden agendar', () => {
 });
 
 describe('la fecha, cuando el lavadero y UTC están en días distintos', () => {
-  it('la zona elegida realmente pone al lavadero en otro día', async () => {
+  itEnTenant('la zona elegida realmente pone al lavadero en otro día', async () => {
     // Guardia del propio test: si esto no se cumple, las pruebas siguientes
     // pasarían con el código viejo por coincidencia y no probarían nada.
     const hoyLavadero = await ponerLavaderoEnOtroDia();
     expect(hoyLavadero).not.toBe(new Date().toISOString().split('T')[0]);
   });
 
-  it('confirma con el día del lavadero y lo llama "Hoy"', async () => {
+  itEnTenant('confirma con el día del lavadero y lo llama "Hoy"', async () => {
     const hoyLavadero = await ponerLavaderoEnOtroDia();
 
     const r = await booking.handle(sesionEnHorarios(hoyLavadero));
@@ -213,7 +224,7 @@ describe('la fecha, cuando el lavadero y UTC están en días distintos', () => {
     expect(r.messages.join('\n')).toContain('Hoy');
   });
 
-  it('sin fecha en la sesión toma la del lavadero, no la del servidor', async () => {
+  itEnTenant('sin fecha en la sesión toma la del lavadero, no la del servidor', async () => {
     const hoyLavadero = await ponerLavaderoEnOtroDia();
 
     const r = await booking.handle(sesionEnHorarios());
@@ -223,7 +234,7 @@ describe('la fecha, cuando el lavadero y UTC están en días distintos', () => {
 });
 
 describe('elegir el día', () => {
-  it('tras el servicio pregunta por el día, dentro de la ventana y sin domingos', async () => {
+  itEnTenant('tras el servicio pregunta por el día, dentro de la ventana y sin domingos', async () => {
     await ponerLavaderoALasHoras(9);
     const hoy = await getTenantToday(tenant.id);
 
@@ -244,7 +255,7 @@ describe('elegir el día', () => {
     for (const f of fechas) expect(f <= sumarDias(hoy, 6)).toBe(true);
   });
 
-  it('el día se elige escribiendo su nombre a secas', async () => {
+  itEnTenant('el día se elige escribiendo su nombre a secas', async () => {
     // El caso real: en producción el cliente escribió «lunes» y el bot no lo
     // entendió. La primera versión de esta prueba usaba la etiqueta completa
     // —«Lunes 14»— y pasaba: probaba el caso que ya funcionaba, no el que
@@ -276,7 +287,7 @@ describe('elegir el día', () => {
     expect(r.data.bookingDate).toBe(conNombre.fecha);
   });
 
-  it('la etiqueta completa también vale', async () => {
+  itEnTenant('la etiqueta completa también vale', async () => {
     await ponerLavaderoALasHoras(9);
     const paso1 = await booking.handle({
       tenant,
@@ -296,7 +307,7 @@ describe('elegir el día', () => {
     expect(r.data.bookingDate).toBe(segundo.fecha);
   });
 
-  it('un día que no se ofreció hace repreguntar', async () => {
+  itEnTenant('un día que no se ofreció hace repreguntar', async () => {
     await ponerLavaderoALasHoras(9);
     const paso1 = await booking.handle({
       tenant,
@@ -316,7 +327,7 @@ describe('elegir el día', () => {
     expect(r.retry).toBe(true);
   });
 
-  it('la confirmación nombra el día elegido, no siempre "Hoy" o "Mañana"', async () => {
+  itEnTenant('la confirmación nombra el día elegido, no siempre "Hoy" o "Mañana"', async () => {
     await ponerLavaderoALasHoras(9);
     const paso1 = await booking.handle({
       tenant,
@@ -346,7 +357,7 @@ describe('elegir el día', () => {
 });
 
 describe('el flujo acepta la opción escrita, no sólo el número', () => {
-  it('«Sedan» avanza igual que «1»', async () => {
+  itEnTenant('«Sedan» avanza igual que «1»', async () => {
     // El caso literal de la prueba en producción: el cliente respondió con la
     // palabra que el menú acababa de mostrarle y el bot le pidió un número.
     const sesion = (text: string, plate: string, lid: string) => ({
@@ -366,7 +377,7 @@ describe('el flujo acepta la opción escrita, no sólo el número', () => {
     expect(conNumero.nextStep).toBe('awaiting_service');
   });
 
-  it('lo que no se entiende sigue repreguntando, y dice cómo responder', async () => {
+  itEnTenant('lo que no se entiende sigue repreguntando, y dice cómo responder', async () => {
     const r = await booking.handle({
       tenant,
       waLid: '99900044400002@lid',
@@ -382,7 +393,7 @@ describe('el flujo acepta la opción escrita, no sólo el número', () => {
     expect(r.messages.join('\n')).toMatch(/sedán/i);
   });
 
-  it('el servicio se elige por su nombre', async () => {
+  itEnTenant('el servicio se elige por su nombre', async () => {
     await ponerLavaderoALasHoras(9);
     const servicios = [
       { id: servicio.id, name: 'Lavado Express', price: 2_500_000, minutes: 30 },

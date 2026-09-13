@@ -6,6 +6,7 @@
  * camposKey = { remoteJid, fromMe, id }. El LID pasa a ser el identificador.
  */
 import * as db from '../src/shared/db';
+import { conTenant } from './helpers/rls';
 import {
   leerIdentidad,
   tieneIdentidad,
@@ -17,15 +18,24 @@ import {
 const LID = '16733343588585@lid';
 let tenantId: string;
 
+/**
+ * Una prueba que corre dentro del contexto de tenant, como lo haría una
+ * petición. Sin esto, con RLS activo estas funciones no ven ninguna fila: las
+ * políticas fallan cerrado a propósito. Ver helpers/rls.ts.
+ */
+const itEnTenant = (nombre: string, fn: () => Promise<void>): void => {
+  it(nombre, () => conTenant(tenantId, fn));
+};
+
 beforeAll(async () => {
-  const { rows } = await db.query<{ id: string }>(
+  const { rows } = await db.queryAdmin<{ id: string }>(
     `SELECT id FROM tenants WHERE slug = 'el-brillante' LIMIT 1`,
   );
   tenantId = rows[0].id;
 });
 
 afterAll(async () => {
-  await db.query(`DELETE FROM customers WHERE wa_lid LIKE '%@lid' AND tenant_id = $1`, [tenantId]);
+  await db.queryAdmin(`DELETE FROM customers WHERE wa_lid LIKE '%@lid' AND tenant_id = $1`, [tenantId]);
   await db.pool.end();
 });
 
@@ -52,11 +62,11 @@ describe('lectura de identidad', () => {
 });
 
 describe('alta y búsqueda de clientes', () => {
-  it('crea un cliente sólo con LID, sin teléfono', async () => {
+  itEnTenant('crea un cliente sólo con LID, sin teléfono', async () => {
     const id = await buscarOCrearCliente(tenantId, { phone: null, waLid: LID }, 'Diego Mayorga');
     expect(id).toBeTruthy();
 
-    const { rows } = await db.query<{ phone: string | null; wa_lid: string; first_name: string; last_name: string }>(
+    const { rows } = await db.queryAdmin<{ phone: string | null; wa_lid: string; first_name: string; last_name: string }>(
       `SELECT phone, wa_lid, first_name, last_name FROM customers WHERE id = $1`, [id],
     );
     expect(rows[0].phone).toBeNull();          // phone dejó de ser NOT NULL
@@ -65,24 +75,24 @@ describe('alta y búsqueda de clientes', () => {
     expect(rows[0].last_name).toBe('Mayorga');
   });
 
-  it('el mismo LID devuelve el mismo cliente, no uno nuevo', async () => {
+  itEnTenant('el mismo LID devuelve el mismo cliente, no uno nuevo', async () => {
     const a = await buscarOCrearCliente(tenantId, { phone: null, waLid: LID }, 'Diego');
     const b = await buscarOCrearCliente(tenantId, { phone: null, waLid: LID }, 'Otro Nombre');
     expect(b).toBe(a);
   });
 
-  it('lo encuentra por LID', async () => {
+  itEnTenant('lo encuentra por LID', async () => {
     const id = await buscarOCrearCliente(tenantId, { phone: null, waLid: LID }, 'Diego');
     const c = await buscarCliente(tenantId, { phone: null, waLid: LID });
     expect(c?.id).toBe(id);
   });
 
-  it('enlaza el LID a un cliente que ya existía por teléfono', async () => {
+  itEnTenant('enlaza el LID a un cliente que ya existía por teléfono', async () => {
     // María García viene del seed, con teléfono y sin LID.
     const telefono = '+573101112233';
     const nuevoLid = '99999999999@lid';
 
-    const { rows: antes } = await db.query<{ id: string; wa_lid: string | null }>(
+    const { rows: antes } = await db.queryAdmin<{ id: string; wa_lid: string | null }>(
       `SELECT id, wa_lid FROM customers WHERE tenant_id = $1 AND phone = $2`, [tenantId, telefono],
     );
     expect(antes[0].wa_lid).toBeNull();
@@ -93,23 +103,23 @@ describe('alta y búsqueda de clientes', () => {
 
     // Se enlaza, no se duplica.
     expect(id).toBe(antes[0].id);
-    const { rows: despues } = await db.query<{ wa_lid: string }>(
+    const { rows: despues } = await db.queryAdmin<{ wa_lid: string }>(
       `SELECT wa_lid FROM customers WHERE id = $1`, [id],
     );
     expect(despues[0].wa_lid).toBe(nuevoLid);
 
-    await db.query(`UPDATE customers SET wa_lid = NULL WHERE id = $1`, [id]);
+    await db.queryAdmin(`UPDATE customers SET wa_lid = NULL WHERE id = $1`, [id]);
   });
 
-  it('sin ninguna identidad falla en vez de crear basura', async () => {
+  itEnTenant('sin ninguna identidad falla en vez de crear basura', async () => {
     await expect(
       buscarOCrearCliente(tenantId, { phone: null, waLid: null }, 'Nadie'),
     ).rejects.toThrow(/waLid/);
   });
 
-  it('la BD rechaza un cliente sin teléfono ni LID', async () => {
+  itEnTenant('la BD rechaza un cliente sin teléfono ni LID', async () => {
     await expect(
-      db.query(
+      db.queryAdmin(
         `INSERT INTO customers (tenant_id, first_name) VALUES ($1, 'Fantasma')`, [tenantId],
       ),
     ).rejects.toThrow(/chk_customers_identidad/);

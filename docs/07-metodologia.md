@@ -182,6 +182,14 @@ Y si hay migración, correrla **antes** de que la versión nueva reciba tráfico
 docker compose exec backend npm run db:migrate-all:prod
 ```
 
+**RLS tiene un paso que no es una migración.** `db:migrate-rls` crea el rol
+`carwash_app` y las políticas, pero **no cambia con qué rol se conecta la
+aplicación**. Mientras `DATABASE_URL` apunte a un superusuario, las políticas
+están y no hacen nada — PostgreSQL no las aplica a superusuarios ni a roles con
+`BYPASSRLS`. El backend lo dice al arrancar, con un `error` en el log. El cambio
+es aparte del despliegue a propósito: la aplicación funciona igual con los dos
+roles, así que se puede hacer cuando haya tiempo de mirarlo.
+
 `db:migrate-telefonos` reescribe datos, no esquema, así que además **imprime un
 informe**: los clientes que quedaron compartiendo teléfono. Conviene leerlo en
 vez de dejarlo pasar — casi siempre es la misma persona cargada dos veces, y el
@@ -212,6 +220,7 @@ Un orden que evita perder tiempo:
 | El backend no arranca | `docker compose logs backend` — nombra la variable |
 | Dejó de responderle a un número | `docker compose logs bot-wa \| grep -i bucle` — si repitió el mismo texto tres veces está en silencio; con escribir otra cosa se reanuda |
 | Un cliente aparece dos veces | `npm run db:migrate-telefonos` lista los que comparten teléfono. No los fusiona: eso se decide a mano |
+| Una consulta devuelve vacío y debería traer filas | Puede ser RLS: la ruta no abrió el contexto de tenant. Se ve en el log de arranque si RLS está activo, y con `SELECT current_setting('app.tenant_id', true)` en la conexión |
 
 ## 9. Cuando el proyecto crezca
 

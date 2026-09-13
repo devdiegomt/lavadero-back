@@ -163,19 +163,19 @@ describe('lo que el alta rechazaba, el PATCH también', () => {
   // empezaron a fallar sin relación aparente con este cambio. Es el mismo
   // problema que ya había dejado el reloj del tenant en una zona ajena.
   beforeAll(async () => {
-    const { rows: t } = await db.query<{ id: string }>(
+    const { rows: t } = await db.queryAdmin<{ id: string }>(
       `SELECT id FROM tenants WHERE slug = 'el-brillante' LIMIT 1`,
     );
     const tenantId = t[0].id;
 
-    const { rows: c } = await db.query<{ id: string }>(
+    const { rows: c } = await db.queryAdmin<{ id: string }>(
       `INSERT INTO customers (tenant_id, first_name, last_name, phone)
        VALUES ($1, 'Entrada', 'Invalida', '+573009998877') RETURNING id`,
       [tenantId],
     );
     customerId = c[0].id;
 
-    const { rows: v } = await db.query<{ id: string }>(
+    const { rows: v } = await db.queryAdmin<{ id: string }>(
       `INSERT INTO vehicles (tenant_id, customer_id, plate, vehicle_type)
        VALUES ($1, $2, 'INV999', 'sedan') RETURNING id`,
       [tenantId, customerId],
@@ -183,19 +183,19 @@ describe('lo que el alta rechazaba, el PATCH también', () => {
     vehicleId = v[0].id;
 
     // Éstos sólo se leen: todos los casos que los tocan esperan 400.
-    const { rows: s } = await db.query<{ id: string }>(
+    const { rows: s } = await db.queryAdmin<{ id: string }>(
       `SELECT id FROM services WHERE tenant_id = $1 LIMIT 1`, [tenantId],
     );
     serviceId = s[0].id;
-    const { rows: u } = await db.query<{ id: string }>(
+    const { rows: u } = await db.queryAdmin<{ id: string }>(
       `SELECT id FROM users WHERE role = 'operator' AND tenant_id = $1 LIMIT 1`, [tenantId],
     );
     userId = u[0].id;
   });
 
   afterAll(async () => {
-    await db.query(`DELETE FROM vehicles WHERE id = $1`, [vehicleId]);
-    await db.query(`DELETE FROM customers WHERE id = $1`, [customerId]);
+    await db.queryAdmin(`DELETE FROM vehicles WHERE id = $1`, [vehicleId]);
+    await db.queryAdmin(`DELETE FROM customers WHERE id = $1`, [customerId]);
   });
 
   const LARGO = 'X'.repeat(5000);
@@ -240,7 +240,7 @@ describe('lo que el alta rechazaba, el PATCH también', () => {
     // De este campo depende cuánta plata se cobra, así que el invariante vive
     // también en la base.
     await expect(
-      db.query(`UPDATE vehicles SET vehicle_type = 'helicoptero' WHERE id = $1`, [vehicleId]),
+      db.queryAdmin(`UPDATE vehicles SET vehicle_type = 'helicoptero' WHERE id = $1`, [vehicleId]),
     ).rejects.toThrow(/chk_vehicles_tipo/);
   });
 
@@ -281,7 +281,7 @@ describe('lo que el alta rechazaba, el PATCH también', () => {
     // El riesgo de derivar estos schemas del alta con `.partial()`: los
     // `.default()` se colarían y un cambio de nombre resetearía el tipo de
     // documento de paso.
-    await db.query(
+    await db.queryAdmin(
       `UPDATE customers SET document_type = 'NIT', notes = 'no me toques' WHERE id = $1`,
       [customerId],
     );
@@ -340,7 +340,7 @@ describe('lo que seguía funcionando sigue funcionando', () => {
 
     expect(res.status).toBe(200);
     // Y se guarda normalizado a HH:MM, no con los segundos de vuelta.
-    const { rows } = await db.query<{ opening_time: string }>(
+    const { rows } = await db.queryAdmin<{ opening_time: string }>(
       `SELECT opening_time FROM tenants WHERE slug = 'el-brillante'`,
     );
     expect(rows[0].opening_time).toBe('07:00:00');

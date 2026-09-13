@@ -56,7 +56,7 @@ beforeAll(async () => {
   redis = new Redis(process.env.REDIS_URL as string, { maxRetriesPerRequest: 2 });
   initBooking(redis);
 
-  await db.query(
+  await db.queryAdmin(
     `UPDATE tenants SET whatsapp_phone = $1, is_active = true WHERE slug = 'el-brillante'`,
     [TENANT],
   );
@@ -160,7 +160,7 @@ describe('workflow n8n: agendamiento multi-turno', () => {
     r = await runWorkflow(conv('SI'), claude('unknown'));
     expect(r.reply).toMatch(/agendado/i);
 
-    const { rows } = await db.query<{ price: string; source: string; customer_id: string }>(
+    const { rows } = await db.queryAdmin<{ price: string; source: string; customer_id: string }>(
       `SELECT a.price, a.source, a.customer_id
        FROM appointments a
        WHERE a.source = 'whatsapp' ORDER BY a.created_at DESC LIMIT 1`,
@@ -174,7 +174,7 @@ describe('workflow n8n: agendamiento multi-turno', () => {
 describe('workflow n8n: auditoría', () => {
   it('registra el entrante y el saliente de un mismo intercambio', async () => {
     const messageId = 'AUDIT-' + Date.now();
-    const antes = await db.query<{ n: string }>(
+    const antes = await db.queryAdmin<{ n: string }>(
       `SELECT count(*) AS n FROM whatsapp_messages WHERE external_id = $1`, [messageId],
     );
     expect(Number(antes.rows[0].n)).toBe(0);
@@ -182,7 +182,7 @@ describe('workflow n8n: auditoría', () => {
     await runWorkflow(msg('hola', { messageId }), claude('greeting'));
 
     // El Code node emite dos items y el nodo HTTP corre una vez por cada uno.
-    const { rows } = await db.query<{ direction: string; flow_step: string }>(
+    const { rows } = await db.queryAdmin<{ direction: string; flow_step: string }>(
       `SELECT direction, flow_step FROM whatsapp_messages
        WHERE external_id = $1 ORDER BY direction`, [messageId],
     );
@@ -208,7 +208,7 @@ describe('workflow n8n: auditoría', () => {
       claude('greeting'),
     );
 
-    const { rows } = await db.query<{ wa_lid: string | null; phone: string | null }>(
+    const { rows } = await db.queryAdmin<{ wa_lid: string | null; phone: string | null }>(
       `SELECT wa_lid, phone FROM whatsapp_messages WHERE external_id = $1`, [messageId],
     );
 
@@ -228,7 +228,7 @@ describe('workflow n8n: auditoría', () => {
     const id2 = messageId + '-2';
     await runWorkflow(msg('XYZ111', { phone, messageId: id2 }), claude('unknown'));
 
-    const { rows } = await db.query<{ flow_step: string }>(
+    const { rows } = await db.queryAdmin<{ flow_step: string }>(
       `SELECT DISTINCT flow_step FROM whatsapp_messages WHERE external_id = $1`, [id2],
     );
     expect(rows).toHaveLength(1);
@@ -339,7 +339,7 @@ describe('workflow n8n: Claude no disponible', () => {
     const messageId = 'KW-' + Date.now();
     await runWorkflow(msg('hola', { messageId }), sinCredito);
 
-    const { rows } = await db.query<{ flow_step: string }>(
+    const { rows } = await db.queryAdmin<{ flow_step: string }>(
       `SELECT DISTINCT flow_step FROM whatsapp_messages WHERE external_id = $1`,
       [messageId],
     );

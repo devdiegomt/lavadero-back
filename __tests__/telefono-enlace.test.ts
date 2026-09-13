@@ -18,6 +18,7 @@
 import request from 'supertest';
 import app from '../src/index';
 import * as db from '../src/shared/db';
+import { conTenant } from './helpers/rls';
 import { buscarOCrearCliente, leerIdentidad } from '../src/modules/whatsapp/wa-identity';
 import { normalizarColumna } from '../src/shared/db/migrate-telefonos';
 
@@ -28,8 +29,18 @@ const LID = '55500011122@lid';
 let tenantId: string;
 let token: string;
 
+/**
+ * Corre la prueba dentro del contexto de tenant, como lo haría una petición.
+ * Con RLS activo, llamar estas funciones sin contexto no ve ninguna fila: las
+ * políticas fallan cerrado a propósito. Ver helpers/rls.ts.
+ */
+const itEnTenant = (nombre: string, fn: () => Promise<void>): void => {
+  it(nombre, () => conTenant(tenantId, fn));
+};
+
+
 beforeAll(async () => {
-  const { rows } = await db.query<{ id: string }>(
+  const { rows } = await db.queryAdmin<{ id: string }>(
     `SELECT id FROM tenants WHERE slug = 'el-brillante' LIMIT 1`,
   );
   tenantId = rows[0].id;
@@ -42,7 +53,7 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
-  await db.query(
+  await db.queryAdmin(
     `DELETE FROM customers WHERE tenant_id = $1 AND (phone IN ($2, $3) OR wa_lid = $4)`,
     [tenantId, SIN_PREFIJO, CANONICO, LID],
   );
@@ -63,7 +74,7 @@ describe('mitad 1: lo que entra queda canónico', () => {
     expect(res.body.phone).toBe(CANONICO);
   });
 
-  it('y entonces el bot lo encuentra en vez de crear otro', async () => {
+  itEnTenant('y entonces el bot lo encuentra en vez de crear otro', async () => {
     // Como lo carga la recepcionista: a secas, como lo dictó el cliente.
     const creado = await request(app)
       .post('/api/customers')
@@ -81,7 +92,7 @@ describe('mitad 1: lo que entra queda canónico', () => {
     expect(id).toBe(creado.body.id);
 
     // Y de paso queda enlazado el WhatsApp, que es el objetivo.
-    const { rows } = await db.query<{ cuantos: string }>(
+    const { rows } = await db.queryAdmin<{ cuantos: string }>(
       `SELECT count(*) AS cuantos FROM customers
        WHERE tenant_id = $1 AND phone = $2 AND deleted_at IS NULL`,
       [tenantId, CANONICO],
@@ -114,7 +125,7 @@ describe('mitad 1: lo que entra queda canónico', () => {
     expect(res.status).toBe(200);
     expect(res.body.phone).toBe(CANONICO);
 
-    await db.query(`DELETE FROM customers WHERE id = $1`, [creado.body.id]);
+    await db.queryAdmin(`DELETE FROM customers WHERE id = $1`, [creado.body.id]);
   });
 });
 
@@ -122,7 +133,7 @@ describe('las rutas que no pasan por Zod', () => {
   // Actualizan por lista de campos permitidos, campo por campo. Es donde más
   // fácil se olvida canonizar, y de hecho se olvidó en el primer intento.
   it('PATCH /api/tenants/me canoniza el whatsapp_phone', async () => {
-    const { rows: antes } = await db.query<{ whatsapp_phone: string | null }>(
+    const { rows: antes } = await db.queryAdmin<{ whatsapp_phone: string | null }>(
       `SELECT whatsapp_phone FROM tenants WHERE id = $1`, [tenantId],
     );
 
@@ -136,13 +147,13 @@ describe('las rutas que no pasan por Zod', () => {
     // responderia "Tenant no encontrado" a todo.
     expect(res.body.whatsapp_phone).toBe('+573001234567');
 
-    await db.query(`UPDATE tenants SET whatsapp_phone = $1 WHERE id = $2`, [
+    await db.queryAdmin(`UPDATE tenants SET whatsapp_phone = $1 WHERE id = $2`, [
       antes[0].whatsapp_phone, tenantId,
     ]);
   });
 
   it('PATCH /api/tenants/me canoniza también el teléfono de contacto', async () => {
-    const { rows: antes } = await db.query<{ phone: string | null }>(
+    const { rows: antes } = await db.queryAdmin<{ phone: string | null }>(
       `SELECT phone FROM tenants WHERE id = $1`, [tenantId],
     );
 
@@ -154,22 +165,22 @@ describe('las rutas que no pasan por Zod', () => {
     expect(res.status).toBe(200);
     expect(res.body.phone).toBe(CANONICO);
 
-    await db.query(`UPDATE tenants SET phone = $1 WHERE id = $2`, [antes[0].phone, tenantId]);
+    await db.queryAdmin(`UPDATE tenants SET phone = $1 WHERE id = $2`, [antes[0].phone, tenantId]);
   });
 });
 
 describe('mitad 2: la migración enlaza lo que ya estaba escrito', () => {
-  it('un cliente guardado antes del arreglo no se encuentra… hasta normalizar', async () => {
+  itEnTenant('un cliente guardado antes del arreglo no se encuentra… hasta normalizar', async () => {
     // Escrito directo en la base: así quedaron las filas cargadas antes de que
     // existiera `normalizarTelefono`. Pasar por el endpoint ya las canonizaría
     // y la prueba no probaría nada.
-    const { rows: creado } = await db.query<{ id: string }>(
+    const { rows: creado } = await db.queryAdmin<{ id: string }>(
       `INSERT INTO customers (tenant_id, first_name, phone) VALUES ($1, 'Diego', $2) RETURNING id`,
       [tenantId, SIN_PREFIJO],
     );
 
     // Antes: el bot no lo ve, y crearía un segundo cliente. Este es el bug.
-    const sinMigrar = await db.query(
+    const sinMigrar = await db.queryAdmin(
       `SELECT id FROM customers WHERE tenant_id = $1 AND phone = $2 AND deleted_at IS NULL`,
       [tenantId, CANONICO],
     );
@@ -187,8 +198,8 @@ describe('mitad 2: la migración enlaza lo que ya estaba escrito', () => {
     expect(id).toBe(creado[0].id);
   });
 
-  it('correrla dos veces no cambia nada la segunda', async () => {
-    await db.query(
+  itEnTenant('correrla dos veces no cambia nada la segunda', async () => {
+    await db.queryAdmin(
       `INSERT INTO customers (tenant_id, first_name, phone) VALUES ($1, 'Diego', $2)`,
       [tenantId, SIN_PREFIJO],
     );

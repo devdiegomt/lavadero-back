@@ -4,6 +4,7 @@ import { AppError } from './errorHandler';
 import { config } from '../../config';
 import type { JwtPayload } from '../../types/api';
 import type { UserRole } from '../../types/entities';
+import { abrirContextoDeTenant } from './rls';
 
 /**
  * Verifica el JWT del header `Authorization: Bearer <token>`.
@@ -72,10 +73,15 @@ export function authorize(...roles: UserRole[]): RequestHandler {
  * Debe usarse DESPUÉS de `authenticate` en todas las rutas de negocio.
  * Super admin NO tiene tenant_id → lanza 400 si intenta usar rutas de tenant.
  */
-export function requireTenant(req: Request, _res: Response, next: NextFunction): void {
+export function requireTenant(req: Request, res: Response, next: NextFunction): void {
   if (!req.user?.tenantId) {
     throw new AppError('Tenant no identificado', 400);
   }
   req.tenantId = req.user.tenantId;
-  next();
+
+  // Y acá mismo se abre el contexto que usan las políticas de RLS, en vez de ser
+  // un middleware más que cada router tiene que acordarse de encadenar. Todos
+  // los routers ya usan `requireTenant`, así que poniéndolo acá no queda ninguno
+  // afuera — que es exactamente el error que ya se cometió con `validateId`.
+  void abrirContextoDeTenant(req, res, next);
 }

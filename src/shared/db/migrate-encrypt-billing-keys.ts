@@ -12,13 +12,13 @@
  */
 
 import 'dotenv/config';
-import { pool } from './index';
+import { pool, queryAdmin } from './index';
 import { encrypt, isEncrypted } from '../utils/crypto';
 
 async function migrate() {
   console.log('🔐 Migrando billing_api_key a formato cifrado...');
 
-  const { rows } = await pool.query(
+  const { rows } = await queryAdmin<{ id: string; name: string; billing_api_key: string }>(
     `SELECT id, name, billing_api_key
      FROM tenants
      WHERE billing_api_key IS NOT NULL`
@@ -34,7 +34,7 @@ async function migrate() {
     }
 
     const ciphertext = encrypt(tenant.billing_api_key);
-    await pool.query(
+    await queryAdmin(
       `UPDATE tenants SET billing_api_key = $1 WHERE id = $2`,
       [ciphertext, tenant.id]
     );

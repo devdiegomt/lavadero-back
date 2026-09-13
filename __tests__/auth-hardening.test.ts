@@ -119,8 +119,8 @@ describe('validación al cambiar la contraseña', () => {
   });
 
   afterAll(async () => {
-    await db.query(`DELETE FROM refresh_tokens WHERE user_id = $1`, [userId]);
-    await db.query(`DELETE FROM users WHERE id = $1`, [userId]);
+    await db.queryAdmin(`DELETE FROM refresh_tokens WHERE user_id = $1`, [userId]);
+    await db.queryAdmin(`DELETE FROM users WHERE id = $1`, [userId]);
   });
 
   it('rechaza una contraseña de menos de 8 caracteres', async () => {

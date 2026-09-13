@@ -6,8 +6,15 @@ import * as authController from './auth.controller';
 import { authenticate } from '../../shared/middleware/auth';
 import { asyncHandler } from '../../shared/utils/asyncHandler';
 import { validate, schemas } from '../../shared/middleware/validate';
+import { conBypassRls } from '../../shared/middleware/rls';
 
 const router = Router();
+
+// La autenticación no puede tener contexto de tenant: el login busca al usuario
+// por email justamente para averiguar de qué lavadero es. No se puede filtrar por
+// tenant para averiguar el tenant. Es una de las tres puertas de atrás de RLS, y
+// está enumerada en shared/middleware/rls.ts.
+router.use(conBypassRls('autenticación: el tenant se conoce después de validar'));
 
 // El limite y la ventana salen de config para poder ajustarlos sin tocar
 // codigo. STRICT_RATE_LIMIT_MAX existia desde antes y no se usaba en ningun

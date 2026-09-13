@@ -18,6 +18,7 @@ import request from 'supertest';
 import app from '../src/index';
 import * as db from '../src/shared/db';
 import { purgarAuditoriaVieja } from '../src/shared/db/retencion';
+import { cruzandoTenants } from './helpers/rls';
 
 interface Fila {
   id: string;
@@ -41,7 +42,7 @@ let hashOperador = '';
 
 /** Lo registrado para una ruta, de lo más nuevo. */
 async function registros(entity?: string): Promise<Fila[]> {
-  const { rows } = await db.query<Fila>(
+  const { rows } = await db.queryAdmin<Fila>(
     `SELECT * FROM action_log
      WHERE tenant_id = $1 ${entity ? 'AND entity = $2' : ''}
      ORDER BY created_at DESC`,
@@ -65,7 +66,7 @@ async function esperarRegistro(entity: string, intentos = 40): Promise<Fila[]> {
 }
 
 beforeAll(async () => {
-  const { rows } = await db.query<{ id: string }>(
+  const { rows } = await db.queryAdmin<{ id: string }>(
     `SELECT id FROM tenants WHERE slug = 'el-brillante' LIMIT 1`,
   );
   tenantId = rows[0].id;
@@ -76,7 +77,7 @@ beforeAll(async () => {
   token = login.body.accessToken;
   expect(token).toBeTruthy();
 
-  const { rows: op } = await db.query<{ id: string; email: string; password_hash: string }>(
+  const { rows: op } = await db.queryAdmin<{ id: string; email: string; password_hash: string }>(
     `SELECT id, email, password_hash FROM users
      WHERE role = 'operator' AND tenant_id = $1 LIMIT 1`,
     [tenantId],
@@ -93,18 +94,18 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  await db.query(`DELETE FROM action_log WHERE tenant_id = $1`, [tenantId]);
+  await db.queryAdmin(`DELETE FROM action_log WHERE tenant_id = $1`, [tenantId]);
 });
 
 afterAll(async () => {
-  await db.query(`DELETE FROM action_log WHERE tenant_id = $1`, [tenantId]);
-  await db.query(`DELETE FROM customers WHERE first_name = 'Auditado'`);
+  await db.queryAdmin(`DELETE FROM action_log WHERE tenant_id = $1`, [tenantId]);
+  await db.queryAdmin(`DELETE FROM customers WHERE first_name = 'Auditado'`);
   // La prueba de la contraseña le cambia la clave al operador del seed. Sin
   // devolverla, la corrida siguiente no puede iniciar sesión como él y estas
   // mismas pruebas fallan sin relación aparente con el código. Ya pasó dos
   // veces en este proyecto, con el reloj del tenant y con un cliente renombrado.
   if (hashOperador) {
-    await db.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [hashOperador, operadorId]);
+    await db.queryAdmin(`UPDATE users SET password_hash = $1 WHERE id = $2`, [hashOperador, operadorId]);
   }
   await db.pool.end();
 });
@@ -132,7 +133,7 @@ describe('qué queda registrado', () => {
   });
 
   it('un PATCH registra el id que venía en la ruta', async () => {
-    const { rows } = await db.query<{ id: string }>(
+    const { rows } = await db.queryAdmin<{ id: string }>(
       `SELECT id FROM customers WHERE tenant_id = $1 LIMIT 1`, [tenantId],
     );
 
@@ -153,7 +154,7 @@ describe('qué queda registrado', () => {
     // perder justamente el registro que importa.
     if (!tokenOperador) throw new Error('sin token de operador: la prueba no probaría nada');
 
-    const { rows } = await db.query<{ id: string }>(
+    const { rows } = await db.queryAdmin<{ id: string }>(
       `SELECT id FROM services WHERE tenant_id = $1 LIMIT 1`, [tenantId],
     );
     const res = await request(app)
@@ -228,7 +229,7 @@ describe('lo que NO se guarda', () => {
       });
     expect(res.status).toBe(201);
     const usuarioId = res.body.id;
-    await db.query(`DELETE FROM action_log WHERE tenant_id = $1`, [tenantId]);
+    await db.queryAdmin(`DELETE FROM action_log WHERE tenant_id = $1`, [tenantId]);
 
     await request(app)
       .patch(`/api/users/${usuarioId}/password`)
@@ -242,8 +243,8 @@ describe('lo que NO se guarda', () => {
     expect(filas[0].fields).toContain('newPassword');
     expect(JSON.stringify(filas[0])).not.toContain('SuperSecreta123');
 
-    await db.query(`DELETE FROM refresh_tokens WHERE user_id = $1`, [usuarioId]);
-    await db.query(`DELETE FROM users WHERE id = $1`, [usuarioId]);
+    await db.queryAdmin(`DELETE FROM refresh_tokens WHERE user_id = $1`, [usuarioId]);
+    await db.queryAdmin(`DELETE FROM users WHERE id = $1`, [usuarioId]);
   });
 
   it('la credencial de facturación tampoco', async () => {
@@ -257,7 +258,7 @@ describe('lo que NO se guarda', () => {
     expect(filas).toHaveLength(1);
     expect(JSON.stringify(filas[0])).not.toContain(TOKEN_ALEGRA);
 
-    await db.query(
+    await db.queryAdmin(
       `UPDATE tenants SET billing_provider = NULL, billing_api_key = NULL WHERE id = $1`,
       [tenantId],
     );
@@ -266,21 +267,32 @@ describe('lo que NO se guarda', () => {
 
 describe('no puede romper nada', () => {
   it('si el INSERT falla, la petición ya respondió igual', async () => {
-    // Se simula el fallo rompiendo la tabla un instante. Lo que se verifica es
-    // que la respuesta del cliente no dependa de que la bitácora funcione.
-    await db.query(`ALTER TABLE action_log RENAME TO action_log_escondida`);
+    // El fallo se provoca en el INSERT de la bitácora y nada más. La primera
+    // versión renombraba la tabla, y eso exige ser dueño: con el rol de la
+    // aplicación —que es como corre en producción, ver rls.test.ts— no se puede.
+    // Interceptar la consulta además es más preciso: rompe exactamente lo que se
+    // quiere romper.
+    const real = db.query.bind(db);
+    const espia = jest
+      .spyOn(db, 'query')
+      .mockImplementation(async (texto: string, params?: unknown[]) => {
+        if (texto.includes('action_log')) throw new Error('bitácora caída');
+        return real(texto, params as never);
+      });
+
     try {
       const res = await request(app)
         .post('/api/customers')
         .set('Authorization', `Bearer ${token}`)
         .send({ firstName: 'Auditado', phone: '3006665544' });
 
+      // Lo que importa: el lavadero pudo trabajar igual.
       expect(res.status).toBe(201);
       expect(res.body.id).toBeTruthy();
       // Y el fallo tuvo tiempo de ocurrir sin tumbar el proceso.
       await new Promise((r) => setTimeout(r, 150));
     } finally {
-      await db.query(`ALTER TABLE action_log_escondida RENAME TO action_log`);
+      espia.mockRestore();
     }
   });
 });
@@ -320,7 +332,7 @@ describe('se puede consultar, que es para lo que existe', () => {
 
   it('filtra sólo los intentos rechazados', async () => {
     if (!tokenOperador) throw new Error('sin token de operador');
-    const { rows } = await db.query<{ id: string }>(
+    const { rows } = await db.queryAdmin<{ id: string }>(
       `SELECT id FROM services WHERE tenant_id = $1 LIMIT 1`, [tenantId],
     );
     await request(app)
@@ -360,14 +372,14 @@ describe('se puede consultar, que es para lo que existe', () => {
 
 describe('retención', () => {
   it('purga lo vencido y deja lo reciente', async () => {
-    await db.query(
+    await db.queryAdmin(
       `INSERT INTO action_log (tenant_id, method, route, status_code, created_at)
        VALUES ($1, 'POST', '/api/viejo', 201, NOW() - INTERVAL '30 months'),
               ($1, 'POST', '/api/nuevo', 201, NOW())`,
       [tenantId],
     );
 
-    const borrados = await purgarAuditoriaVieja(24);
+    const borrados = await cruzandoTenants(() => purgarAuditoriaVieja(24));
     expect(borrados).toBeGreaterThanOrEqual(1);
 
     const rutas = (await registros()).map((f) => f.route);
@@ -376,13 +388,13 @@ describe('retención', () => {
   });
 
   it('con 0 meses no purga nada: el plazo lo decide el responsable', async () => {
-    await db.query(
+    await db.queryAdmin(
       `INSERT INTO action_log (tenant_id, method, route, status_code, created_at)
        VALUES ($1, 'POST', '/api/viejisimo', 201, NOW() - INTERVAL '10 years')`,
       [tenantId],
     );
 
-    expect(await purgarAuditoriaVieja(0)).toBe(0);
+    expect(await cruzandoTenants(() => purgarAuditoriaVieja(0))).toBe(0);
     expect((await registros()).map((f) => f.route)).toContain('/api/viejisimo');
   });
 });

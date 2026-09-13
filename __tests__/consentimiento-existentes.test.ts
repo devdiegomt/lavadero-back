@@ -10,6 +10,7 @@
  * No era un pasivo quieto: se volvía a ejercer en cada visita.
  */
 import * as db from '../src/shared/db';
+import { conTenant } from './helpers/rls';
 import { registrarAutorizacion } from '../src/modules/whatsapp/wa-identity';
 import { VERSION_AVISO, autorizacionDe } from '../src/modules/whatsapp/consentimiento';
 
@@ -21,11 +22,21 @@ const PLACA_CON = 'EXI002';
 
 let tenant: { id: string; name: string };
 
+/**
+ * Corre la prueba dentro del contexto de tenant, como lo haría una petición.
+ * Con RLS activo, llamar estas funciones sin contexto no ve ninguna fila: las
+ * políticas fallan cerrado a propósito. Ver helpers/rls.ts.
+ */
+const itEnTenant = (nombre: string, fn: () => Promise<void>): void => {
+  it(nombre, () => conTenant(tenant.id, fn));
+};
+
+
 /** Crea un cliente con vehículo, con o sin autorización registrada. */
 async function crearClienteConVehiculo(
   nombre: string, placa: string, conAutorizacion: boolean,
 ): Promise<string> {
-  const { rows } = await db.query<{ id: string }>(
+  const { rows } = await db.queryAdmin<{ id: string }>(
     `INSERT INTO customers (tenant_id, first_name, phone, consent_at, consent_version, consent_source)
      VALUES ($1, $2, $3, ${conAutorizacion ? 'NOW()' : 'NULL'},
              ${conAutorizacion ? `'${VERSION_AVISO}'` : 'NULL'},
@@ -33,7 +44,7 @@ async function crearClienteConVehiculo(
      RETURNING id`,
     [tenant.id, nombre, `+5730011${placa.slice(-4)}`],
   );
-  await db.query(
+  await db.queryAdmin(
     `INSERT INTO vehicles (tenant_id, customer_id, plate, vehicle_type)
      VALUES ($1, $2, $3, 'sedan')`,
     [tenant.id, rows[0].id, placa],
@@ -52,36 +63,36 @@ function darLaPlaca(placa: string) {
 }
 
 async function consentDe(customerId: string) {
-  const { rows } = await db.query<{ consent_at: Date | null; consent_version: string | null }>(
+  const { rows } = await db.queryAdmin<{ consent_at: Date | null; consent_version: string | null }>(
     `SELECT consent_at, consent_version FROM customers WHERE id = $1`, [customerId],
   );
   return rows[0];
 }
 
 beforeAll(async () => {
-  const { rows } = await db.query<{ id: string; name: string }>(
+  const { rows } = await db.queryAdmin<{ id: string; name: string }>(
     `SELECT id, name FROM tenants WHERE slug = 'el-brillante' LIMIT 1`,
   );
   tenant = rows[0];
 });
 
 beforeEach(async () => {
-  await db.query(
+  await db.queryAdmin(
     `DELETE FROM vehicles WHERE tenant_id = $1 AND plate IN ($2, $3)`,
     [tenant.id, PLACA_SIN, PLACA_CON],
   );
-  await db.query(
+  await db.queryAdmin(
     `DELETE FROM customers WHERE tenant_id = $1 AND first_name IN ('Viejo', 'Autorizado')`,
     [tenant.id],
   );
 });
 
 afterAll(async () => {
-  await db.query(
+  await db.queryAdmin(
     `DELETE FROM vehicles WHERE tenant_id = $1 AND plate IN ($2, $3)`,
     [tenant.id, PLACA_SIN, PLACA_CON],
   );
-  await db.query(
+  await db.queryAdmin(
     `DELETE FROM customers WHERE tenant_id = $1 AND first_name IN ('Viejo', 'Autorizado')`,
     [tenant.id],
   );
@@ -89,7 +100,7 @@ afterAll(async () => {
 });
 
 describe('cliente conocido sin autorización registrada', () => {
-  it('se le pide antes de dejarle agendar', async () => {
+  itEnTenant('se le pide antes de dejarle agendar', async () => {
     await crearClienteConVehiculo('Viejo', PLACA_SIN, false);
 
     const r = await darLaPlaca(PLACA_SIN);
@@ -99,7 +110,7 @@ describe('cliente conocido sin autorización registrada', () => {
     expect(r.messages.join('\n')).toContain('¿Autorizas el tratamiento');
   });
 
-  it('al aceptar queda registrada en su ficha y sigue al servicio', async () => {
+  itEnTenant('al aceptar queda registrada en su ficha y sigue al servicio', async () => {
     const id = await crearClienteConVehiculo('Viejo', PLACA_SIN, false);
     const paso1 = await darLaPlaca(PLACA_SIN);
 
@@ -117,7 +128,7 @@ describe('cliente conocido sin autorización registrada', () => {
     expect(c.consent_version).toBe(VERSION_AVISO);
   });
 
-  it('si no autoriza, no agenda y no se le registra nada', async () => {
+  itEnTenant('si no autoriza, no agenda y no se le registra nada', async () => {
     const id = await crearClienteConVehiculo('Viejo', PLACA_SIN, false);
     const paso1 = await darLaPlaca(PLACA_SIN);
 
@@ -132,7 +143,7 @@ describe('cliente conocido sin autorización registrada', () => {
     expect((await consentDe(id)).consent_at).toBeNull();
   });
 
-  it('ante una respuesta ambigua repregunta, sin darla por concedida', async () => {
+  itEnTenant('ante una respuesta ambigua repregunta, sin darla por concedida', async () => {
     const id = await crearClienteConVehiculo('Viejo', PLACA_SIN, false);
     const paso1 = await darLaPlaca(PLACA_SIN);
 
@@ -149,7 +160,7 @@ describe('cliente conocido sin autorización registrada', () => {
 });
 
 describe('a quien ya autorizó no se le vuelve a preguntar', () => {
-  it('va directo a elegir servicio', async () => {
+  itEnTenant('va directo a elegir servicio', async () => {
     await crearClienteConVehiculo('Autorizado', PLACA_CON, true);
 
     const r = await darLaPlaca(PLACA_CON);
@@ -159,7 +170,7 @@ describe('a quien ya autorizó no se le vuelve a preguntar', () => {
 });
 
 describe('registrarAutorizacion', () => {
-  it('no pisa una autorización anterior', async () => {
+  itEnTenant('no pisa una autorización anterior', async () => {
     // La fecha y la versión originales son la prueba de qué se le informó y
     // cuándo. Sobrescribirlas destruiría justo lo que hay que poder mostrar.
     const id = await crearClienteConVehiculo('Autorizado', PLACA_CON, true);
@@ -175,7 +186,7 @@ describe('registrarAutorizacion', () => {
     expect(despues.consent_at).toEqual(antes.consent_at);
   });
 
-  it('no alcanza a un cliente de otro lavadero', async () => {
+  itEnTenant('no alcanza a un cliente de otro lavadero', async () => {
     const id = await crearClienteConVehiculo('Viejo', PLACA_SIN, false);
     const otroTenant = '00000000-0000-0000-0000-000000000000';
 
