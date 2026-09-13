@@ -76,7 +76,7 @@ que emite `pino` para poder correlacionar.
 81 en 15 módulos. Los agrupados por recurso:
 
 <details>
-<summary><strong>auth</strong> (4)</summary>
+<summary><strong>auth</strong> (5)</summary>
 
 | Método | Ruta | Rol |
 |---|---|---|
@@ -84,6 +84,7 @@ que emite `pino` para poder correlacionar.
 | POST | `/auth/refresh` | cookie + `x-panel-request` |
 | POST | `/auth/logout` | autenticado + cookie + `x-panel-request` |
 | GET | `/auth/me` | autenticado |
+| PATCH | `/auth/password` | autenticado — la propia, verificando la anterior; revoca todas las sesiones |
 </details>
 
 <details>

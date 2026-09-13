@@ -16,6 +16,7 @@ Nomenclatura: `RF-<módulo>-<n>`.
 | RF-AUT-1 | Un usuario inicia sesión con correo y contraseña y recibe un access token (15 min) y un refresh token (7 días) en cookie `httpOnly` | `POST /api/auth/login` |
 | RF-AUT-2 | El refresh token rota: al usarlo se revoca y se emite uno nuevo | `POST /api/auth/refresh` |
 | RF-AUT-3 | Cerrar sesión revoca el refresh; sin cuerpo revoca todas las sesiones | `POST /api/auth/logout` |
+| RF-AUT-4 | Cualquier usuario cambia su propia contraseña verificando la anterior, y eso cierra todas sus sesiones | `PATCH /api/auth/password` |
 | RF-USR-1 | Un `admin` crea, edita, activa y desactiva usuarios de su tenant | `/api/users` |
 | RF-USR-2 | Un usuario cambia su propia contraseña verificando la anterior | `PATCH /api/users/:id/password` |
 

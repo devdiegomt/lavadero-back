@@ -298,6 +298,18 @@ export const schemas = {
     newPassword: z.string().min(8, 'Mínimo 8 caracteres'),
   }),
 
+  /**
+   * Cambiar la contraseña propia (`PATCH /api/auth/password`).
+   *
+   * Acá `currentPassword` es obligatoria, a diferencia del esquema de arriba:
+   * ese cubre también a un admin cambiándole la contraseña a un operador, donde
+   * no tiene la anterior. Éste es siempre sobre uno mismo.
+   */
+  cambiarPropiaPassword: z.object({
+    currentPassword: z.string().min(1, 'La contraseña actual es requerida'),
+    newPassword: z.string().min(8, 'Mínimo 8 caracteres'),
+  }),
+
   // ── Onboarding (self-service) ─────────────────────────────────────────────
   onboardingRegister: z.object({
     businessName: str(150),

@@ -151,6 +151,34 @@ los verifica, y `super_admin` pasa siempre.
 router.post('/', authenticate, requireTenant, authorize('admin'), crearServicio);
 ```
 
+### La cuenta con más poder, y lo que se descubrió de ella (2026-09)
+
+El `super_admin` no pertenece a ningún tenant y ve todos los lavaderos. Al
+recrear la base de producción aparecieron dos cosas que convivían mal:
+
+1. **El seed tenía una contraseña por omisión escrita en el código**
+   (`process.env.SUPER_ADMIN_PASSWORD || 'super123!'`), y publicada además en los
+   README de los dos repositorios. Un despliegue sin esa variable creaba, sin
+   fallar ni avisar, un superadministrador con una credencial pública.
+2. **Esa cuenta no podía cambiar su propia contraseña.** Las rutas de
+   `/api/users` van bajo `requireTenant` y filtran por `tenant_id`; sin tenant, el
+   superadministrador recibía `400 Tenant no identificado`. La única cuenta del
+   sistema sin forma de rotar su credencial era justo la que más lo necesitaba.
+
+Por separado cada una es un descuido. Juntas son una puerta abierta que no se
+puede cerrar.
+
+Ahora: el seed **exige** `SUPER_ADMIN_EMAIL` y `SUPER_ADMIN_PASSWORD`, no imprime
+la contraseña, y si la cuenta ya existe le rota la contraseña en vez de plantarse
+con "ya existe". Y hay `PATCH /api/auth/password`, que sirve para cualquier
+usuario —sin tenant— y **revoca todas las sesiones**: si se cambia una contraseña
+es porque puede estar comprometida, y dejar vivas las sesiones abiertas con la
+anterior da siete días más de acceso a quien la tuviera.
+
+Lo que generaliza: **un valor por omisión para una credencial es una credencial
+publicada.** El código lo trataba como una comodidad de desarrollo, y el entorno
+que se saltea las comodidades de desarrollo es exactamente el de producción.
+
 ## 2. Superficie expuesta
 
 | Control | Configuración | Nota |

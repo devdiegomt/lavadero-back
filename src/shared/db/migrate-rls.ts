@@ -91,13 +91,11 @@ function sqlDelRol(password: string | undefined): string {
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${ROL}') THEN
+    -- Sin atributos: un rol nuevo nace NOSUPERUSER, NOBYPASSRLS, NOCREATEDB y
+    -- NOCREATEROLE. Que son justo las cuatro que hacen falta.
     CREATE ROLE ${ROL} LOGIN;
   END IF;
 END $$;
-
--- Explícito y no por omisión: son las dos propiedades de las que depende que
--- todo esto sirva para algo.
-ALTER ROLE ${ROL} NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
 ${conPassword}
 
 -- Permisos de datos, ninguno de esquema: la aplicación no crea ni altera
@@ -119,6 +117,54 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 /** Escapa una cadena para SQL. Es una contraseña y va a un DDL, no a un $1. */
 function literal(valor: string): string {
   return `'${valor.replace(/'/g, "''")}'`;
+}
+
+/**
+ * Comprueba que el rol tenga las propiedades de las que depende todo esto.
+ *
+ * Antes acá había un `ALTER ROLE … NOSUPERUSER NOBYPASSRLS NOCREATEDB
+ * NOCREATEROLE`, explícito "para no depender de valores por omisión". Suena más
+ * seguro y es peor: **en PostgreSQL sólo un superusuario puede tocar el atributo
+ * `BYPASSRLS`, aunque sea para ponerlo en `NO`.** En una base administrada
+ * —Render, Neon, RDS— el usuario que corre las migraciones es dueño de las
+ * tablas pero no superusuario, así que esa línea falla con
+ * `permission denied to alter role` y se lleva puesta la migración entera.
+ *
+ * Pasó al recrear la base de producción. La migración corrió bien hasta ahí y
+ * murió en el último paso.
+ *
+ * Un rol recién creado ya nace con las cuatro propiedades que queremos, así que
+ * el `ALTER` no aportaba nada salvo el fallo. Lo que sí aporta es **mirar**: si
+ * alguien le dio `BYPASSRLS` al rol, las políticas quedan de adorno y nadie se
+ * entera. Comprobarlo es más fuerte que afirmarlo, y funciona sin superusuario.
+ */
+async function comprobarElRol(): Promise<void> {
+  const { rows } = await pool.query<{
+    rolsuper: boolean; rolbypassrls: boolean;
+    rolcreatedb: boolean; rolcreaterole: boolean; rolcanlogin: boolean;
+  }>(
+    `SELECT rolsuper, rolbypassrls, rolcreatedb, rolcreaterole, rolcanlogin
+     FROM pg_roles WHERE rolname = $1`,
+    [ROL],
+  );
+
+  if (rows.length === 0) throw new Error(`El rol ${ROL} no existe después de crearlo.`);
+  const rol = rows[0];
+
+  const problemas: string[] = [];
+  if (rol.rolsuper) problemas.push('es SUPERUSER: se saltea todas las políticas');
+  if (rol.rolbypassrls) problemas.push('tiene BYPASSRLS: se saltea todas las políticas');
+  if (rol.rolcreatedb) problemas.push('tiene CREATEDB, y no lo necesita');
+  if (rol.rolcreaterole) problemas.push('tiene CREATEROLE, y no lo necesita');
+  if (!rol.rolcanlogin) problemas.push('no tiene LOGIN: la aplicación no podría conectarse');
+
+  if (problemas.length > 0) {
+    throw new Error(
+      `El rol ${ROL} no sirve para aislar tenants:\n` +
+        problemas.map((p) => `      - ${p}`).join('\n') +
+        `\n      Corregirlo hace falta un superusuario: ALTER ROLE ${ROL} NOSUPERUSER NOBYPASSRLS;`,
+    );
+  }
 }
 
 function sqlDePoliticas(tablas: readonly string[]): string {
@@ -205,6 +251,7 @@ async function migrate(): Promise<void> {
     }
 
     await pool.query(sqlDelRol(password));
+    await comprobarElRol();
     console.log(`   👤 Rol ${ROL} (NOSUPERUSER, NOBYPASSRLS) con permisos de datos`);
 
     const tablas = await tablasPorTenant();
