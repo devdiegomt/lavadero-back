@@ -218,7 +218,22 @@ Y si el cambio se ve en el panel, además, con el backend arriba:
 cd ../lavadero-front && npm run e2e   # 40 pruebas en Chromium, escritorio y móvil
 ```
 
-Todos tienen que pasar. Si alguno falla de forma intermitente, **eso es un
+Todos tienen que pasar.
+
+**Y ahora también corren solos.** `.github/workflows/ci.yml` los ejecuta en cada
+PR y en cada push a `main`: tipos, el build del bot, migraciones, y la suite
+**tres veces** —una normal, otra seguida sin resetear la base, y otra con el rol
+al que RLS sí se le aplica—. Las tres están ahí porque las tres encontraron cosas
+que la primera sola no encuentra.
+
+Hasta que existió, nada verificaba un PR antes de mergearlo: las pruebas corrían
+sólo si alguien se acordaba.
+
+Una cosa que no hace el CI y conviene saber: **no baja `BCRYPT_ROUNDS`**. Tienta,
+porque la suite hace muchos logins y a 12 rondas tarda. Pero hay una prueba que
+exige ese mínimo —es un control de seguridad— y bajarlo la rompe. Se descubrió
+reproduciendo el entorno del CI en local antes de subirlo: poner 4 habría dejado
+el CI en verde con esa comprobación apagada. Si alguno falla de forma intermitente, **eso es un
 bug**, no ruido: un test que falla 1 de cada 8 corridas enseña a ignorar el
 rojo. (Pasó — dos suites compartían base y se pisaban en paralelo. Se resolvió
 con `maxWorkers: 1`.)
