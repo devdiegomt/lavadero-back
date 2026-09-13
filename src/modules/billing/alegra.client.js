@@ -8,9 +8,18 @@
  * Rate limit: 60 req/min
  */
 
-const { decryptIfNeeded } = require('../../shared/utils/crypto');
+const { descifrarCredencial } = require('../../shared/utils/crypto');
 
 const ALEGRA_BASE_URL = 'https://api.alegra.com/api/v1';
+
+/**
+ * Corte por tiempo de cada llamada a Alegra.
+ *
+ * `fetch` sin timeout espera indefinidamente. Importa en /config/credentials,
+ * que prueba la conexion al guardar: sin esto, Alegra colgada deja la peticion
+ * del panel esperando para siempre en vez de decir "no respondio".
+ */
+const TIMEOUT_MS = parseInt(process.env.ALEGRA_TIMEOUT_MS || '15000', 10);
 
 class AlegraClient {
   /**
@@ -43,7 +52,21 @@ class AlegraClient {
       options.body = JSON.stringify(body);
     }
 
-    const response = await fetch(url, options);
+    let response;
+    try {
+      response = await fetch(url, { ...options, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    } catch (err) {
+      // Un timeout o un DNS caido llegan como TypeError/DOMException sin
+      // statusCode, y aguas arriba se confundirian con un 4xx de Alegra.
+      const fallo = new Error(
+        err.name === 'TimeoutError'
+          ? `Alegra no respondio en ${TIMEOUT_MS} ms`
+          : `No se pudo contactar a Alegra: ${err.message}`
+      );
+      fallo.statusCode = 504;
+      throw fallo;
+    }
+
     const data = await response.json().catch(() => null);
 
     if (!response.ok) {
@@ -321,9 +344,9 @@ class AlegraClient {
 function createAlegraClientForTenant(tenant) {
   if (tenant.billing_provider !== 'alegra') return null;
 
-  // billing_api_key se almacena cifrado en BD (AES-256-GCM).
-  // decryptIfNeeded maneja también valores en plaintext (período de migración).
-  const plaintext = decryptIfNeeded(tenant.billing_api_key);
+  // billing_api_key se almacena cifrado en BD (AES-256-GCM). Si esta en texto
+  // plano esto falla a proposito: ver descifrarCredencial en utils/crypto.
+  const plaintext = descifrarCredencial(tenant.billing_api_key, 'billing_api_key');
 
   // Después de descifrar, el formato esperado es "email:token"
   const [email, token] = (plaintext || '').split(':');

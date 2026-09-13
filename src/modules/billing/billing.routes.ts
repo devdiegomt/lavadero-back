@@ -7,6 +7,7 @@ import * as ctrl from './billing.controller';
 import { authenticate, authorize, requireTenant } from '../../shared/middleware/auth';
 import { asyncHandler } from '../../shared/utils/asyncHandler';
 import { planFeature } from '../../shared/middleware/planLimits';
+import { validate, schemas } from '../../shared/middleware/validate';
 
 const router = Router();
 router.use(authenticate, requireTenant);
@@ -35,6 +36,16 @@ router.get('/pending', asyncHandler(ctrl.listPendingPayments));
 // ── Configuración ────────────────────────────────────────────────────
 // Estado de configuración fiscal
 router.get('/config', authorize('admin'), asyncHandler(ctrl.getConfig));
+
+// Guardar las credenciales de Alegra. Se cifran antes de escribirlas, y es la
+// única vía que lo hace: por SQL se puede guardar texto plano, y eso ahora
+// revienta al leerlo en vez de pasar desapercibido.
+router.put(
+  '/config/credentials',
+  authorize('admin'),
+  validate(schemas.billingCredentials),
+  asyncHandler(ctrl.setCredentials),
+);
 
 // Probar conexión con Alegra
 router.post('/config/test', authorize('admin'), asyncHandler(ctrl.testConnection));

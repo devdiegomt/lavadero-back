@@ -213,6 +213,25 @@ export const schemas = {
     adminFirstName: str(80),
     adminLastName: optStr(80),
   }),
+
+  // ── Credenciales de facturación ───────────────────────────────────────────
+  // Se validan aunque el módulo `billing` no use Zod en el resto: es un secreto
+  // y entra por una ruta nueva, así que no hereda la deuda de las viejas.
+  billingCredentials: z.object({
+    email: z
+      .string()
+      .email('El email de Alegra no es válido')
+      .transform((v) => v.toLowerCase().trim()),
+    // El token de Alegra no se recorta ni se transforma más allá del trim: un
+    // secreto que el servidor "arregla" deja de ser el que el usuario pegó.
+    token: z
+      .string()
+      .transform((v) => v.trim())
+      .refine((v) => v.length >= 10, 'El token de Alegra parece incompleto')
+      // El formato guardado es "email:token": un token con ":" partiría mal al
+      // leerlo y el síntoma sería una credencial inválida sin explicación.
+      .refine((v) => !v.includes(':'), 'El token no puede contener ":"'),
+  }),
 } as const;
 
 // ─── Tipos inferidos exportados ───────────────────────────────────────────────
@@ -228,6 +247,7 @@ export type ServiceCreateBody       = z.infer<typeof schemas.serviceCreate>;
 export type PaymentCreateBody       = z.infer<typeof schemas.paymentCreate>;
 export type UserCreateBody          = z.infer<typeof schemas.userCreate>;
 export type OnboardingRegisterBody  = z.infer<typeof schemas.onboardingRegister>;
+export type BillingCredentialsBody  = z.infer<typeof schemas.billingCredentials>;
 
 // ─── Middleware factory ───────────────────────────────────────────────────────
 
