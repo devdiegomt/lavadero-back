@@ -26,6 +26,7 @@ const {
   sumarDias,
   diasAgendables,
   etiquetaDeDia,
+  nombreDelDia,
   getDateInTimezone,
   getMinutesOfDayInTimezone,
 } = require('../../../shared/utils/dateUtils');
@@ -506,8 +507,23 @@ async function handle(ctx) {
   // ─── AWAITING DATE ───
   if (step === 'awaiting_date') {
     const dias = data.diasOfrecidos ?? [];
-    // Numero o el nombre del dia: "martes" y "2" valen igual. Ver menu.ts.
-    const idx = elegirOpcion(text, dias.map((d) => ({ claves: [d.etiqueta] })));
+    // Numero o nombre del dia. Ademas de la etiqueta ("Lunes 14") se acepta el
+    // nombre a secas ("lunes"), que es como escribe la gente: elegirOpcion
+    // busca la clave DENTRO del texto, asi que con solo la etiqueta un "lunes"
+    // no casaba. Se comprobo en produccion, escribiendo el nombre del dia.
+    //
+    // El nombre suelto se admite solo si identifica a un unico dia de los
+    // ofrecidos: con una ventana larga podria haber dos lunes, y elegir el
+    // primero seria decidir por el cliente.
+    const nombres = dias.map((d) => nombreDelDia(d.fecha).toLowerCase());
+    const idx = elegirOpcion(
+      text,
+      dias.map((d, i) => {
+        const nombre = nombres[i];
+        const unico = nombres.filter((n) => n === nombre).length === 1;
+        return { claves: unico ? [d.etiqueta, nombre] : [d.etiqueta] };
+      }),
+    );
 
     if (idx === null) {
       return {

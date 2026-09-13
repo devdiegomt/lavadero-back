@@ -14,7 +14,7 @@
 import * as db from '../src/shared/db';
 import {
   sumarDias, getTenantToday, olvidarTimezone, diaDeLaSemana,
-  diasAgendables, etiquetaDeDia,
+  diasAgendables, etiquetaDeDia, nombreDelDia,
 } from '../src/shared/utils/dateUtils';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -244,7 +244,12 @@ describe('elegir el día', () => {
     for (const f of fechas) expect(f <= sumarDias(hoy, 6)).toBe(true);
   });
 
-  it('el día se elige por número o por su nombre', async () => {
+  it('el día se elige escribiendo su nombre a secas', async () => {
+    // El caso real: en producción el cliente escribió «lunes» y el bot no lo
+    // entendió. La primera versión de esta prueba usaba la etiqueta completa
+    // —«Lunes 14»— y pasaba: probaba el caso que ya funcionaba, no el que
+    // ocurre. `elegirOpcion` busca la clave DENTRO del texto, y aquí el
+    // cliente escribe MENOS que la etiqueta.
     await ponerLavaderoALasHoras(9);
     const paso1 = await booking.handle({
       tenant,
@@ -253,16 +258,42 @@ describe('elegir el día', () => {
       session: { step: 'awaiting_service', data: { plate: 'DIA002', services: [servicio] } },
     });
 
-    const segundo = paso1.data.diasOfrecidos[1];
-    const porNombre = await booking.handle({
+    // Un día que no sea hoy ni mañana: los que llevan nombre de día.
+    const conNombre = paso1.data.diasOfrecidos.find(
+      (d: { etiqueta: string }) => !['Hoy', 'Mañana'].includes(d.etiqueta),
+    );
+    expect(conNombre).toBeDefined();
+
+    const soloElNombre = nombreDelDia(conNombre.fecha).toLowerCase();
+    const r = await booking.handle({
       tenant,
       waLid: '99900055500002@lid',
+      text: soloElNombre,
+      session: { step: 'awaiting_date', data: paso1.data },
+    });
+
+    expect(r.nextStep).toBe('awaiting_time');
+    expect(r.data.bookingDate).toBe(conNombre.fecha);
+  });
+
+  it('la etiqueta completa también vale', async () => {
+    await ponerLavaderoALasHoras(9);
+    const paso1 = await booking.handle({
+      tenant,
+      waLid: '99900055500005@lid',
+      text: '1',
+      session: { step: 'awaiting_service', data: { plate: 'DIA005', services: [servicio] } },
+    });
+    const segundo = paso1.data.diasOfrecidos[1];
+
+    const r = await booking.handle({
+      tenant,
+      waLid: '99900055500005@lid',
       text: segundo.etiqueta,
       session: { step: 'awaiting_date', data: paso1.data },
     });
 
-    expect(porNombre.nextStep).toBe('awaiting_time');
-    expect(porNombre.data.bookingDate).toBe(segundo.fecha);
+    expect(r.data.bookingDate).toBe(segundo.fecha);
   });
 
   it('un día que no se ofreció hace repreguntar', async () => {
