@@ -118,6 +118,15 @@ ciegas ante síntomas mal entendidos. Los casos concretos:
   datos de prueba poco realistas miden un sistema que no existe** — y da igual si
   el número sale alto o bajo.
 
+- Midiendo el bot, la consulta de "¿ya está mi carro?" saltó de 5 a **60 ms** con
+  volumen. Se miró el plan, se culpó al `UPPER(plate)` que impedía usar el
+  índice, se creó el índice funcional… y no cambió nada. La causa era otra: el
+  generador repartía los estados al azar sobre dos años y dejaba **6.572 turnos
+  «pendientes» de hace más de un mes**, que ningún lavadero tiene. Con estados
+  realistas son 17 ms. **Se estuvo a punto de optimizar una consulta que no tenía
+  nada malo**, y la segunda vez que el mismo generador produce un número
+  engañoso.
+
 **La regla que sale de ahí:** antes de cambiar código, conseguir el dato que
 distingue entre las causas posibles. Un log, una ejecución, una petición
 reproducida. Si no se puede reproducir, el primer trabajo es hacerlo
@@ -142,7 +151,7 @@ El penúltimo punto es el que más se olvida. Documentación que se actualiza
 
 ```bash
 npm run db:reset          # base limpia
-npx jest                  # 341 tests
+npx jest                  # 363 tests
 npm run test:rls          # los mismos, con RLS aplicándose
 npx tsc --noEmit          # backend
 cd bot-wa && npm run build # bot
@@ -194,7 +203,14 @@ actualizan en el mismo PR que los resuelve, así que no envejecen.
 npm run db:seed-carga 100000   # volumen realista
 npm run medir                  # los 12 endpoints del panel, por HTTP
 npm run medir:rls              # los mismos, con RLS aplicándose
+npm run medir:bot              # lo que n8n le pide al backend en cada mensaje
+npm run medir:bot:rls          # lo mismo, con RLS
 ```
+
+**Antes de creerle a un número lento, mirar si los datos de prueba se parecen a
+la realidad.** Este generador ya produjo dos números engañosos: una distribución
+de fechas que ponía 3.776 turnos en un solo día, y estados al azar que dejaban
+6.572 turnos «pendientes» de hace un año. Las dos veces el código estaba bien.
 
 Reporta **mediana y p95**, no promedio: un promedio esconde que una de cada
 veinte peticiones tarde el triple, y esa es la que el usuario recuerda. Un

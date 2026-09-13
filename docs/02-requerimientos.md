@@ -118,7 +118,7 @@ Escritos como criterios verificables. Donde no hay medición, se dice.
 | ID | Requerimiento | Estado |
 |---|---|---|
 | RNF-REN-1 | Una consulta del panel responde en < 500 ms con 10k turnos | ✅ Medido: peor p95 **24 ms** con 10k, **114 ms** con 100k. Ver abajo |
-| RNF-REN-2 | El bot responde en < 5 s (incluye la llamada a Claude) | ⚠️ No medido; observado ~1-2 s |
+| RNF-REN-2 | El bot responde en < 5 s (incluye la llamada a Claude) | ⚠️ Parcial — el tramo del backend son **18 ms** en el peor paso con 100k turnos. Claude, n8n y WhatsApp no se miden desde acá. Ver abajo |
 | RNF-REN-3 | Las consultas frecuentes tienen índice | ✅ 6 índices en `appointments`, 5 en `customers` |
 
 **Cómo se midió.** `npm run db:seed-carga 100000` genera el volumen y
@@ -128,9 +128,38 @@ es como corre en producción.
 
 Con 10k turnos —el volumen que pide el requisito— el peor p95 es 24 ms, unas 20
 veces por debajo del presupuesto. Con 100k, diez veces el requisito, el peor es
-114 ms: sigue sobrando. Los dos más caros son el listado de turnos, que cuenta
+108 ms: sigue sobrando. Los dos más caros son el listado de turnos, que cuenta
 todas las filas para paginar, y la búsqueda de clientes, que hace `ILIKE` sobre
 varias columnas. Ninguno justifica tocarlos hoy.
+
+### El bot (RNF-REN-2)
+
+`npm run medir:bot` recorre lo que n8n le pide al backend en cada mensaje: las
+consultas de los intents y la conversación de agendamiento paso por paso. Con
+100k turnos y RLS aplicándose, el peor paso es **17,5 ms**.
+
+| Paso | p95 |
+|---|---|
+| Consultar estado por placa | 17,5 ms |
+| Agendar · elegir servicio (calcula cupos) | 11,7 ms |
+| El resto | < 5 ms |
+
+**Esto no alcanza para decir que RNF-REN-2 se cumple**, y conviene ser claro: el
+requisito son 5 s de punta a punta e incluye explícitamente la llamada a Claude,
+que es el término que domina y no es nuestro. Lo que sí se puede afirmar es que
+**el backend no es el problema**: aporta un 0,4 % del presupuesto. Si el bot
+tarda, la respuesta no está de este lado.
+
+Lo que queda sin medir, y por qué:
+
+| Tramo | Por qué no |
+|---|---|
+| Claude | Medirlo acá gastaría crédito y daría el número de esta máquina, no el de producción. Se ve en las ejecuciones de n8n |
+| n8n | Su tiempo de orquestación se ve en su propio panel |
+| WhatsApp | La entrega no la controla nadie de este lado |
+
+Para cerrarlo del todo haría falta instrumentar el workflow de n8n y registrar el
+tiempo real de punta a punta en producción, que es otro trabajo.
 
 **RLS cuesta, y poco.** Comparando los mismos endpoints con y sin políticas, la
 diferencia va del 10 % al 45 % según la consulta —lo peor es el listado de
