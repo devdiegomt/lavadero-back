@@ -343,6 +343,7 @@ Un orden que evita perder tiempo:
 | El bot deja de responder de golpe | Si el backend murió, mirar si fue un `unhandled rejection`. Toda ruta `async` va con `asyncHandler`: sin él, en Express 4 el rechazo no llega al errorHandler y Node 22 termina el proceso |
 | La API se reinicia sola cada pocos minutos | Buscar en el log un volcado que termine en `Node.js v20.x` — eso no es un error manejado, es el proceso muriéndose. Si el stack pasa por una tarea de fondo, va con `correrTarea` (`shared/db/cron.ts`): una promesa que nadie espera necesita un `catch` |
 | `getaddrinfo ENOTFOUND dpg-…` / `ECONNREFUSED` al puerto de la base | La base no existe o cambió de dirección, no es un problema de la aplicación. En Render la instancia gratuita de PostgreSQL **expira y se borra**; el hostname deja de resolver y `DATABASE_URL` apunta a la nada. `/api/health` sigue en 200 porque no toca la base: eso ya separa "la app está viva" de "la base no" |
+| El log de `bot-wa` dice que no pudo resolver el teléfono | **Es lo normal, no una falla.** WhatsApp casi nunca lo entrega: el cliente se identifica por su LID, y hasta los recordatorios salen por ahí ([ADR-0005](adr/0005-identidad-por-lid.md)). Lo único que no pasa es el cruce con un cliente cargado en el panel por teléfono |
 | Una consulta devuelve vacío y debería traer filas | Puede ser RLS: la ruta no abrió el contexto de tenant. Se ve en el log de arranque si RLS está activo, y con `SELECT current_setting('app.tenant_id', true)` en la conexión |
 
 ## 9. Cuando el proyecto crezca
