@@ -121,7 +121,7 @@ Escritos como criterios verificables. Donde no hay medición, se dice.
 |---|---|---|
 | RNF-REN-1 | Una consulta del panel responde en < 500 ms con 10k turnos | ✅ Medido: peor p95 **24 ms** con 10k, **108 ms** con 100k. Ver abajo |
 | RNF-REN-2 | El bot responde en < 5 s (incluye la llamada a Claude) | ⚠️ Parcial — el tramo del backend son **18 ms** en el peor paso con 100k turnos. Claude, n8n y WhatsApp no se miden desde acá. Ver abajo |
-| RNF-REN-3 | Las consultas frecuentes tienen índice | ✅ 6 índices en `appointments`, 5 en `customers` |
+| RNF-REN-3 | Las consultas frecuentes tienen índice | ✅ 6 índices en `appointments`, 5 en `customers`. Había además una vista materializada precalculada para reportes que **nadie leía**; se borró (ver [Seguridad §3](05-seguridad.md)) |
 
 **Cómo se midió.** `npm run db:seed-carga 100000` genera el volumen y
 `npm run medir` recorre los doce endpoints del panel por HTTP, reportando mediana
@@ -238,7 +238,7 @@ WhatsApp, y autorización y retención de datos personales según la Ley 1581.
 | RNF-MAN-1 | Todo el backend en TypeScript con `strict` | ✅ |
 | RNF-MAN-2 | Los módulos siguen la misma estructura | ✅ 14 módulos, `controller` + `routes` |
 | RNF-MAN-3 | Las decisiones estructurales quedan en un ADR | ✅ Ver `adr/` |
-| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 383 tests, y `npm run test:rls` los corre con RLS aplicándose. **Contar no alcanza**: `superadmin` tenía ocho rutas y cero pruebas, y es el módulo que más poder concentra. Lo que importa es qué queda sin cubrir, no cuántas hay |
+| RNF-MAN-4 | Los cambios tienen prueba automatizada | ✅ 385 tests, y `npm run test:rls` los corre con RLS aplicándose. **Contar no alcanza**: `superadmin` tenía ocho rutas y cero pruebas, y es el módulo que más poder concentra. Lo que importa es qué queda sin cubrir, no cuántas hay |
 
 ### Compatibilidad
 

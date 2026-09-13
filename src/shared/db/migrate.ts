@@ -280,27 +280,33 @@ BEGIN
 END $$;
 
 -- ============================================================================
--- MATERIALIZED VIEW (Fase 2 - Reportes)
 -- ============================================================================
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_daily_summary AS
-SELECT
-    a.tenant_id,
-    a.scheduled_date AS report_date,
-    COUNT(*) AS total_appointments,
-    COUNT(*) FILTER (WHERE a.status = 'delivered') AS completed,
-    COUNT(*) FILTER (WHERE a.status = 'cancelled') AS cancelled,
-    COALESCE(SUM(p.amount), 0) AS total_revenue,
-    COUNT(DISTINCT a.customer_id) AS unique_customers,
-    AVG(
-        EXTRACT(EPOCH FROM (a.completed_at - a.started_at)) / 60
-    ) FILTER (WHERE a.completed_at IS NOT NULL AND a.started_at IS NOT NULL)
-    AS avg_service_minutes
-FROM appointments a
-LEFT JOIN payments p ON p.appointment_id = a.id
-GROUP BY a.tenant_id, a.scheduled_date;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_daily_summary
-    ON mv_daily_summary(tenant_id, report_date);
+-- mv_daily_summary: BORRADA (2026-09)
+-- ============================================================================
+-- Era un resumen diario por lavadero —turnos, entregados, cancelados, ingresos,
+-- clientes unicos, duracion promedio— precalculado "para la fase de reportes".
+--
+-- Se borra por dos razones, y la segunda es la que decide:
+--
+-- 1. Nadie la leia. Ningun controller, ninguna prueba, ningun reporte del panel
+--    la consultaba. Se creaba, se indexaba y un cron la refrescaba cada quince
+--    minutos; el resultado no se usaba para nada. Los reportes consultan
+--    appointments y payments directo, y les sobra margen: el peor p95 del panel
+--    son 108 ms con 100k turnos.
+--
+-- 2. RLS no la puede proteger. PostgreSQL no admite politicas sobre una
+--    materialized view, y esta contiene los ingresos y el volumen de TODOS los
+--    lavaderos. Comprobado: sin contexto de tenant, appointments devuelve 0
+--    filas y la vista las devolvia todas.
+--
+--    Hoy no es una fuga porque nadie la lee. Es algo peor de tener: un objeto
+--    cargado con datos de todos los tenants que el motor no puede vigilar,
+--    esperando a que alguien lo conecte a una pantalla.
+--
+-- Si alguna vez hace falta precalcular reportes, la forma segura es una tabla
+-- normal —con tenant_id y su politica— que una tarea llene con bypass, no una
+-- materialized view.
+DROP MATERIALIZED VIEW IF EXISTS mv_daily_summary;
 `;
 
 async function migrate() {
