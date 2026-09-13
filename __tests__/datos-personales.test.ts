@@ -15,7 +15,7 @@ import app from '../src/index';
 import * as db from '../src/shared/db';
 import { conTenant } from './helpers/rls';
 import { initBooking } from '../src/modules/whatsapp/wa-bridge.booking';
-import { accionSolicitada } from '../src/modules/whatsapp/datos-personales';
+import { accionSolicitada, nombreValido } from '../src/modules/whatsapp/datos-personales';
 import { buscarOCrearCliente } from '../src/modules/whatsapp/wa-identity';
 import { autorizacionDe } from '../src/modules/whatsapp/consentimiento';
 
@@ -138,6 +138,116 @@ describe('derecho de acceso', () => {
   it('a quien no tiene datos se lo dice, en vez de inventar un resumen', async () => {
     const r = await escribir('99955500099999@lid', 'MIS DATOS');
     expect(r.body.reply).toContain('No tenemos datos tuyos');
+  });
+});
+
+describe('qué sirve como nombre', () => {
+  // Unitario, sin pasar por el bridge: es la segunda línea de defensa del paso
+  // de corrección, y probarla por HTTP no la ejercitaría —el despacho atiende
+  // las palabras reservadas antes—.
+  it('acepta un nombre normal, con tildes y compuesto', () => {
+    expect(nombreValido('Ana')).toBe(true);
+    expect(nombreValido('María José')).toBe(true);
+    expect(nombreValido("O'Brien")).toBe(true);
+    expect(nombreValido('Jean-Luc')).toBe(true);
+  });
+
+  it('rechaza lo que claramente no es un nombre', () => {
+    expect(nombreValido('')).toBe(false);
+    expect(nombreValido('A')).toBe(false);
+    expect(nombreValido('ABC123')).toBe(false);       // una placa
+    expect(nombreValido('+573001234567')).toBe(false); // un teléfono
+    expect(nombreValido('x'.repeat(81))).toBe(false);
+  });
+
+  it('rechaza las palabras reservadas', () => {
+    // Lo que se escriba acá queda como el nombre del titular. Un
+    // «BORRAR MIS DATOS» guardado como nombre sería entender al revés.
+    expect(nombreValido('BORRAR MIS DATOS')).toBe(false);
+    expect(nombreValido('mis datos')).toBe(false);
+    expect(nombreValido('confirmo')).toBe(false);
+  });
+});
+
+describe('derecho de rectificación', () => {
+  // El derecho que faltaba: el doc decía "sólo el personal puede corregir", así
+  // que ejercerlo dependía de que alguien contestara.
+
+  itEnTenant('pide el nombre nuevo y lo guarda', async () => {
+    const pregunta = await escribir(LID_TITULAR, 'CORREGIR MIS DATOS');
+    expect(pregunta.body.reply).toContain('Ana Titular');
+    expect(pregunta.body.done).toBe(false);
+
+    const hecho = await escribir(LID_TITULAR, 'Ana María Titular');
+    expect(hecho.body.done).toBe(true);
+    expect(hecho.body.reply).toContain('Ana María Titular');
+
+    expect((await datosDe(LID_TITULAR))?.first_name).toBe('Ana');
+
+    const { rows } = await db.queryAdmin<{ last_name: string }>(
+      `SELECT last_name FROM customers WHERE tenant_id = $1 AND wa_lid = $2`,
+      [tenantId, LID_TITULAR],
+    );
+    expect(rows[0].last_name).toBe('María Titular');
+  });
+
+  itEnTenant('no pide confirmación: corregir no es borrar', async () => {
+    // Asimetría deliberada. El borrado no se deshace y exige CONFIRMO; una
+    // corrección de nombre sí se deshace escribiendo otra vez, así que pedir
+    // confirmación sería fricción sin nada a cambio.
+    await escribir(LID_TITULAR, 'CORREGIR MIS DATOS');
+    const hecho = await escribir(LID_TITULAR, 'Anita');
+
+    expect(hecho.body.done).toBe(true);
+    expect((await datosDe(LID_TITULAR))?.first_name).toBe('Anita');
+  });
+
+  itEnTenant('con 0 se desiste y el nombre queda igual', async () => {
+    await escribir(LID_TITULAR, 'CORREGIR MIS DATOS');
+    const r = await escribir(LID_TITULAR, '0');
+
+    expect(r.body.done).toBe(true);
+    expect(r.body.reply).not.toMatch(/borramos/i);
+    expect((await datosDe(LID_TITULAR))?.first_name).toBe('Ana');
+  });
+
+  itEnTenant('una palabra reservada se entiende, no se guarda como nombre', async () => {
+    // Quien escriba BORRAR MIS DATOS en este paso está pidiendo otra cosa.
+    //
+    // Lo atiende el despacho, que intercepta las palabras reservadas **antes**
+    // de llegar acá: la respuesta es la confirmación del borrado, no una
+    // repregunta por el nombre. `nombreValido` las rechaza igual, como segunda
+    // línea — eso se prueba aparte, abajo.
+    await escribir(LID_TITULAR, 'CORREGIR MIS DATOS');
+    const r = await escribir(LID_TITULAR, 'BORRAR MIS DATOS');
+
+    expect(r.body.done).toBe(false);
+    expect(r.body.reply).toMatch(/no se puede deshacer|CONFIRMO/i);
+    expect((await datosDe(LID_TITULAR))?.first_name).toBe('Ana');
+  });
+
+  itEnTenant('algo con números se rechaza y se repregunta', async () => {
+    // Una placa o un teléfono tecleados por error no son un nombre.
+    await escribir(LID_TITULAR, 'CORREGIR MIS DATOS');
+    const r = await escribir(LID_TITULAR, 'ABC123');
+
+    expect(r.body.done).toBe(false);
+    expect(r.body.reply).toMatch(/sin n[uú]meros/i);
+    expect((await datosDe(LID_TITULAR))?.first_name).toBe('Ana');
+  });
+
+  itEnTenant('corrige sólo al que lo pidió, no al vecino', async () => {
+    await escribir(LID_TITULAR, 'CORREGIR MIS DATOS');
+    await escribir(LID_TITULAR, 'Anita Corregida');
+
+    expect((await datosDe(LID_VECINO))?.first_name).toBe('Beto');
+  });
+
+  itEnTenant('el resumen de datos ofrece la corrección', async () => {
+    // Antes decía sólo "escribe ASESOR", que es el canal que dependía de que
+    // alguien contestara.
+    const r = await escribir(LID_TITULAR, 'MIS DATOS');
+    expect(r.body.reply).toContain('CORREGIR MIS DATOS');
   });
 });
 

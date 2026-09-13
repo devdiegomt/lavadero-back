@@ -106,6 +106,7 @@ Nomenclatura: `RF-<módulo>-<n>`.
 | RF-DAT-5 | Se puede contar cuántos clientes quedaron sin autorización registrada | `clientesSinAutorizacion()` |
 | RF-DAT-6 | El titular consulta sus datos escribiendo *MIS DATOS* | `datos-personales.ts` |
 | RF-DAT-7 | El titular pide la supresión y se le exige confirmación explícita antes de borrar | paso `awaiting_delete_confirm` |
+| RF-DAT-9 | El titular corrige su nombre escribiendo *CORREGIR MIS DATOS*, sin depender de que alguien conteste | paso `awaiting_name_fix` |
 | RF-DAT-8 | El personal suprime los datos de un titular que lo pidió por otro canal | `POST /api/customers/:id/anonimizar` |
 
 ## 2. No funcionales
@@ -187,7 +188,7 @@ WhatsApp, y autorización y retención de datos personales según la Ley 1581.
 
 | ID | Requerimiento | Estado |
 |---|---|---|
-| RNF-LEG-1 | Cumplir la Ley 1581 sobre datos personales | ⚠️ Parcial — autorización, retención, acceso y supresión resueltos; falta publicar el aviso completo, la rectificación por el propio titular y el registro ante la SIC. Ver [Seguridad §5](05-seguridad.md#5-datos-personales-ley-1581) |
+| RNF-LEG-1 | Cumplir la Ley 1581 sobre datos personales | ⚠️ Parcial — autorización, retención, acceso y supresión resueltos; falta publicar el aviso completo y el registro ante la SIC. Ver [Seguridad §5](05-seguridad.md#5-datos-personales-ley-1581) |
 | RNF-LEG-2 | Facturar según las reglas de la DIAN | ✅ Delegado en Alegra |
 | RNF-LEG-3 | Conservar facturas 5 años | ⚠️ Parcial — se archiva copia propia del PDF y del registro, con hash verificable. Falta el XML firmado, que Alegra no expone por API. Ver [ADR-0009](adr/0009-archivo-de-facturas.md) |
 

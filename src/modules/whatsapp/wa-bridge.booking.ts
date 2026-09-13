@@ -26,11 +26,17 @@ import {
   accionSolicitada,
   textoAcceso,
   textoConfirmarSupresion,
+  textoPedirNombre,
+  textoNombreCorregido,
+  nombreValido,
+  partirNombre,
   TEXTO_SUPRESION_HECHA,
   TEXTO_SIN_DATOS,
   TEXTO_CONFIRMACION_SIN_CONTEXTO,
+  TEXTO_NOMBRE_INVALIDO,
   FLUJO_DATOS,
   PASO_CONFIRMAR_SUPRESION,
+  PASO_CORREGIR_NOMBRE,
   type ResumenDatos,
 } from './datos-personales';
 
@@ -122,7 +128,7 @@ async function resumirDatos(
  * **este** lavadero: `anonimizarCliente` lleva el `tenant_id` en el WHERE.
  */
 async function atenderDerechosDelTitular(
-  accion: 'acceso' | 'supresion' | 'confirmacion',
+  accion: 'acceso' | 'rectificacion' | 'supresion' | 'confirmacion',
   tenantId: string,
   identidad: { phone: string | null; waLid: string | null },
   clave: string,
@@ -155,6 +161,23 @@ async function atenderDerechosDelTitular(
 
   if (accion === 'acceso') {
     return { active: true, done: true, reply: textoAcceso(resumen) };
+  }
+
+  // Rectificación: se pregunta el nombre nuevo y se espera la respuesta.
+  //
+  // A diferencia del borrado, **no se pide confirmación**. La asimetría es
+  // deliberada: el borrado no se deshace y una corrección de nombre sí —quien se
+  // equivoque vuelve a escribir *CORREGIR MIS DATOS*—, así que pedir un CONFIRMO
+  // acá sería fricción sin nada a cambio.
+  if (accion === 'rectificacion') {
+    await sesiones.set(tenantId, clave, {
+      flow: FLUJO_DATOS,
+      step: PASO_CORREGIR_NOMBRE,
+      data: { customerId: cliente.id },
+      retries: 0,
+      createdAt: new Date().toISOString(),
+    });
+    return { active: true, done: false, reply: textoPedirNombre(resumen.nombre) };
   }
 
   // Supresión: no se borra todavía. Se avisa y se espera un CONFIRMO explícito,
@@ -221,7 +244,39 @@ export async function bookingStep(req: Request, res: Response): Promise<void> {
       res.json({
         active: true,
         done: true,
-        reply: 'Listo, no borramos nada. Tus datos siguen como estaban. 🙂',
+        reply:
+          session?.step === PASO_CORREGIR_NOMBRE
+            ? 'Listo, lo dejamos como estaba. 🙂'
+            : 'Listo, no borramos nada. Tus datos siguen como estaban. 🙂',
+      });
+      return;
+    }
+
+    // Esperando el nombre corregido: este mensaje **es** el nombre.
+    if (session?.step === PASO_CORREGIR_NOMBRE) {
+      if (!nombreValido(text)) {
+        // Se repregunta en vez de guardar cualquier cosa: lo que se escriba acá
+        // queda como el nombre del titular.
+        res.json({ active: true, done: false, reply: TEXTO_NOMBRE_INVALIDO });
+        return;
+      }
+
+      const customerId = session?.data?.customerId as string | undefined;
+      const { first, last } = partirNombre(text);
+
+      // El `tenant_id` en el WHERE no es decorativo: la corrección alcanza sólo
+      // al cliente de este lavadero asociado a esta identidad.
+      await db.query(
+        `UPDATE customers SET first_name = $1, last_name = $2, updated_at = NOW()
+         WHERE id = $3 AND tenant_id = $4`,
+        [first, last, customerId ?? null, tenantId],
+      );
+
+      await sessionManager.delete(tenantId, clave);
+      res.json({
+        active: true,
+        done: true,
+        reply: textoNombreCorregido([first, last].filter(Boolean).join(' ')),
       });
       return;
     }
