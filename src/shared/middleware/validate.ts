@@ -72,11 +72,87 @@ const priceCents = z.number().int().min(0, 'El precio no puede ser negativo').de
 
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD');
 
+/**
+ * Fecha que además **existe**. El regex acepta `2026-02-31`, que después se
+ * convierte en otra cosa o revienta contra la base según quién la use.
+ */
+const fechaReal = dateStr.refine((v) => {
+  const [a, m, d] = v.split('-').map(Number);
+  const fecha = new Date(Date.UTC(a, m - 1, d));
+  return (
+    fecha.getUTCFullYear() === a && fecha.getUTCMonth() === m - 1 && fecha.getUTCDate() === d
+  );
+}, 'Esa fecha no existe');
+
+/**
+ * Hora del día.
+ *
+ * Dos cosas que parecen detalles y no lo son:
+ *
+ * - **`99:99` cumple `\d{2}:\d{2}$`.** Pasaba la validación y reventaba contra
+ *   la columna `TIME` con un 500. Lo usa también el onboarding, así que ahí
+ *   tenía el mismo agujero.
+ * - **Los segundos son opcionales.** PostgreSQL devuelve `TIME` como
+ *   `"07:00:00"`, el panel lee eso de `GET /tenants/me` y lo reenvía tal cual al
+ *   guardar. Exigir `HH:MM` habría devuelto 400 en una pantalla que funciona.
+ *   Se normaliza a `HH:MM` para guardar siempre igual.
+ */
 const timeStr = z
   .string()
-  .regex(/^\d{2}:\d{2}$/, 'Formato: HH:MM')
+  .regex(/^\d{2}:\d{2}(:\d{2})?$/, 'Formato: HH:MM')
+  .refine((v) => {
+    const [h, m, s = 0] = v.split(':').map(Number);
+    return h <= 23 && m <= 59 && s <= 59;
+  }, 'Esa hora no existe')
+  .transform((v) => v.slice(0, 5))
   .optional()
   .nullable();
+
+// ─── Query params ─────────────────────────────────────────────────────────────
+
+/**
+ * Los query params se validan **sin cambiarlos de tipo**: siguen siendo texto,
+ * porque los controllers hacen su propio `parseInt` y tienen sus propios valores
+ * por defecto. Lo único que cambia es que la basura se detiene acá con un 400 en
+ * vez de llegar a PostgreSQL y volver como 500.
+ *
+ * Tope máximo de `limit`. Sin él, `?limit=99999` devuelve la tabla entera y el
+ * servidor se la trae a memoria.
+ */
+const LIMITE_MAXIMO = 200;
+
+const enteroEnTexto = (max: number, nombre: string) =>
+  z
+    .string()
+    .regex(/^\d+$/, `${nombre} debe ser un número entero`)
+    .refine((v) => {
+      const n = Number(v);
+      return n >= 1 && n <= max;
+    }, `${nombre} debe estar entre 1 y ${max}`)
+    .optional();
+
+/**
+ * Arma un schema de query.
+ *
+ * Dos decisiones que no son obvias:
+ *
+ * 1. **Una cadena vacía cuenta como ausente.** El panel manda literalmente
+ *    `?from=&to=` cuando no hay rango de fechas (ver `PaymentsPage`), y tratar
+ *    eso como una fecha inválida rompería una pantalla que hoy funciona.
+ * 2. **`passthrough`**: las claves que no se nombran pasan intactas. `validate`
+ *    reemplaza `req.query` con lo que devuelve el schema, así que sin esto se
+ *    perderían en silencio los params que lee cada controller —`method`,
+ *    `period`, `all`— y el síntoma sería un filtro que deja de filtrar. Un
+ *    filtro que se ignora calladamente es peor que uno que da error.
+ */
+function queryDe<T extends z.ZodRawShape>(shape: T) {
+  return z.preprocess((entrada) => {
+    if (entrada === null || typeof entrada !== 'object') return entrada;
+    return Object.fromEntries(
+      Object.entries(entrada as Record<string, unknown>).filter((par) => par[1] !== ''),
+    );
+  }, z.object(shape).passthrough());
+}
 
 // ─── Schemas por módulo ───────────────────────────────────────────────────────
 
@@ -214,6 +290,29 @@ export const schemas = {
     adminLastName: optStr(80),
   }),
 
+  // ── Query de listados y reportes ──────────────────────────────────────────
+  // Lo que hoy devuelve 500 con basura: `?page=abc`, `?limit=-5`,
+  // `?from=no-es-fecha`. Ver docs/05-seguridad §7.
+  queryListado: queryDe({
+    page: enteroEnTexto(100_000, 'page'),
+    limit: enteroEnTexto(LIMITE_MAXIMO, 'limit'),
+    from: fechaReal.optional(),
+    to: fechaReal.optional(),
+    date: fechaReal.optional(),
+  }),
+
+  // ── PATCH /api/tenants/me ─────────────────────────────────────────────────
+  // Se validan sólo los campos que hoy revientan: los que van a columnas
+  // numéricas o de tipo TIME. El resto sigue pasando por la lista de campos
+  // permitidos del controller, que es la que decide qué se puede tocar.
+  tenantUpdate: z
+    .object({
+      bays_count: z.number().int().min(1).max(20).optional(),
+      opening_time: timeStr,
+      closing_time: timeStr,
+    })
+    .passthrough(),
+
   // ── Credenciales de facturación ───────────────────────────────────────────
   // Se validan aunque el módulo `billing` no use Zod en el resto: es un secreto
   // y entra por una ruta nueva, así que no hereda la deuda de las viejas.
@@ -288,17 +387,35 @@ export function validate<T extends z.ZodTypeAny>(
   };
 }
 
+const FORMA_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
- * Valida que `req.params.id` sea un UUID válido.
- * Sin esto, IDs malformados provocan errores crípticos en PostgreSQL.
+ * Valida que los parámetros de ruta indicados sean UUID.
+ *
+ * Sin esto, un id malformado llega a PostgreSQL, que responde
+ * `invalid input syntax for type uuid` y el cliente recibe un **500**. Era el
+ * caso de 19 rutas: el middleware existía desde siempre y estaba puesto en una
+ * sola. La brecha no era que faltara validación, era que no estaba conectada.
+ *
+ * Un id con forma válida que no existe sigue dando 404, como antes: esto sólo
+ * distingue "no me entendiste" de "no está".
  */
-export function validateId(req: Request, _res: Response, next: NextFunction): void {
-  const { id } = req.params;
-  if (!id) return next();
+export function validarUuid(...nombres: string[]): RequestHandler {
+  const cuales = nombres.length > 0 ? nombres : ['id'];
 
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
-    throw new AppError('ID inválido. Se espera formato UUID.', 400);
-  }
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    for (const nombre of cuales) {
+      const valor = req.params[nombre];
+      // Ausente no es inválido: la misma ruta puede no traer ese parámetro.
+      if (!valor) continue;
 
-  next();
+      if (!FORMA_UUID.test(valor)) {
+        throw new AppError(`${nombre} inválido. Se espera formato UUID.`, 400);
+      }
+    }
+    next();
+  };
 }
+
+/** El caso de siempre: `req.params.id`. */
+export const validateId = validarUuid('id');

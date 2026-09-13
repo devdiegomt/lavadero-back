@@ -7,31 +7,31 @@ import * as ctrl from './billing.controller';
 import { authenticate, authorize, requireTenant } from '../../shared/middleware/auth';
 import { asyncHandler } from '../../shared/utils/asyncHandler';
 import { planFeature } from '../../shared/middleware/planLimits';
-import { validate, schemas } from '../../shared/middleware/validate';
+import { validate, validarUuid, schemas } from '../../shared/middleware/validate';
 
 const router = Router();
 router.use(authenticate, requireTenant);
 
 // ── Facturación ──────────────────────────────────────────────────────
 // Generar factura electrónica para un pago
-router.post('/invoice/:paymentId', planFeature('billing'), asyncHandler(ctrl.generateInvoice));
+router.post('/invoice/:paymentId', validarUuid('paymentId'), planFeature('billing'), asyncHandler(ctrl.generateInvoice));
 
 // Consultar estado de factura (refresca desde DIAN)
-router.get('/invoice/:paymentId', asyncHandler(ctrl.getInvoiceStatus));
+router.get('/invoice/:paymentId', validarUuid('paymentId'), asyncHandler(ctrl.getInvoiceStatus));
 
 // Reintentar factura fallida
-router.post('/retry/:paymentId', asyncHandler(ctrl.retryInvoice));
+router.post('/retry/:paymentId', validarUuid('paymentId'), asyncHandler(ctrl.retryInvoice));
 
 // ── Notas Crédito ────────────────────────────────────────────────────
 // Generar nota crédito (anulación/devolución)
-router.post('/credit-note/:paymentId', authorize('admin'), asyncHandler(ctrl.createCreditNote));
+router.post('/credit-note/:paymentId', validarUuid('paymentId'), authorize('admin'), asyncHandler(ctrl.createCreditNote));
 
 // ── Listados ─────────────────────────────────────────────────────────
 // Lista de facturas emitidas
-router.get('/invoices', asyncHandler(ctrl.listInvoices));
+router.get('/invoices', validate(schemas.queryListado, 'query'), asyncHandler(ctrl.listInvoices));
 
 // Pagos pendientes de facturar (sin invoice_id o invoice_status = 'failed')
-router.get('/pending', asyncHandler(ctrl.listPendingPayments));
+router.get('/pending', validate(schemas.queryListado, 'query'), asyncHandler(ctrl.listPendingPayments));
 
 // ── Configuración ────────────────────────────────────────────────────
 // Estado de configuración fiscal

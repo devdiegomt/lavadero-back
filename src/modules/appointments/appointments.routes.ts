@@ -8,11 +8,11 @@ import { validate, validateId, schemas } from '../../shared/middleware/validate'
 const router = Router();
 router.use(authenticate, requireTenant);
 
-router.get('/',         asyncHandler(ctrl.list));
-router.get('/today',    asyncHandler(ctrl.today));
+router.get('/',         validate(schemas.queryListado, 'query'), asyncHandler(ctrl.list));
+router.get('/today',    validate(schemas.queryListado, 'query'), asyncHandler(ctrl.today));
 router.get('/:id',      validateId, asyncHandler(ctrl.getById));
 router.post('/',        planLimit('appointments'), validate(schemas.appointmentCreate), asyncHandler(ctrl.create));
-router.patch('/:id',    asyncHandler(ctrl.update));
+router.patch('/:id',    validateId, asyncHandler(ctrl.update));
 router.patch('/:id/status', validateId, validate(schemas.statusChange), asyncHandler(ctrl.changeStatus));
 router.post('/quick',   planLimit('appointments'), validate(schemas.appointmentQuick), asyncHandler(ctrl.quickCreate));
 
