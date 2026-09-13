@@ -17,9 +17,10 @@
  * - **Los turnos se reparten sobre dos años hacia atrás**, con más densidad en
  *   los últimos meses. Meterlos todos en un día haría que los índices por fecha
  *   se vieran mucho mejor de lo que son.
- * - **Los estados siguen una proporción plausible**: casi todo entregado, algo
- *   cancelado, poco pendiente. Un `WHERE status = 'pending'` sobre datos donde
- *   la mitad está pendiente mide otra cosa.
+ * - **El estado depende de la fecha del turno**, no del azar: lo viejo está
+ *   entregado o cancelado, y sólo los últimos días tienen trabajo en curso. Un
+ *   `WHERE status IN ('pending','in_progress')` sobre miles de turnos
+ *   «pendientes» de hace un año mide un lavadero que no existe.
  * - **Los clientes tienen visitas desparejas**: unos pocos concentran muchos
  *   turnos y la mayoría tiene uno o dos, que es como se comporta un lavadero.
  *
@@ -33,23 +34,35 @@ import { queryAdmin, pool } from './index';
 
 const TURNOS_POR_DEFECTO = 10_000;
 
-/** Proporción de estados, aproximada a la de un lavadero en marcha. */
-const ESTADOS: ReadonlyArray<[string, number]> = [
-  ['delivered', 0.78],
-  ['cancelled', 0.09],
-  ['done', 0.06],
-  ['in_progress', 0.03],
-  ['pending', 0.04],
-];
-
-function estadoAleatorio(): string {
+/**
+ * El estado depende de **cuándo** fue el turno, no del azar.
+ *
+ * La primera versión los repartía al azar sobre los dos años, y eso dejaba 6.572
+ * turnos `pending` o `in_progress` **de hace más de un mes**. Ningún lavadero
+ * tiene eso: un turno de hace seis meses está entregado o cancelado, nunca
+ * pendiente.
+ *
+ * No era un detalle cosmético. La consulta de "¿ya está mi carro?" filtra por
+ * `status IN ('pending','in_progress')`, así que con 7.000 turnos activos el
+ * planificador elegía recorrerlos todos y la consulta tardaba **60 ms** en vez
+ * de 5. Se estuvo a punto de "optimizar" una consulta que no tenía nada malo.
+ *
+ * Es la segunda vez que este generador produce un número engañoso por no
+ * parecerse a la realidad. La primera fue la distribución de fechas.
+ */
+function estadoSegun(diasAtras: number): string {
   const r = Math.random();
-  let acumulado = 0;
-  for (const [estado, peso] of ESTADOS) {
-    acumulado += peso;
-    if (r < acumulado) return estado;
-  }
-  return 'delivered';
+
+  // Lo viejo está cerrado. Un turno de la semana pasada ya se entregó o se
+  // canceló; no puede seguir "en proceso".
+  if (diasAtras > 2) return r < 0.9 ? 'delivered' : 'cancelled';
+
+  // Los últimos días son los que tienen trabajo en curso.
+  if (r < 0.45) return 'delivered';
+  if (r < 0.60) return 'done';
+  if (r < 0.75) return 'in_progress';
+  if (r < 0.92) return 'pending';
+  return 'cancelled';
 }
 
 /**
@@ -170,11 +183,12 @@ async function cargar(cuantos: number): Promise<void> {
           ? usuarios[Math.floor(Math.random() * usuarios.length)].id
           : null;
 
+      const dias = diasAtras(RANGO_DIAS);
       const p = params.length;
       params.push(
         veh.customer_id, veh.id, srv.id,
-        String(diasAtras(RANGO_DIAS)), `${String(hora).padStart(2, '0')}:${minuto}`,
-        srv.price_sedan, estadoAleatorio(), asignado,
+        String(dias), `${String(hora).padStart(2, '0')}:${minuto}`,
+        srv.price_sedan, estadoSegun(dias), asignado,
       );
       valores.push(
         `($1, $${p + 1}, $${p + 2}, $${p + 3},` +
