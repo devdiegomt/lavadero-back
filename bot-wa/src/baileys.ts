@@ -255,7 +255,12 @@ function resolveReplyJid(incomingJid: string): string {
       logger.info({ lid: incomingJid, resolved }, 'JID resuelto desde mapa');
       return resolved;
     }
-    logger.warn({ lid: incomingJid }, 'LID no encontrado en mapa, usando @lid directo');
+    // `debug` y no `warn`: no pasa nada malo. El mapa se llena con `senderPn`
+    // a medida que llegan mensajes, así que arranca vacío en cada sesión nueva
+    // —después de escanear un QR, por ejemplo— y responder al `@lid` directo
+    // funciona igual. Estaba en `warn` y aparecía en cada primer mensaje de
+    // cada cliente.
+    logger.debug({ lid: incomingJid }, 'LID no encontrado en mapa, usando @lid directo');
   }
   return incomingJid;
 }
@@ -295,24 +300,38 @@ async function processMessage(msg: proto.IWebMessageInfo): Promise<void> {
   const phone = resolveCustomerPhone(key);
 
   if (!phone) {
-    // Volcar que trae realmente la key: si WhatsApp manda el telefono bajo
-    // otro nombre, aca se ve. Sin esto solo sabemos que senderPn vino vacio,
-    // no si existe alguna otra via.
+    // **Esto es el caso normal, no una falla.** WhatsApp casi nunca entrega el
+    // telefono: el cliente se identifica por su LID, que es estable y viaja en
+    // `waLid`. Ver ADR-0005.
+    //
+    // El mensaje decia "las consultas por cliente se omitiran" y hoy es falso:
+    // el bridge acepta `waLid` o `phone` indistintamente, y hasta los
+    // recordatorios salen por LID (`notifications.ts`: `wa_lid ?? phone`). No se
+    // omite nada. Era texto de antes de que existiera la identidad por LID, en
+    // nivel `warn`, apareciendo en cada mensaje de cada cliente — o sea,
+    // enseñando a ignorar los warnings.
+    //
+    // Lo unico que se pierde de verdad es el cruce con un cliente cargado en el
+    // panel por telefono, hasta que se enlacen.
+    //
+    // El volcado de la key se conserva en `debug`: sirvio para averiguar si
+    // WhatsApp mandaba el telefono bajo otro nombre, y sigue sirviendo si
+    // alguna vez hay que volver a mirarlo.
     const camposKey: Record<string, unknown> = {};
     for (const k of Object.keys(key)) {
       const v = (key as Record<string, unknown>)[k];
       if (v !== null && v !== undefined) camposKey[k] = v;
     }
-    logger.warn(
+    logger.debug(
       {
         jid,
         replyJid,
         camposKey,
         lidMapSize: lidToJid.size,
-        // pushName es lo unico que identifica al cliente cuando no hay telefono
+        // pushName es lo unico legible por humanos cuando no hay telefono
         pushName: msg.pushName ?? null,
       },
-      'No se pudo resolver el telefono real; las consultas por cliente se omitiran'
+      'Sin telefono: el cliente se identifica por LID, que es lo habitual'
     );
   }
 
