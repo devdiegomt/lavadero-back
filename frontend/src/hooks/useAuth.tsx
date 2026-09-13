@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import {
-  api, setTokens, clearTokens, setAuthErrorHandler,
-  getStoredUser, setStoredUser,
+  api, setAccessToken, clearTokens, setAuthErrorHandler,
+  getStoredUser, setStoredUser, restaurarSesion, cerrarSesionEnServidor,
 } from '../lib/api';
 import type { AuthUser } from '../types';
 
@@ -26,15 +26,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-      api<AuthUser>('/auth/me')
-        .then((data) => { setUser(data); setStoredUser(data); })
-        .catch(() => { clearTokens(); setUser(null); })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+    // El access token no se persiste —vive en memoria, ver lib/api.ts— así que
+    // tras recargar la página no hay ninguno. Se pide uno con la cookie
+    // httpOnly, que es lo único que sobrevive al recargo. Si no hay cookie, o
+    // venció, el usuario ve el login.
+    //
+    // Antes esto miraba `localStorage.getItem('accessToken')`, que es
+    // exactamente lo que ya no existe.
+    let vigente = true;
+
+    restaurarSesion()
+      .then(async (ok) => {
+        if (!vigente) return;
+        if (!ok) {
+          clearTokens();
+          setUser(null);
+          return;
+        }
+        const data = await api<AuthUser>('/auth/me');
+        if (!vigente) return;
+        setUser(data);
+        setStoredUser(data);
+      })
+      .catch(() => {
+        if (!vigente) return;
+        clearTokens();
+        setUser(null);
+      })
+      .finally(() => {
+        if (vigente) setLoading(false);
+      });
+
+    return () => { vigente = false; };
   }, []);
 
   useEffect(() => {
@@ -42,20 +65,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string): Promise<AuthUser> => {
-    const data = await api<{ accessToken: string; refreshToken: string; user: AuthUser }>(
+    // La respuesta ya no trae el refresh token: viene en una cookie httpOnly que
+    // este código no puede leer, y es la mitad del arreglo.
+    const data = await api<{ accessToken: string; user: AuthUser }>(
       '/auth/login', { method: 'POST', body: { email, password } },
     );
-    setTokens(data.accessToken, data.refreshToken);
+    setAccessToken(data.accessToken);
     setUser(data.user);
     setStoredUser(data.user);
     return data.user;
   }, []);
 
   const signup = useCallback(async (payload: Record<string, unknown>) => {
-    const data = await api<{ accessToken: string; refreshToken: string; user: AuthUser; tenant: unknown }>(
+    const data = await api<{ accessToken: string; user: AuthUser; tenant: unknown }>(
       '/onboarding/register', { method: 'POST', body: payload },
     );
-    setTokens(data.accessToken, data.refreshToken);
+    setAccessToken(data.accessToken);
     const fullUser = await api<AuthUser>('/auth/me');
     setUser(fullUser);
     setStoredUser(fullUser);
@@ -63,10 +88,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    try {
-      const rt = localStorage.getItem('refreshToken');
-      await api('/auth/logout', { method: 'POST', body: { refreshToken: rt } });
-    } catch { /* Ignorar error en logout */ }
+    // El servidor es el único que puede borrar la cookie: es httpOnly. Por eso
+    // cerrar sesión deja de ser una limpieza local y pasa a ser una petición.
+    await cerrarSesionEnServidor();
     clearTokens();
     setUser(null);
   }, []);
