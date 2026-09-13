@@ -11,6 +11,7 @@ import {
   borrarRefreshCookie,
   leerRefreshToken,
 } from './cookies';
+import { hashPassword } from '../../shared/utils/password';
 import type { UserRow, TenantRow } from '../../types/entities';
 
 // ─── Helpers JWT ─────────────────────────────────────────────────────────────
@@ -233,4 +234,60 @@ export async function me(req: Request, res: Response): Promise<void> {
       : null,
   };
   res.json(response);
+}
+// ─── Cambiar la contraseña propia ────────────────────────────────────────────
+
+/**
+ * `PATCH /api/auth/password` — cualquier usuario cambia la suya.
+ *
+ * Ya existía `PATCH /api/users/:id/password`, pero vive bajo `requireTenant` y
+ * filtra por `tenant_id`. El **superadministrador no tiene tenant**, así que esa
+ * ruta le devuelve `400 Tenant no identificado`: la cuenta con más poder del
+ * sistema era la única que no podía rotar su credencial, y se creaba con una
+ * contraseña escrita en el README. Eso se descubrió recreando la base de
+ * producción, con esa cuenta ya viva en una API accesible desde internet.
+ *
+ * Esta ruta no necesita tenant porque no lo necesita para nada: opera sobre
+ * `req.user.id`, que sale de un token ya verificado. Siempre pide la contraseña
+ * actual — no hay caso de "un admin le cambia la contraseña a otro" acá; para
+ * eso sigue estando la ruta de `users`.
+ *
+ * **Revoca todas las sesiones**, incluida la de quien la llama. Si se cambia una
+ * contraseña es porque puede estar comprometida, y dejar vivas las sesiones
+ * abiertas con la anterior deja entrar a quien la tuviera durante siete días
+ * más. El precio es tener que volver a entrar.
+ */
+export async function cambiarPropiaPassword(req: Request, res: Response): Promise<void> {
+  const { currentPassword, newPassword } = req.body as {
+    currentPassword: string;
+    newPassword: string;
+  };
+
+  const { rows } = await db.query<Pick<UserRow, 'password_hash'>>(
+    'SELECT password_hash FROM users WHERE id = $1',
+    [req.user!.id],
+  );
+  if (rows.length === 0) throw new AppError('Usuario no encontrado', 404);
+
+  const correcta = await bcrypt.compare(currentPassword, rows[0].password_hash);
+  if (!correcta) throw new AppError('La contraseña actual es incorrecta', 400);
+
+  if (currentPassword === newPassword) {
+    throw new AppError('La contraseña nueva tiene que ser distinta de la actual', 400);
+  }
+
+  await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [
+    await hashPassword(newPassword),
+    req.user!.id,
+  ]);
+
+  await db.query(
+    'UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL',
+    [req.user!.id],
+  );
+  borrarRefreshCookie(res);
+
+  res.json({
+    message: 'Contraseña actualizada. Todas las sesiones se cerraron; entra de nuevo.',
+  });
 }

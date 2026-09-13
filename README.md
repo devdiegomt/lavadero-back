@@ -99,9 +99,26 @@ npm run dev
 
 El backend queda en `http://localhost:3000`. Health check: `GET /api/health`.
 
-Credenciales por defecto del seed:
-- Super admin: `superadmin@carwash-saas.com` / `super123!` (cambiables vía `.env`)
+Credenciales del seed de demo (`npm run db:seed`):
 - Demo tenant admin: `admin@elbrillante.co` / `admin123`
+
+El super admin va aparte y **no tiene contraseña por defecto**: sale de
+`SUPER_ADMIN_EMAIL` y `SUPER_ADMIN_PASSWORD`, y sin esas dos variables el script
+se niega a correr.
+
+```bash
+npm run db:seed-superadmin
+```
+
+> ⚠️ Antes había un valor por omisión —`super123!`, escrito en este README y en
+> el código— y un despliegue al que le faltara la variable creaba, **sin fallar
+> ni avisar**, un superadministrador con una credencial pública sobre una API
+> abierta a internet. Pasó. Correr el script otra vez con otra contraseña la
+> rota, y `PATCH /api/auth/password` la cambia desde la aplicación.
+
+> ⚠️ **Estas credenciales son para desarrollo.** En un entorno accesible desde
+> internet —aunque sea una demo— cambiálas: el super admin ve **todos** los
+> lavaderos.
 
 > ⚠️ **Si vas a poner el repo público**, NO commitees el `.env`. El `.env.example` debe tener placeholders, nunca valores reales.
 

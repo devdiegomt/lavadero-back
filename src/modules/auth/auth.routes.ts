@@ -43,4 +43,14 @@ router.post('/refresh', exigirIntencionDelPanel, asyncHandler(authController.ref
 router.post('/logout', exigirIntencionDelPanel, authenticate, asyncHandler(authController.logout));
 router.get('/me', authenticate, asyncHandler(authController.me));
 
+// Cambiar la contraseña propia. Va acá y no en `users` porque las rutas de
+// `users` exigen tenant, y el superadministrador no tiene — era la única cuenta
+// del sistema que no podía rotar su credencial. Ver el controlador.
+router.patch(
+  '/password',
+  authenticate,
+  validate(schemas.cambiarPropiaPassword),
+  asyncHandler(authController.cambiarPropiaPassword),
+);
+
 export default router;
