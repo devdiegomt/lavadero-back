@@ -107,6 +107,17 @@ ciegas ante síntomas mal entendidos. Los casos concretos:
   `{ mensajes: [...] }`. **Antes de reportar un bug a partir de una prueba
   propia, verificar que la prueba habla el mismo idioma que el código.**
 
+- Se midió el panel y la herramienta reportó *"los 12 endpoints por debajo de
+  500 ms"*. Cuatro habían devuelto **429**: el limitador los rechazaba en 1,5 ms
+  y eso se contaba como rapidez. **Una respuesta que no es 200 no es una
+  medición**, y una herramienta que no lo comprueba se aprueba a sí misma.
+
+- La misma medición dio 106 ms para el tablero del día, y el dato era falso por
+  el otro lado: el generador de carga concentraba tanto en lo reciente que dejaba
+  **3.776 turnos en un solo día**, un tablero que ningún lavadero tiene. **Unos
+  datos de prueba poco realistas miden un sistema que no existe** — y da igual si
+  el número sale alto o bajo.
+
 **La regla que sale de ahí:** antes de cambiar código, conseguir el dato que
 distingue entre las causas posibles. Un log, una ejecución, una petición
 reproducida. Si no se puede reproducir, el primer trabajo es hacerlo
@@ -176,6 +187,24 @@ No hay tablero. El pendiente vive en dos lugares, ambos dentro del repositorio:
 
 Que vivan en el repositorio y no en una herramienta aparte tiene una ventaja: se
 actualizan en el mismo PR que los resuelve, así que no envejecen.
+
+## 6.1. Medir antes de optimizar
+
+```bash
+npm run db:seed-carga 100000   # volumen realista
+npm run medir                  # los 12 endpoints del panel, por HTTP
+npm run medir:rls              # los mismos, con RLS aplicándose
+```
+
+Reporta **mediana y p95**, no promedio: un promedio esconde que una de cada
+veinte peticiones tarde el triple, y esa es la que el usuario recuerda. Un
+endpoint que no devuelve 200 **invalida la corrida** en vez de contarse como
+rápido.
+
+Los resultados vigentes están en
+[Requerimientos §2](02-requerimientos.md#rendimiento). La regla es la misma que
+para todo lo demás: **un requisito con un número y sin medición es una
+intención**, y hasta que se mide no se sabe si sobra margen o falta.
 
 ## 7. Entornos
 

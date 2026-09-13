@@ -115,9 +115,34 @@ Escritos como criterios verificables. Donde no hay medición, se dice.
 
 | ID | Requerimiento | Estado |
 |---|---|---|
-| RNF-REN-1 | Una consulta del panel responde en < 500 ms con 10k turnos | ⚠️ No medido |
+| RNF-REN-1 | Una consulta del panel responde en < 500 ms con 10k turnos | ✅ Medido: peor p95 **24 ms** con 10k, **114 ms** con 100k. Ver abajo |
 | RNF-REN-2 | El bot responde en < 5 s (incluye la llamada a Claude) | ⚠️ No medido; observado ~1-2 s |
 | RNF-REN-3 | Las consultas frecuentes tienen índice | ✅ 6 índices en `appointments`, 5 en `customers` |
+
+**Cómo se midió.** `npm run db:seed-carga 100000` genera el volumen y
+`npm run medir` recorre los doce endpoints del panel por HTTP, reportando mediana
+y p95. `npm run medir:rls` hace lo mismo con las políticas de RLS aplicándose, que
+es como corre en producción.
+
+Con 10k turnos —el volumen que pide el requisito— el peor p95 es 24 ms, unas 20
+veces por debajo del presupuesto. Con 100k, diez veces el requisito, el peor es
+114 ms: sigue sobrando. Los dos más caros son el listado de turnos, que cuenta
+todas las filas para paginar, y la búsqueda de clientes, que hace `ILIKE` sobre
+varias columnas. Ninguno justifica tocarlos hoy.
+
+**RLS cuesta, y poco.** Comparando los mismos endpoints con y sin políticas, la
+diferencia va del 10 % al 45 % según la consulta —lo peor es el listado de
+turnos— y en ningún caso acerca nada al presupuesto.
+
+Dos advertencias sobre estos números:
+
+- **Es una base local**, en la misma máquina, sin red y sin nadie más usándola.
+  Sirve para comparar endpoints y detectar un plan de consulta malo. En un
+  servidor real serán peores.
+- **El tablero del día no está indexado y está bien así.** PostgreSQL prefiere un
+  escaneo secuencial paralelo antes que 400 accesos aleatorios al montón: la
+  tabla entera son unas 6.000 páginas. Es elección del planificador, no un índice
+  que falte.
 
 ### Disponibilidad
 
