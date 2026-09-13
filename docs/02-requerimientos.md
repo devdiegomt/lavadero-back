@@ -186,8 +186,41 @@ Dos advertencias sobre estos números:
 | RNF-DIS-6 | Un cliente que escribe de más no deja sin bot a los demás | ✅ Límite por cliente en `wa-bridge`, no por IP |
 | RNF-DIS-7 | Una conversación que se repite sin avanzar se corta, avisando antes | ✅ `bucle.ts`; un texto distinto la reanuda |
 | RNF-DIS-8 | Un proveedor externo que no responde no deja una petición colgada | ✅ Alegra con corte a los 15 s (`ALEGRA_TIMEOUT_MS`) |
-| RNF-DIS-9 | Un fallo de base en una ruta del bot responde un error, no tumba el proceso | ✅ `asyncHandler` en todas las rutas |
+| RNF-DIS-9 | Un fallo de base responde un error, no tumba el proceso | ✅ `asyncHandler` en las rutas y `correrTarea` en las tareas de fondo. Decía "en una ruta del bot" y esa redacción escondía el agujero: en producción lo que mató al proceso fue un **cron** sin `catch`. Ver abajo |
 | RNF-DIS-5 | Objetivo de disponibilidad | ⚠️ No definido |
+
+### Una caída que conviene tener escrita (2026-09)
+
+La base de datos de producción dejó de resolver por DNS —en Render la instancia
+gratuita de PostgreSQL expira y se borra— y la API **se murió en ciclo** en vez
+de degradarse: caía, Render la reiniciaba, y a los cinco minutos otra vez.
+
+Lo que la mataba no era la base. Era esto, en `initCronJobs`:
+
+```ts
+void conBypassRlsFueraDePeticion(() => sendAppointmentReminders());
+```
+
+Sin `catch`. En Node 20 una promesa rechazada que nadie maneja **termina el
+proceso**, así que el cron de recordatorios —que sólo hace falta para avisar de
+un turno— se llevaba puesta la API entera cada cinco minutos.
+
+Tres cosas que valen más que el arreglo:
+
+- **El `try/catch` que las tareas ya tenían adentro no servía de nada.** Lo que
+  falla es `pool.connect()` en el envoltorio, *antes* de que la tarea llegue a
+  correr. Quien programa una tarea es quien tiene que manejar su error.
+- **RNF-DIS-9 decía ✅ y era verdad de lo que decía**: *"un fallo de base **en una
+  ruta del bot**"*. La redacción, heredada del incidente anterior, dejaba fuera
+  justo el camino que falló. Un requisito acotado al caso que ya se arregló no
+  protege del siguiente.
+- **Es la tercera vez** que el proyecto se cae por una promesa sin `catch`. Ahora
+  hay tres capas: `asyncHandler` en las rutas, `correrTarea` en los crons, y un
+  `unhandledRejection` a nivel de proceso que anota y deja vivo al servidor.
+
+El síntoma fue distinguible en un comando: `/api/health` seguía devolviendo 200
+—no toca la base— mientras el login daba 500. Eso separa *"la app está caída"* de
+*"la app está viva y la base no"* sin entrar a ningún panel.
 
 ### Seguridad
 

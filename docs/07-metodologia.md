@@ -127,6 +127,16 @@ ciegas ante síntomas mal entendidos. Los casos concretos:
   nada malo**, y la segunda vez que el mismo generador produce un número
   engañoso.
 
+- La API de producción se reiniciaba sola cada pocos minutos. El correo del
+  proveedor decía *"server failure… in many cases this issue resolves
+  automatically"*, que invita a esperar. El log tenía dos cosas distintas: un
+  `ENOTFOUND` de la base —causa externa, la instancia gratuita había expirado— y
+  **un volcado que terminaba en `Node.js v20.20.2`**, que no es un error sino el
+  proceso muriéndose, por un cron sin `catch`. Sin lo segundo, la caída de la
+  base habría sido un servicio degradado en vez de una API caída. **Cuando algo
+  externo falla, la pregunta que queda es por qué nos tumbó** — y esa parte sí es
+  nuestra.
+
 **La regla que sale de ahí:** antes de cambiar código, conseguir el dato que
 distingue entre las causas posibles. Un log, una ejecución, una petición
 reproducida. Si no se puede reproducir, el primer trabajo es hacerlo
@@ -252,7 +262,7 @@ intención**, y hasta que se mide no se sabe si sobra margen o falta.
 | Entorno | Dónde | Datos |
 |---|---|---|
 | Local | Docker Compose | `db:reset` o `db:demo` |
-| Producción | Railway (backend) · Vercel (frontend) | Reales |
+| Producción | Render (backend + PostgreSQL) · Vercel (frontend) | Reales |
 
 **No hay staging.** Con un desarrollador y sin usuarios en producción todavía,
 mantener un tercer entorno cuesta más de lo que evita. Cuando haya usuarios
@@ -313,6 +323,8 @@ Un orden que evita perder tiempo:
 | Una factura archivada no se puede descargar | `npm run db:verificar-facturas`: si su hash no coincide, el sistema se niega a entregarla como auténtica. Volver a bajarla con `db:archivar-facturas` mientras Alegra siga vigente |
 | Un cliente aparece dos veces | `npm run db:migrate-telefonos` lista los que comparten teléfono. No los fusiona: eso se decide a mano |
 | El bot deja de responder de golpe | Si el backend murió, mirar si fue un `unhandled rejection`. Toda ruta `async` va con `asyncHandler`: sin él, en Express 4 el rechazo no llega al errorHandler y Node 22 termina el proceso |
+| La API se reinicia sola cada pocos minutos | Buscar en el log un volcado que termine en `Node.js v20.x` — eso no es un error manejado, es el proceso muriéndose. Si el stack pasa por una tarea de fondo, va con `correrTarea` (`shared/db/cron.ts`): una promesa que nadie espera necesita un `catch` |
+| `getaddrinfo ENOTFOUND dpg-…` / `ECONNREFUSED` al puerto de la base | La base no existe o cambió de dirección, no es un problema de la aplicación. En Render la instancia gratuita de PostgreSQL **expira y se borra**; el hostname deja de resolver y `DATABASE_URL` apunta a la nada. `/api/health` sigue en 200 porque no toca la base: eso ya separa "la app está viva" de "la base no" |
 | Una consulta devuelve vacío y debería traer filas | Puede ser RLS: la ruta no abrió el contexto de tenant. Se ve en el log de arranque si RLS está activo, y con `SELECT current_setting('app.tenant_id', true)` en la conexión |
 
 ## 9. Cuando el proyecto crezca

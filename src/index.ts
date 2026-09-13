@@ -119,6 +119,22 @@ app.use(errorHandler);
 // En tests (NODE_ENV=test) NO levantamos el servidor — supertest usa `app`
 // directamente y abrir un puerto crearía conflictos al correr en paralelo.
 if (process.env.NODE_ENV !== 'test') {
+  // Última red, no un sustituto de manejar los errores donde ocurren.
+  //
+  // En Node 20 una promesa rechazada que nadie maneja termina el proceso. Para
+  // un script eso está bien; para un servidor convierte "una tarea de fondo no
+  // pudo hablar con la base" en "la API entera se cae", que es exactamente lo
+  // que pasó en producción: un cron sin `catch` y un ciclo de reinicios cada 5
+  // minutos.
+  //
+  // Cada caso concreto se maneja donde corresponde —`asyncHandler` en las rutas,
+  // `correrTarea` en los crons—. Esto es para el que se escape: se anota con el
+  // stack completo y el servidor sigue atendiendo. Si aparece en el log, es un
+  // bug a arreglar, no ruido a ignorar.
+  process.on('unhandledRejection', (razon) => {
+    logger.error({ err: razon }, 'Promesa rechazada sin manejar');
+  });
+
   app.listen(PORT, () => {
     logger.info(`🚿 Carwash API corriendo en puerto ${PORT}`);
     logger.info(`   Ambiente: ${process.env.NODE_ENV ?? 'development'}`);
