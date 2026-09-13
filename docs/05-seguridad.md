@@ -286,6 +286,47 @@ además intenta leer, modificar, borrar e insertar en el lavadero vecino y
 comprueba que el motor lo impide. Probar esto como `postgres` daría verde sin
 medir nada.
 
+#### Lo que esa suite verde no cubría (2026-09)
+
+Toda esa suite entra **por HTTP**, y ahí el contexto de tenant lo abre
+`requireTenant`. Lo que corre **fuera de una petición** —seeds, crons, scripts de
+mantenimiento— no pasa por ahí, y no lo cubría nada. Se descubrió intentando
+rotar la contraseña del superadministrador contra una base con RLS activo:
+
+```
+❌ Error: new row violates row-level security policy for table "users"
+```
+
+El superadministrador tiene `tenant_id = NULL`, y la política dice
+`tenant_id = current_setting('app.tenant_id')`. En SQL `NULL = cualquier cosa` no
+es verdadero: **esa fila no se puede insertar sin el bypass, nunca.**
+
+Mirando el resto aparecieron tres más, y la segunda es la que preocupa:
+
+| Dónde | Qué pasaba |
+|---|---|
+| `seed.ts`, `demo-seed.ts`, `rotate-encryption-key.ts` | El mismo error, ruidoso |
+| **La limpieza de `billing_errors`** | El `DELETE` **no falla: borra cero filas y no dice nada** |
+| `REFRESH MATERIALIZED VIEW mv_daily_summary` | `must be owner of materialized view` cada quince minutos |
+
+La del medio es la peor forma de romperse. Un error se ve en el log; un no-op
+silencioso no se ve nunca — la tabla simplemente crece para siempre. Está
+comprobado contra la base: la fila candidata seguía ahí después de correr la
+limpieza.
+
+La tercera resultó ser trabajo muerto: **nadie lee `mv_daily_summary`**. Se
+creaba, se indexaba y se refrescaba cada quince minutos, y ningún controller,
+prueba ni reporte la consulta. Se quitó el refresco; la vista sigue en el
+esquema, y quien la vaya a usar tiene que decidir quién la refresca —con RLS
+aplicándose, el refresco necesita bypass o la vista se llena vacía.
+
+**La regla que sale de esto:** todo lo que escriba en la base **fuera de una
+petición** cruza tenants por definición, y necesita el bypass explícito. Los
+seeds abren una conexión con `app.bypass_rls` puesto para todo el script; los
+crons van envueltos en `conBypassRlsFueraDePeticion`. Y hay una prueba —
+`__tests__/crons-bajo-rls.test.ts`— que corre la limpieza y **comprueba que
+borró**, no que no falló.
+
 **Al escribir una consulta nueva**, la pregunta sigue siendo: *¿puede esta
 consulta devolver una fila de otro tenant?* El `WHERE tenant_id` se sigue
 poniendo. RLS es la red debajo, no el reemplazo: una consulta sin filtro dentro
@@ -650,6 +691,12 @@ Ordenadas por relación entre riesgo y esfuerzo.
 > `carwash_app`— es operativo y va aparte del despliegue: la suite pasa con los
 > dos roles, y el servidor avisa al arrancar mientras las políticas estén
 > inertes.
+>
+> Este párrafo decía *"la suite pasa con los dos roles"* como si eso alcanzara
+> para activarlo. No alcanzaba: la suite entra por HTTP y **nada cubría lo que
+> corre fuera de una petición**. Activarlo habría roto los seeds con un error, y
+> —peor— habría dejado la limpieza de `billing_errors` borrando cero filas en
+> silencio. Está contado en la §3. Ahora sí.
 
 > **Cerrada (2026-09).** *"Sin auditoría de acciones"* era la #4. Existe
 > `action_log`, que escribe un middleware global —no una llamada por controller,
