@@ -36,6 +36,14 @@ const API_URL = import.meta.env.VITE_API_URL || '/api';
  */
 const CABECERA_PANEL = 'x-panel-request';
 
+/**
+ * Rutas donde un 401 es "credenciales inválidas", no "el token venció".
+ *
+ * Para el resto, un 401 se responde pidiendo un token nuevo con la cookie. Acá
+ * no hay nada que renovar.
+ */
+const ESTABLECEN_SESION = new Set(['/auth/login', '/auth/refresh']);
+
 /** En memoria a propósito. Ver la cabecera del archivo. */
 let accessToken: string | null = null;
 
@@ -77,13 +85,53 @@ export function setStoredUser(user: unknown): void {
 }
 
 /**
+ * La renovación en curso, si hay una.
+ *
+ * El backend **rota** el refresh token: cada `/auth/refresh` emite uno nuevo y
+ * revoca el anterior en el acto. Eso es lo correcto —un token robado deja de
+ * servir en cuanto el dueño renueva— pero vuelve fatal renovar dos veces a la
+ * vez: la segunda llega con un token ya revocado, recibe 401 y este cliente
+ * cierra la sesión.
+ *
+ * Y renovar dos veces a la vez es lo normal, no lo raro. Al cargar una pantalla
+ * el panel dispara varias consultas en paralelo; si el access token no está
+ * —justo después de recargar, que es el caso de siempre ahora que no se
+ * persiste— todas responden 401 y todas querrían renovar.
+ *
+ * Esto lo encontró una prueba en navegador: tres pantallas de nueve cerraban
+ * sesión sola al entrar, y el log del backend tenía exactamente tres
+ * `Refresh token inválido o expirado`. Con `supertest` no aparece: las
+ * peticiones van de a una.
+ *
+ * Queda un caso que esto no cubre: **dos pestañas** comparten la cookie pero no
+ * esta variable, así que si renuevan en el mismo instante una pierde. Hace
+ * falta un candado entre pestañas (`BroadcastChannel` o `navigator.locks`) o
+ * una ventana de gracia en el backend. Anotado en docs/05-seguridad.md.
+ */
+let renovacionEnCurso: Promise<boolean> | null = null;
+
+/**
  * Pide un access token nuevo usando la cookie.
  *
+ * Los que lleguen mientras hay una renovación en curso se cuelgan de esa misma
+ * en vez de empezar otra. Ver arriba.
+ */
+function renovar(): Promise<boolean> {
+  if (!renovacionEnCurso) {
+    renovacionEnCurso = pedirTokenNuevo();
+    void renovacionEnCurso.finally(() => {
+      renovacionEnCurso = null;
+    });
+  }
+  return renovacionEnCurso;
+}
+
+/**
  * `credentials: 'include'` es obligatorio: sin eso el navegador no manda la
  * cookie en una petición cross-origin y el refresh falla con 400 sin decir por
  * qué.
  */
-async function renovar(): Promise<boolean> {
+async function pedirTokenNuevo(): Promise<boolean> {
   try {
     const res = await fetch(`${API_URL}/auth/refresh`, {
       method: 'POST',
@@ -180,18 +228,25 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
   // Antes esto sólo se intentaba si había un refresh token guardado. Ahora
   // siempre se intenta: el navegador tiene la cookie o no la tiene, y este código
   // no puede saberlo — que es exactamente el punto.
-  if (res.status === 401) {
+  //
+  // Salvo en las rutas que *establecen* la sesión. Ahí un 401 no significa
+  // "venció el access token" sino "estas credenciales no sirven", y renovar no
+  // arregla nada: dispara un refresh inútil y, peor, reemplaza el mensaje del
+  // servidor por "Sesión expirada". Escribir mal la contraseña decía que la
+  // sesión había expirado. Lo encontró una prueba en navegador, no las del
+  // backend: el error sólo se ve en la pantalla.
+  if (res.status === 401 && !ESTABLECEN_SESION.has(path)) {
     const renovado = await renovar();
     if (renovado && accessToken) {
       headers['Authorization'] = `Bearer ${accessToken}`;
       res = await fetch(`${API_URL}${path}`, { ...config, headers });
     }
-  }
 
-  if (res.status === 401) {
-    clearTokens();
-    onAuthError?.();
-    throw new ApiError('Sesión expirada', 401);
+    if (res.status === 401) {
+      clearTokens();
+      onAuthError?.();
+      throw new ApiError('Sesión expirada', 401);
+    }
   }
 
   const data = (await res.json()) as T;

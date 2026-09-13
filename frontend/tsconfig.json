@@ -40,6 +40,7 @@
     //   }
     // y configura también `resolve.alias` en vite.config.ts.
   },
-  "include": ["src"],
+  // `e2e` también: son pruebas y se rompen igual que el código.
+  "include": ["src", "e2e"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

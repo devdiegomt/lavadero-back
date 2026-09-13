@@ -83,9 +83,13 @@ export default function AppLayout() {
               </p>
               <p className="text-xs text-gray-500 truncate">{user?.role}</p>
             </div>
+            {/* El contenido es un emoji, así que sin `aria-label` el nombre
+                accesible del botón es «🚪»: un lector de pantalla anuncia eso.
+                `title` no alcanza —sólo se usa cuando no hay contenido. */}
             <button
               onClick={logout}
               title="Cerrar sesión"
+              aria-label="Cerrar sesión"
               className="text-gray-400 hover:text-gray-600 transition p-1"
             >
               🚪
