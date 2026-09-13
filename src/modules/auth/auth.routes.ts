@@ -7,6 +7,7 @@ import { authenticate } from '../../shared/middleware/auth';
 import { asyncHandler } from '../../shared/utils/asyncHandler';
 import { validate, schemas } from '../../shared/middleware/validate';
 import { conBypassRls } from '../../shared/middleware/rls';
+import { exigirIntencionDelPanel } from './cookies';
 
 const router = Router();
 
@@ -31,8 +32,15 @@ const loginLimiter = rateLimit({
 });
 
 router.post('/login', loginLimiter, validate(schemas.login), asyncHandler(authController.login));
-router.post('/refresh', validate(schemas.refresh), asyncHandler(authController.refresh));
-router.post('/logout', authenticate, asyncHandler(authController.logout));
+// `exigirIntencionDelPanel` es la defensa contra CSRF de los dos únicos
+// endpoints que se autentican con cookie. Las rutas que cambian datos usan
+// `Authorization`, que el navegador nunca adjunta solo, así que no la necesitan.
+// Ver modules/auth/cookies.ts.
+//
+// Ya no valida el cuerpo: el token viene de la cookie. Exigirlo en el cuerpo
+// rechazaría justamente el flujo nuevo.
+router.post('/refresh', exigirIntencionDelPanel, asyncHandler(authController.refresh));
+router.post('/logout', exigirIntencionDelPanel, authenticate, asyncHandler(authController.logout));
 router.get('/me', authenticate, asyncHandler(authController.me));
 
 export default router;

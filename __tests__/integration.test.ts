@@ -252,18 +252,28 @@ describe('TC-004: Auth', () => {
   });
 
   test('Refresh token rotation', async () => {
+    // El refresh token viaja en una cookie httpOnly, no en el cuerpo: un XSS no
+    // se puede llevar siete días de sesión renovable. Ver sesion-cookie.test.ts.
     const login = await request(app)
       .post('/api/auth/login')
       .send({ email: 'admin@elbrillante.co', password: 'admin123' });
-    const loginBody = login.body as LoginResponse;
+
+    const cookies = login.headers['set-cookie'] as unknown as string[];
+    const cookie = cookies.find((c) => c.startsWith('refresh_token='))!.split(';')[0];
 
     const res = await request(app)
       .post('/api/auth/refresh')
-      .send({ refreshToken: loginBody.refreshToken });
+      .set('Cookie', cookie)
+      .set('x-panel-request', '1')
+      .send({});
 
     expect(res.status).toBe(200);
-    const body = res.body as RefreshResponse;
-    expect(body.refreshToken).not.toBe(loginBody.refreshToken);
+    expect((res.body as RefreshResponse).accessToken).toBeTruthy();
+
+    // Rota: la cookie nueva es otra.
+    const nuevas = res.headers['set-cookie'] as unknown as string[];
+    const nueva = nuevas.find((c) => c.startsWith('refresh_token='))!.split(';')[0];
+    expect(nueva).not.toBe(cookie);
   });
 });
 

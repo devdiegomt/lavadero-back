@@ -125,6 +125,25 @@ const envSchema = z.object({
   // del empleado — de ahi que tenga plazo y no sea para siempre.
   DATA_RETENTION_AUDIT_MONTHS: z.coerce.number().int().min(0).default(24),
 
+  // ── Sesión en cookie ─────────────────────────────────────────────────────
+  // El refresh token va en una cookie httpOnly, no en localStorage, para que un
+  // XSS no se lleve siete días de sesión renovable. Ver modules/auth/cookies.ts.
+  //
+  // `lax` alcanza cuando el panel y la API comparten dominio registrable
+  // (app.lavadero.com y api.lavadero.com). Si están en dominios distintos hace
+  // falta `none`, y entonces lo único que queda contra CSRF es la cabecera de
+  // intención — que se exige siempre, justamente por esto.
+  AUTH_COOKIE_SAMESITE: z.enum(['lax', 'strict', 'none']).default('lax'),
+
+  // Si el login además devuelve el refresh token en el cuerpo. Por defecto NO:
+  // devolverlo invita a guardarlo donde no debe estar, que es la brecha entera.
+  // Poner `true` sólo para no dejar sin sesión a un frontend viejo mientras se
+  // despliega el nuevo, y volver a `false` después.
+  AUTH_REFRESH_IN_BODY: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+
   // ── Misc ─────────────────────────────────────────────────────────────────
   TIMEZONE: z.string().default('America/Bogota'),
 });
