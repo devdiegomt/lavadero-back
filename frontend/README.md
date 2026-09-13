@@ -50,6 +50,11 @@ Credenciales demo (necesitas que el backend esté seedeado):
 ## Estructura
 
 ```
+e2e/                        # Pruebas en navegador (Playwright)
+├── ayudas.ts               # Entrar al panel; comprobar que hay backend
+├── sesion.spec.ts          # La cookie httpOnly, vista por un navegador
+└── movil.spec.ts           # RNF-COM-3: que el panel quepa y se pueda tocar
+
 src/
 ├── App.jsx                 # Router principal
 ├── main.jsx                # Bootstrap (incluye initSentry)
@@ -65,7 +70,7 @@ src/
 │   ├── AppLayout.jsx       # Layout del tenant (sidebar + bottom nav)
 │   └── SuperAdminLayout.jsx
 ├── lib/
-│   ├── api.js              # Wrapper de fetch con refresh automático
+│   ├── api.js              # Wrapper de fetch; access token en memoria, refresh en cookie
 │   ├── format.js           # formatCOP, formatDateTime
 │   └── sentry.jsx          # Init opcional de Sentry
 └── pages/
@@ -88,10 +93,70 @@ src/
 ## Scripts
 
 ```bash
-npm run dev       # Vite dev server (con --host expone en LAN)
-npm run build     # Build de producción → dist/
-npm run preview   # Sirve dist/ localmente para verificar build
+npm run dev        # Vite dev server (con --host expone en LAN)
+npm run build      # Build de producción → dist/
+npm run preview    # Sirve dist/ localmente para verificar build
+npm run typecheck  # tsc --noEmit sobre src/ y e2e/
+npm run e2e        # Pruebas en navegador (ver abajo)
+npm run e2e:ui     # Las mismas, en modo interactivo
 ```
+
+---
+
+## Pruebas en navegador
+
+`e2e/` corre el panel en Chromium con Playwright, en dos tamaños: escritorio
+(Desktop Chrome) y móvil (Pixel 5).
+
+Existen por dos razones. La primera es **RNF-COM-3** —que el panel funcione en
+móvil— que hasta ahora se había mirado, no comprobado. La segunda es la que las
+hizo urgentes: **la sesión vive en una cookie `httpOnly` y eso no se puede
+probar sin un navegador.** Las pruebas del backend usan `supertest`, que copia
+cabeceras: no aplica `HttpOnly`, ni `SameSite`, ni `Path`, ni decide si una
+petición cross-origin lleva la cookie.
+
+La primera corrida encontró dos fallas que las 500+ pruebas del backend no
+podían ver, las dos introducidas por el cambio de sesión a cookie:
+
+- Escribir mal la contraseña decía **"Sesión expirada"**. Un 401 del login
+  disparaba el camino de renovar el token.
+- Entrar a Pagos o a Config **cerraba la sesión sola**. El backend rota el
+  refresh token en cada uso; al cargar una pantalla el panel dispara varias
+  consultas a la vez, todas sin access token, y cada una pedía su propia
+  renovación. Ganaba una y las demás llegaban con un token ya revocado.
+
+### Cómo correrlas
+
+El dev server de Vite lo levanta Playwright. El backend no —vive en otro
+repositorio y necesita su base— así que va aparte:
+
+```bash
+# Terminal 1: el backend
+cd ../lavadero-back
+npm run db:reset
+NODE_ENV=development RATE_LIMIT_MAX=100000 STRICT_RATE_LIMIT_MAX=100 npm run dev
+
+# Terminal 2: las pruebas
+npx playwright install chromium   # una sola vez
+npm run e2e
+```
+
+Los límites altos no son cosmética: `STRICT_RATE_LIMIT_MAX` son cinco intentos
+de login fallidos por email cada quince minutos, y la prueba de la contraseña
+equivocada gasta uno por corrida y por proyecto. Sin subirlo, la sexta corrida
+falla como si el login estuviera roto. Las pruebas lo detectan y lo dicen antes
+de empezar.
+
+Si hay un Chromium instalado pero no el que Playwright pide, `CHROMIUM_PATH`
+apunta al binario y se saltea la descarga.
+
+### Lo que no cubren
+
+- **Safari y Firefox.** Playwright los sabe manejar; agregarlos son tres líneas
+  en `playwright.config.ts` y descargar los binarios.
+- **`SameSite` de verdad.** `localhost:5173` y `localhost:3000` son orígenes
+  distintos pero el *mismo sitio*, así que la cookie viaja igual. En producción
+  el panel y la API sí están en sitios distintos: ver abajo.
 
 ---
 
@@ -157,16 +222,43 @@ setSentryUser(user);
    { "rewrites": [{ "source": "/(.*)", "destination": "/" }] }
    ```
 
-### CORS
+### CORS y la cookie de sesión
 
 Si el backend está en otro dominio, asegúrate de que `CORS_ORIGIN` en el backend incluya el dominio del frontend.
+
+Y hay una segunda cosa, que no es CORS y se confunde con CORS. La sesión vive en
+una cookie `httpOnly`; el navegador decide si la manda según **`SameSite`**, que
+mira el sitio, no el origen:
+
+| Panel | API | ¿Mismo sitio? | Qué hace falta |
+|---|---|---|---|
+| `localhost:5173` | `localhost:3000` | Sí (el puerto no cuenta) | Nada: `Lax` alcanza |
+| `panel.tu-dominio.com` | `api.tu-dominio.com` | Sí | Nada: `Lax` alcanza |
+| `tu-panel.vercel.app` | `tu-api.up.railway.app` | **No** | `AUTH_COOKIE_SAMESITE=none` en el backend, y HTTPS |
+
+El tercer caso es el que muerde: todo anda en local, se despliega, el login
+parece funcionar y la sesión se cae en la primera recarga sin ningún error que
+lo explique —el navegador simplemente no mandó la cookie—. Con `SameSite=None`
+la cookie es obligatoriamente `Secure`, así que el backend tiene que estar en
+HTTPS.
+
+Lo más simple es evitar el caso: poner el panel y la API bajo el mismo dominio
+con subdominios distintos.
 
 ---
 
 ## Troubleshooting
 
 **Login funciona pero al recargar pierde sesión**
-- El backend no está aceptando el refresh token. Verificar que `JWT_SECRET` no haya cambiado.
+- Casi siempre es la cookie, no el token. El access token vive en memoria y no
+  se persiste: al recargar hay que pedir uno nuevo con la cookie `refresh_token`.
+  Si el navegador no la manda, no hay sesión que restaurar.
+- En DevTools → Application → Cookies: la cookie tiene que estar, con
+  `HttpOnly` y `Path=/api/auth`. Si no está, el navegador nunca la guardó —falta
+  `Access-Control-Allow-Credentials: true` del backend, o `CORS_ORIGIN` no
+  coincide exactamente con el origen del panel (el `*` no sirve con credenciales).
+- Si está pero no viaja: es `SameSite`. Ver "CORS y la cookie de sesión".
+- Y recién después: que `JWT_SECRET` no haya cambiado en el backend.
 
 **`Failed to fetch` en cualquier llamada**
 - Verifica `VITE_API_URL` y que el backend esté corriendo. En dev, normalmente `http://localhost:3000/api`.
