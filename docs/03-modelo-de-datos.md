@@ -1,6 +1,6 @@
 # 03 · Modelo de datos
 
-PostgreSQL, 15 tablas. Todos los identificadores son `UUID` con
+PostgreSQL, 16 tablas. Todos los identificadores son `UUID` con
 `uuid_generate_v4()`.
 
 ## 1. Mapa
@@ -36,11 +36,12 @@ PostgreSQL, 15 tablas. Todos los identificadores son `UUID` con
 
   Sin relación directa con appointments:
   whatsapp_messages · billing_sync · tenant_usage · onboarding_log · refresh_tokens
+  action_log
 ```
 
 ## 2. La columna que está en casi todas
 
-`tenant_id` aparece en 11 de las 15 tablas. Es el eje del aislamiento
+`tenant_id` aparece en 12 de las 16 tablas. Es el eje del aislamiento
 multi-tenant y **toda consulta lo lleva en el `WHERE`**.
 
 Las cuatro que no lo tienen:
@@ -226,6 +227,7 @@ Sólo el hash. Quien lea la tabla no puede suplantar a nadie.
 | `billing_sync` | Estado de sincronización con Alegra |
 | `billing_errors` | Fallos de facturación pendientes de reintento |
 | `appointment_status_log` | Quién cambió el estado de un turno y cuándo |
+| `action_log` | Quién cambió qué desde el panel. Nombres de campos, nunca valores — ver [Seguridad §5](05-seguridad.md#el-rastro-de-acciones) |
 | `mv_daily_summary` | Vista materializada; se refresca cada 15 min |
 
 ## 5. Índices
@@ -257,6 +259,7 @@ npm run db:migrate-consent    # autorización y retención (Ley 1581)
 npm run db:migrate-agenda     # días de apertura y ventana de reserva
 npm run db:migrate-telefonos  # teléfonos a forma canónica
 npm run db:migrate-tipos-vehiculo  # cierra vehicle_type a los tipos con precio
+npm run db:migrate-auditoria       # bitácora de acciones del personal
 npm run db:encrypt-billing-keys    # cifra las credenciales de facturación
 # o todas:
 npm run db:migrate-all

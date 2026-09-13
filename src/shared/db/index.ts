@@ -36,6 +36,24 @@ pool.on('error', (err: Error) => {
 });
 
 /**
+ * Parámetro de una consulta.
+ *
+ * Los arrays están incluidos porque hay columnas de tipo array
+ * (`action_log.fields`, `tenants.closed_weekdays`) y `node-pg` las maneja
+ * nativamente. Sin esto, escribir en una obligaba a castear en el punto de
+ * llamada, que es justo donde el cast deja de verse.
+ */
+export type ParametroSql =
+  | string
+  | number
+  | boolean
+  | null
+  | Date
+  | undefined
+  | string[]
+  | number[];
+
+/**
  * Ejecuta una query con parámetros opcionales.
  *
  * Genérico: T define el shape de cada fila devuelta.
@@ -49,7 +67,7 @@ pool.on('error', (err: Error) => {
  */
 export async function query<T extends object = Record<string, unknown>>(
   text: string,
-  params?: (string | number | boolean | null | Date | undefined)[],
+  params?: ParametroSql[],
 ): Promise<QueryResult<T>> {
   return pool.query<T>(text, params as unknown[]);
 }

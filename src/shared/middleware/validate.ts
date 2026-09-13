@@ -334,6 +334,20 @@ export const schemas = {
     date: fechaReal.optional(),
   }),
 
+  // ── Bitácora de acciones ──────────────────────────────────────────────────
+  // Los ids se validan como UUID aunque vengan por query: sin eso, un filtro
+  // mal escrito llega a PostgreSQL y vuelve como 500.
+  queryAuditoria: queryDe({
+    page: enteroEnTexto(100_000, 'page'),
+    limit: enteroEnTexto(LIMITE_MAXIMO, 'limit'),
+    from: fechaReal.optional(),
+    to: fechaReal.optional(),
+    userId: uuid.optional(),
+    entityId: uuid.optional(),
+    entity: z.string().max(50).regex(/^[a-z-]+$/, 'Entidad inválida').optional(),
+    soloFallidas: z.enum(['true', 'false']).optional(),
+  }),
+
   // ── Cuerpos de PATCH ──────────────────────────────────────────────────────
   //
   // Los `POST` de alta validaban desde siempre; los `PATCH` no, y por ahí
