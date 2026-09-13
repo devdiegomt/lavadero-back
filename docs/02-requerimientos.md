@@ -189,7 +189,36 @@ Dos advertencias sobre estos números:
 | RNF-DIS-7 | Una conversación que se repite sin avanzar se corta, avisando antes | ✅ `bucle.ts`; un texto distinto la reanuda |
 | RNF-DIS-8 | Un proveedor externo que no responde no deja una petición colgada | ✅ Alegra con corte a los 15 s (`ALEGRA_TIMEOUT_MS`) |
 | RNF-DIS-9 | Un fallo de base responde un error, no tumba el proceso | ✅ `asyncHandler` en las rutas y `correrTarea` en las tareas de fondo. Decía "en una ruta del bot" y esa redacción escondía el agujero: en producción lo que mató al proceso fue un **cron** sin `catch`. Ver abajo |
-| RNF-DIS-5 | Objetivo de disponibilidad | ⚠️ No definido |
+| RNF-DIS-5 | Objetivo de disponibilidad: **99% en horario de atención** | ⚠️ Definido, **no alcanzable con la infraestructura actual**. Ver abajo |
+
+### El objetivo de disponibilidad, y por qué hoy no se cumple
+
+**99% en horario de atención**: lunes a sábado, 7:00 a 19:00 hora de Bogotá. Son
+72 horas por semana, así que el 1% son **unos 43 minutos de caída al mes** dentro
+de esa ventana. Fuera de ella no hay compromiso.
+
+Se acota al horario a propósito. Un lavadero cerrado a las 3 de la mañana no
+pierde nada si la API está caída, y prometer 24×7 obligaría a una infraestructura
+que este proyecto no tiene ni necesita. Lo que sí importa es que a las 10 de la
+mañana de un sábado el tablero responda.
+
+**Hoy no se cumple, y el número está escrito para que se note.** Un requisito con
+una cifra y sin medición es una intención; uno con una cifra que la
+infraestructura no puede dar es peor, porque parece resuelto. Lo que falta:
+
+| Qué | Por qué impide el 99% |
+|---|---|
+| El plan gratuito de Render **hiberna** por inactividad | El primer pedido después de un rato tarda cerca de un minuto. A las 7:00 de un lunes, eso es el arranque del día |
+| La base gratuita **expira y se borra** | Ya pasó una vez. No es un porcentaje de caída: es el servicio entero |
+| **No se mide nada** | Sin un chequeo externo contra `/api/health` no hay forma de saber si se cumple. Un objetivo que nadie mide no es un objetivo |
+| Una sola instancia, sin réplica | Cualquier despliegue es una interrupción, aunque corta |
+
+Los dos primeros se resuelven con un plan pago, en Render o donde sea. El tercero
+es un chequeo externo —cualquier servicio de monitoreo que golpee `/api/health`
+cada minuto y avise— y sin él los otros dos no se pueden dar por resueltos.
+
+**Mientras tanto, el estado honesto es «objetivo definido, no medido, no
+alcanzado».** No «⚠️ no definido», que era peor: no decía ni a qué se aspira.
 
 ### Una caída que conviene tener escrita (2026-09)
 
