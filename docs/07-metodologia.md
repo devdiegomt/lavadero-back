@@ -198,7 +198,7 @@ mientras no lo haya abierto un navegador. Las pruebas están en
 
 ```bash
 npm run db:reset          # base limpia
-npx jest                  # 383 tests
+npx jest                  # 385 tests
 npm run test:rls          # los mismos, con RLS aplicándose
 npx tsc --noEmit          # backend
 cd bot-wa && npm run build # bot

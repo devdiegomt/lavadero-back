@@ -334,6 +334,21 @@ ninguna prueba** hasta 2026-09; ahora `__tests__/superadmin.test.ts` comprueba
 que un admin de lavadero no llega a ninguna de las ocho, que sin sesión tampoco,
 y que el bypass efectivamente trae filas (sin él devolvería vacío).
 
+**RLS no alcanza a todo tipo de objeto, y eso hay que mirarlo.** PostgreSQL
+**no admite políticas sobre una vista materializada**. `mv_daily_summary` tenía
+los ingresos y el volumen diario de todos los lavaderos, y no se podía proteger:
+sin contexto de tenant, `appointments` devolvía 0 filas y la vista las devolvía
+todas. No era una fuga —nadie la leía— sino algo peor de tener: un objeto cargado
+con datos de todos que el motor no puede vigilar, esperando a que alguien lo
+conectara a una pantalla. Se borró.
+
+`__tests__/sin-objetos-sin-rls.test.ts` lo deja fijo: ninguna vista materializada
+con `tenant_id`, y ninguna tabla con `tenant_id` sin RLS y sin política. Se
+comprobó creando una vista de prueba: la suite se pone en rojo y la nombra.
+
+Si alguna vez hace falta precalcular reportes, va una **tabla normal** con su
+política, llenada por una tarea con bypass.
+
 **Al escribir una consulta nueva**, la pregunta sigue siendo: *¿puede esta
 consulta devolver una fila de otro tenant?* El `WHERE tenant_id` se sigue
 poniendo. RLS es la red debajo, no el reemplazo: una consulta sin filtro dentro
