@@ -163,6 +163,33 @@ ciegas ante síntomas mal entendidos. Los casos concretos:
   capacidad** — es la misma forma del acceso a «Mi cuenta» que existía y no se
   veía, y de `validateId` puesto en una sola ruta.
 
+- El CI moría a mitad de la corrida y el log decía
+  `idle = 10` junto a `timeout exceeded when trying to connect`. Al medirlo en
+  local con 200 peticiones concurrentes salió lo mismo —diez `idle`— y de ahí se
+  concluyó «pool sano». **Era lo contrario.** `idle` en `pg_stat_activity`
+  significa que *el servidor* no está ejecutando nada en esa conexión, no que
+  esté libre en el pool: estaban tomadas por la aplicación y sin devolver. La
+  causa era un `release()` que colgaba del `finally` de la consulta de limpieza,
+  así que si esa consulta no respondía la conexión no volvía nunca. **El mismo
+  número quería decir cosas opuestas según qué más pasara**, y lo que lo
+  distinguía —que el login siguiera contestando 200— estaba al lado y no se miró.
+- Ese mismo diagnóstico costó cuatro hipótesis, tres descartadas midiendo: fuga
+  por peticiones abortadas, fuga en `getClient()`, y agotamiento por carga. La
+  cuarta —que el runner fuera lento y bcrypt saturara el event loop— la tiró el
+  propio log: un login tarda 340 ms en local y 310 ms en CI. **Descartar con una
+  medición cuesta minutos; arreglar la hipótesis equivocada cuesta días.**
+
+- El primer CI del backend fallo con cuatro pruebas en rojo, y las cuatro eran
+  **frágiles, no rotas**. Tres decían `Expected: 400, Received: 401` y apuntaban a
+  la validación de contraseñas; el origen estaba en un `beforeAll` sin una sola
+  aserción, donde un login que falla deja el token en `undefined` y todo lo demás
+  da 401. La cuarta esperaba una fila de auditoría y encontraba dos: **el test
+  competía contra su propia escritura**, que ocurre en `res.on('finish')`, o sea
+  después de que supertest resuelve. En una máquina rápida el insert gana
+  siempre; en un runner de dos núcleos, no. **Un armado sin comprobar convierte
+  cualquier fallo en un fallo que señala al lugar equivocado**, y una prueba que
+  no espera a algo asíncrono sólo funciona mientras la máquina la acompañe.
+
 **La regla que sale de ahí:** antes de cambiar código, conseguir el dato que
 distingue entre las causas posibles. Un log, una ejecución, una petición
 reproducida. Si no se puede reproducir, el primer trabajo es hacerlo
@@ -237,6 +264,11 @@ el CI en verde con esa comprobación apagada. Si alguno falla de forma intermite
 bug**, no ruido: un test que falla 1 de cada 8 corridas enseña a ignorar el
 rojo. (Pasó — dos suites compartían base y se pisaban en paralelo. Se resolvió
 con `maxWorkers: 1`.)
+
+**El armado de una prueba se comprueba como el resto.** Un `beforeAll` que hace
+login y crea datos sin mirar ningún código deja los fallos apuntando al lugar
+equivocado: tres pruebas de validación en rojo cuando lo que se había roto era el
+login de arriba.
 
 **Correrlo dos veces seguidas sin resetear la base.** El estado que una suite
 deja es el que la siguiente encuentra, y eso ya rompió cosas cuatro veces: una
@@ -367,6 +399,7 @@ Un orden que evita perder tiempo:
 | La API se reinicia sola cada pocos minutos | Buscar en el log un volcado que termine en `Node.js v20.x` — eso no es un error manejado, es el proceso muriéndose. Si el stack pasa por una tarea de fondo, va con `correrTarea` (`shared/db/cron.ts`): una promesa que nadie espera necesita un `catch` |
 | `getaddrinfo ENOTFOUND dpg-…` / `ECONNREFUSED` al puerto de la base | La base no existe o cambió de dirección, no es un problema de la aplicación. En Render la instancia gratuita de PostgreSQL **expira y se borra**; el hostname deja de resolver y `DATABASE_URL` apunta a la nada. `/api/health` sigue en 200 porque no toca la base: eso ya separa "la app está viva" de "la base no" |
 | El log de `bot-wa` dice que no pudo resolver el teléfono | **Es lo normal, no una falla.** WhatsApp casi nunca lo entrega: el cliente se identifica por su LID, y hasta los recordatorios salen por ahí ([ADR-0005](adr/0005-identidad-por-lid.md)). Lo único que no pasa es el cruce con un cliente cargado en el panel por teléfono |
+| La API contesta 500 y el log dice `timeout exceeded when trying to connect` | Es el pool sin conexiones libres. Buscar `Pool de PostgreSQL con cola`: dice `abiertas`, **`libres`** y `esperando`. Con `libres=0` y `esperando` que no baja, hay conexiones tomadas que no se devuelven. **No mirar `pg_stat_activity`**: ahí `idle` significa que el servidor no ejecuta nada, no que la conexión esté libre — y eso ya mandó por el camino equivocado una vez |
 | Una consulta devuelve vacío y debería traer filas | Puede ser RLS: la ruta no abrió el contexto de tenant. Se ve en el log de arranque si RLS está activo, y con `SELECT current_setting('app.tenant_id', true)` en la conexión |
 
 ## 9. Cuando el proyecto crezca

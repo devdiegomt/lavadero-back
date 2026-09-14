@@ -106,7 +106,18 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ): void {
-  if (process.env.NODE_ENV !== 'production') {
+  // En desarrollo conviene ver el error en la consola. **En tests no**: buena
+  // parte de la suite comprueba justamente que los errores salgan bien —entrada
+  // inválida, credenciales que no sirven, ids que no son UUID— así que cada
+  // prueba que pasa imprime su error esperado, con stack.
+  //
+  // El costo no es estético. Una corrida de CI salió con **9.778 líneas**, casi
+  // todas este bloque repetido, y encontrar el fallo de verdad ahí adentro es
+  // buscar una aguja. Un log que aparece siempre no lo lee nadie, y cuando hace
+  // falta leerlo estorba.
+  //
+  // El error sigue viajando en la respuesta, que es lo que las pruebas afirman.
+  if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
     console.error('❌', err.message);
     if (err.stack && !('isOperational' in err && err.isOperational)) {
       console.error(err.stack);

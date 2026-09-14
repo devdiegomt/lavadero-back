@@ -275,7 +275,27 @@ WhatsApp, y autorización y retención de datos personales según la Ley 1581.
 |---|---|---|
 | RNF-COM-1 | Node.js 20+ | ✅ |
 | RNF-COM-2 | PostgreSQL 14+ | ✅ Probado contra 16 |
-| RNF-COM-3 | El panel funciona en navegadores actuales y en móvil | ⚠️ Parcial — 40 pruebas en Chromium, en escritorio (1280px) y en móvil (Pixel 5): las nueve pantallas caben a lo ancho, la navegación de abajo se puede tocar y la sesión sobrevive a una recarga. Falta Safari y Firefox. Ver [`e2e/` en el frontend](https://github.com/devdiegomt/lavadero-front/tree/main/e2e) |
+| RNF-COM-3 | El panel funciona en navegadores actuales y en móvil | ✅ **125 pruebas en los tres motores**, en cada PR: Chromium (escritorio 1280px y Pixel 5), Firefox, y WebKit —el motor de Safari— en escritorio y en iPhone 13. Las nueve pantallas caben a lo ancho, la navegación de abajo se puede tocar, y la sesión en cookie `httpOnly` sobrevive a una recarga en los tres. Ver [`e2e/`](https://github.com/devdiegomt/lavadero-front/tree/main/e2e) y abajo |
+
+#### Qué cubren esas 125 pruebas, y qué no
+
+Veinticinco por navegador, iguales en los cinco. Corren en cada PR desde
+`.github/workflows/ci.yml` del panel, **un runner por navegador**: así un fallo
+en WebKit no arrastra a los demás y el informe dice cuál falló sin deducirlo.
+
+| Cubre | No cubre |
+|---|---|
+| Los tres motores: Blink, Gecko y WebKit | **Safari de verdad.** Playwright usa WebKit, que es su motor; coincide en cookies, CSS y layout, no en todo |
+| Dos tamaños reales de teléfono (Pixel 5, iPhone 13), con eventos táctiles | Tamaños de tableta |
+| Que la sesión en cookie `httpOnly` sobreviva a una recarga en los tres | **`SameSite` entre sitios distintos.** `localhost:5173` y `localhost:3000` son el mismo *site*; comprobarlo requiere desplegar en dos dominios. Ver [Seguridad §1](05-seguridad.md) |
+| Que ninguna de las nueve pantallas se desborde a lo ancho | Que se vean *bien*: mide desbordes, no diseño |
+
+**Por qué costó llegar acá.** Los tres navegadores nuevos se escribieron sin
+poder ejecutarlos —el CDN de Playwright estaba bloqueado en un entorno y la
+descarga falló tres veces en el otro— y las dos primeras corridas de CI murieron
+a mitad, con el backend quedándose sin conexiones. Eso está contado en la
+[metodología §2](07-metodologia.md): el diagnóstico costó cuatro hipótesis, tres
+descartadas midiendo.
 
 ### Legales
 
