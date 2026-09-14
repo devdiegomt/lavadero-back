@@ -16,6 +16,7 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import { pool } from '../db';
 import { correrEnContexto } from '../db/contexto';
+import type { PoolClient } from 'pg';
 import logger from '../utils/logger';
 
 /**
@@ -25,6 +26,53 @@ import logger from '../utils/logger';
  * —super admin, o una ruta pública— sigue sin abrir nada: esas consultas van al
  * pool y las bloquea RLS salvo que pasen por `conBypassRls`.
  */
+/**
+ * Devuelve una conexión al pool, pase lo que pase con la limpieza.
+ *
+ * Antes de devolverla hay que borrar el ajuste de sesión —`app.tenant_id` o
+ * `app.bypass_rls`— porque la conexión vuelve al pool y la próxima petición la
+ * heredaría. Eso es una consulta más, y **el `release()` colgaba de que esa
+ * consulta respondiera**:
+ *
+ *     cliente.query(...).catch(...).finally(() => cliente.release());
+ *
+ * Si no responde, la conexión no vuelve nunca. Con `max: 10`, diez de ésas y
+ * toda la API contesta 500 — que es exactamente el cuadro que apareció en CI:
+ * diez conexiones `idle` en PostgreSQL, la más vieja de hace minuto y medio, y
+ * `pool.connect()` dando timeout a los 5 s.
+ *
+ * **No está confirmado que ésa fuera la causa** —no se pudo reproducir fuera de
+ * CI, y sólo pasa con WebKit—. Pero un camino de liberación que depende de que
+ * una consulta responda no es un camino de liberación, y eso vale arreglarlo
+ * aunque después resulte que el fallo era otro.
+ *
+ * El corte a los 2 s deja rastro: si aparece en el log, la hipótesis era buena.
+ */
+function devolverAlPool(cliente: PoolClient, ajuste: string, ruta: string): void {
+  let devuelta = false;
+  const soltar = (porCorte: boolean): void => {
+    if (devuelta) return;
+    devuelta = true;
+    if (porCorte) {
+      logger.error(
+        { ruta, ajuste },
+        'La limpieza del contexto no respondió en 2 s: se devuelve la conexión igual',
+      );
+    }
+    cliente.release();
+  };
+
+  const corte = setTimeout(() => soltar(true), 2_000);
+
+  cliente
+    .query(`SELECT set_config('${ajuste}', '', false)`)
+    .catch(() => undefined)
+    .finally(() => {
+      clearTimeout(corte);
+      soltar(false);
+    });
+}
+
 export async function abrirContextoDeTenant(
   req: Request,
   res: Response,
@@ -62,12 +110,7 @@ export async function abrirContextoDeTenant(
   const liberar = (): void => {
     if (liberada) return;
     liberada = true;
-    // Se limpia antes de devolverla: la conexión vuelve al pool y la próxima
-    // petición podría heredar este tenant si no se resetea.
-    cliente
-      .query(`SELECT set_config('app.tenant_id', '', false)`)
-      .catch(() => undefined)
-      .finally(() => cliente.release());
+    devolverAlPool(cliente, 'app.tenant_id', req.originalUrl);
   };
   res.on('finish', liberar);
   res.on('close', liberar);
@@ -112,10 +155,7 @@ export function conBypassRls(motivo: string): RequestHandler {
     const liberar = (): void => {
       if (liberada) return;
       liberada = true;
-      cliente
-        .query(`SELECT set_config('app.bypass_rls', '', false)`)
-        .catch(() => undefined)
-        .finally(() => cliente.release());
+      devolverAlPool(cliente, 'app.bypass_rls', req.originalUrl);
     };
     res.on('finish', liberar);
     res.on('close', liberar);
