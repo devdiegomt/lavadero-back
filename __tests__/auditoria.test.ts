@@ -229,6 +229,17 @@ describe('lo que NO se guarda', () => {
       });
     expect(res.status).toBe(201);
     const usuarioId = res.body.id;
+
+    // **Esperar a que la creación quede registrada antes de limpiar.** La
+    // auditoría se escribe en `res.on('finish')`, o sea *después* de que
+    // supertest resuelve: borrar de una carrera contra ese insert. Acá el
+    // insert gana siempre y en CI —dos núcleos, más lento— llegaba después del
+    // borrado, así que la fila de la creación sobrevivía y esta prueba veía
+    // dos filas en vez de una.
+    //
+    // El fallo no señalaba a la auditoría ni a la carrera: decía
+    // `Expected length: 1, Received length: 2`.
+    await esperarRegistro('users');
     await db.queryAdmin(`DELETE FROM action_log WHERE tenant_id = $1`, [tenantId]);
 
     await request(app)

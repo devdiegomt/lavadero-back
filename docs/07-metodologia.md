@@ -179,6 +179,17 @@ ciegas ante síntomas mal entendidos. Los casos concretos:
   propio log: un login tarda 340 ms en local y 310 ms en CI. **Descartar con una
   medición cuesta minutos; arreglar la hipótesis equivocada cuesta días.**
 
+- El primer CI del backend fallo con cuatro pruebas en rojo, y las cuatro eran
+  **frágiles, no rotas**. Tres decían `Expected: 400, Received: 401` y apuntaban a
+  la validación de contraseñas; el origen estaba en un `beforeAll` sin una sola
+  aserción, donde un login que falla deja el token en `undefined` y todo lo demás
+  da 401. La cuarta esperaba una fila de auditoría y encontraba dos: **el test
+  competía contra su propia escritura**, que ocurre en `res.on('finish')`, o sea
+  después de que supertest resuelve. En una máquina rápida el insert gana
+  siempre; en un runner de dos núcleos, no. **Un armado sin comprobar convierte
+  cualquier fallo en un fallo que señala al lugar equivocado**, y una prueba que
+  no espera a algo asíncrono sólo funciona mientras la máquina la acompañe.
+
 **La regla que sale de ahí:** antes de cambiar código, conseguir el dato que
 distingue entre las causas posibles. Un log, una ejecución, una petición
 reproducida. Si no se puede reproducir, el primer trabajo es hacerlo
@@ -253,6 +264,11 @@ el CI en verde con esa comprobación apagada. Si alguno falla de forma intermite
 bug**, no ruido: un test que falla 1 de cada 8 corridas enseña a ignorar el
 rojo. (Pasó — dos suites compartían base y se pisaban en paralelo. Se resolvió
 con `maxWorkers: 1`.)
+
+**El armado de una prueba se comprueba como el resto.** Un `beforeAll` que hace
+login y crea datos sin mirar ningún código deja los fallos apuntando al lugar
+equivocado: tres pruebas de validación en rojo cuando lo que se había roto era el
+login de arriba.
 
 **Correrlo dos veces seguidas sin resetear la base.** El estado que una suite
 deja es el que la siguiente encuentra, y eso ya rompió cosas cuatro veces: una

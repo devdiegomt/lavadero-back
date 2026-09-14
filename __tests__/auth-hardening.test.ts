@@ -95,10 +95,19 @@ describe('validación al cambiar la contraseña', () => {
   let token: string;
   let userId: string;
 
+  // **Cada paso del armado se comprueba.** Sin esto, si el login del admin
+  // falla, `accessToken` queda `undefined`, el alta devuelve 401, `userId` queda
+  // `undefined` y las tres pruebas de abajo fallan con
+  // `Expected: 400, Received: 401` — un mensaje que señala a la validación de
+  // contraseñas, que no tiene nada que ver.
+  //
+  // Pasó en CI: tres fallos idénticos y confusos cuyo origen real estaba en el
+  // `beforeAll`. Ahora el fallo nombra el paso que se rompió y su código.
   beforeAll(async () => {
     const admin = await request(app)
       .post('/api/auth/login')
       .send({ email: 'admin@elbrillante.co', password: 'admin123' });
+    expect([admin.status, 'login del admin del seed']).toEqual([200, 'login del admin del seed']);
 
     const creado = await request(app)
       .post('/api/users')
@@ -110,11 +119,20 @@ describe('validación al cambiar la contraseña', () => {
         lastName: 'Password',
         role: 'operator',
       });
+    expect([creado.status, 'alta del usuario de prueba']).toEqual([
+      201,
+      'alta del usuario de prueba',
+    ]);
     userId = creado.body.user?.id ?? creado.body.id;
+    expect(typeof userId).toBe('string');
 
     const login = await request(app)
       .post('/api/auth/login')
       .send({ email, password: 'inicial123' });
+    expect([login.status, 'login del usuario de prueba']).toEqual([
+      200,
+      'login del usuario de prueba',
+    ]);
     token = login.body.accessToken;
   });
 
