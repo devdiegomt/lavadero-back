@@ -42,14 +42,47 @@ export async function comprobarBackend(request: APIRequestContext): Promise<void
   const login = await request.post(`${API}/auth/login`, {
     data: { email: EMAIL, password: PASSWORD },
   });
-  expect(
-    login.status(),
-    login.status() === 429
-      ? 'El backend está limitando los intentos de login. Reiniciarlo con el ' +
-          `límite alto —o esperar quince minutos:\n${COMO_LEVANTARLO}`
-      : `El login de prueba no funciona (HTTP ${login.status()}). ¿Falta ` +
-          '`npm run db:reset` en el backend?',
-  ).toBe(200);
+  expect(login.status(), explicar(login.status())).toBe(200);
+}
+
+/**
+ * Qué decir según el código, porque no todos significan lo mismo.
+ *
+ * El mensaje era uno solo —«¿falta `npm run db:reset`?»— y con un **500** eso
+ * manda por el camino equivocado: el 500 no aparece cuando falta el seed, sino
+ * cuando el backend arrancó bien y se rompió después. Pasó en CI: seis pruebas
+ * repitiendo esa pregunta mientras la causa real era que el servidor se había
+ * caído a mitad de la corrida.
+ *
+ * Un mensaje de error que apunta al lugar equivocado cuesta más que no tener
+ * mensaje.
+ */
+function explicar(codigo: number): string {
+  if (codigo === 429) {
+    return (
+      'El backend está limitando los intentos de login. Reiniciarlo con el ' +
+      `límite alto —o esperar quince minutos:\n${COMO_LEVANTARLO}`
+    );
+  }
+
+  if (codigo === 401) {
+    return (
+      'El backend responde pero el usuario de prueba no existe o tiene otra ' +
+      `contraseña. Eso sí es el seed:\n${COMO_LEVANTARLO}`
+    );
+  }
+
+  if (codigo >= 500) {
+    return (
+      `El backend contestó ${codigo} al login. **Arrancó bien y se rompió ` +
+      'después** — el seed no tiene nada que ver. Mirar su log: un ' +
+      '`pool.connect()` agotado, la base caída y el proceso muerto se ven ' +
+      'distinto. En CI está en el paso «Qué le pasó al backend» y en el ' +
+      'artefacto `backend-log`.'
+    );
+  }
+
+  return `El login de prueba devolvió HTTP ${codigo}, que no se esperaba.`;
 }
 
 export async function entrar(page: Page): Promise<void> {

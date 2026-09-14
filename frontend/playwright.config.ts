@@ -31,7 +31,7 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * Lo que esto **no** prueba: `localhost:5173` y `localhost:3000` son el mismo
  * *site* (el puerto no cuenta), así que `SameSite=Lax` acá no estorba. En
- * producción el panel y la API sí están en sitios distintos (Vercel / Railway)
+ * producción el panel y la API sí están en sitios distintos (Vercel / Render)
  * y esa cookie no viajaría: hace falta `AUTH_COOKIE_SAMESITE=none` con
  * `Secure`. Eso no lo puede comprobar esta suite —haría falta desplegar en dos
  * dominios— y queda anotado en docs/05-seguridad.md.
@@ -42,15 +42,15 @@ import { defineConfig, devices } from '@playwright/test';
  * y no se puede descargar el que Playwright pide (CI sin salida a internet).
  * En una máquina normal no hace falta: `npx playwright install`.
  *
- * ## Aviso sobre Firefox y Safari
+ * ## Dónde corren Firefox y Safari
  *
- * Los proyectos de `firefox`, `safari` y `safari-móvil` **nunca se corrieron**
- * en el entorno donde se escribieron: la política de red bloquea el CDN de
- * Playwright y no se pudieron descargar los binarios. Están acá porque la
- * configuración es correcta y porque esperar no los agrega nunca — pero la
- * primera corrida de verdad es la primera vez que alguien haga
- * `npx playwright install` y `npm run e2e`. **Que encuentren algo es el punto,
- * no una señal de que estén mal configurados.**
+ * En CI (`.github/workflows/ci.yml`), en cada PR. Se escribieron sin poder
+ * ejecutarlos —el entorno donde se armaron bloquea el CDN de Playwright, y la
+ * descarga tampoco pasó en una máquina con Windows— así que CI no es una
+ * comodidad acá: es el único lugar donde estos tres se corren.
+ *
+ * **Que encuentren algo es el punto**, no una señal de que estén mal
+ * configurados.
  */
 const chromium = process.env.CHROMIUM_PATH;
 /** Sólo para los proyectos de Chromium: Firefox y WebKit no entienden estas opciones. */
@@ -88,7 +88,11 @@ export default defineConfig({
   fullyParallel: false,
   timeout: 30_000,
   expect: { timeout: 10_000 },
-  reporter: process.env.CI ? 'list' : [['list']],
+  // En CI, además del listado, un informe HTML: es lo que el workflow sube como
+  // artefacto cuando algo falla, con las trazas de cada prueba. Estaba en `list`
+  // a secas, así que el paso que subía `playwright-report/` no habría subido
+  // nada.
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
 
   use: {
     baseURL: 'http://localhost:5173',
