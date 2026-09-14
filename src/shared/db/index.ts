@@ -37,6 +37,46 @@ pool.on('error', (err: Error) => {
 });
 
 /**
+ * Avisar cuando el pool se está quedando sin conexiones, **antes** de que
+ * empiece a devolver 500.
+ *
+ * Esto existe por un diagnóstico que costó cuatro hipótesis. El CI fallaba, y lo
+ * único que había para mirar era `pg_stat_activity` desde afuera, que decía
+ * `idle = 10`. Eso parece un pool sano y era lo contrario: **`idle` significa
+ * que el servidor no está ejecutando nada en esa conexión, no que esté libre en
+ * el pool.** Las diez estaban tomadas por la aplicación y sin devolver.
+ *
+ * El pool sí sabe la diferencia, y no la estaba contando nadie:
+ *
+ * - `totalCount` — conexiones abiertas.
+ * - `idleCount`  — de ésas, cuántas están **libres en el pool**. Esto es lo que
+ *   `pg_stat_activity` no puede responder.
+ * - `waitingCount` — peticiones esperando una conexión. Si esto es mayor que
+ *   cero, ya hay alguien encolado y el 500 viene en camino.
+ *
+ * Sólo avisa cuando hay cola, y como mucho una vez por minuto: un log que
+ * aparece siempre no lo lee nadie.
+ */
+const MS_ENTRE_AVISOS = 60_000;
+let ultimoAviso = 0;
+
+setInterval(() => {
+  if (pool.waitingCount === 0) return;
+
+  const ahora = Date.now();
+  if (ahora - ultimoAviso < MS_ENTRE_AVISOS) return;
+  ultimoAviso = ahora;
+
+  console.warn(
+    '⚠️  Pool de PostgreSQL con cola: ' +
+      `abiertas=${pool.totalCount} libres=${pool.idleCount} esperando=${pool.waitingCount}. ` +
+      'Si `libres` es 0 y `esperando` no baja, hay conexiones tomadas que no se devuelven.',
+  );
+  // `unref` para que este intervalo no mantenga vivo el proceso: sin esto, los
+  // scripts que terminan (migraciones, seeds) se quedarían colgados.
+}, 5_000).unref();
+
+/**
  * Parámetro de una consulta.
  *
  * Los arrays están incluidos porque hay columnas de tipo array
