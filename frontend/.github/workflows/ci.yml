@@ -129,11 +129,47 @@ jobs:
       - name: Pruebas
         run: npm run e2e
 
-      # El log del backend explica la mitad de los fallos: un 500 acá se ve como
-      # una pantalla vacía allá.
-      - name: Log del backend
+      # Cuando la suite falla, lo que hace falta no es el fallo de Playwright
+      # —ése ya se ve— sino **el estado del backend en ese momento**. Las tres
+      # preguntas que separan las causas posibles, en un paso:
+      #
+      #   1. ¿El proceso sigue vivo, o se murió?
+      #   2. ¿Qué dijo el log? Un `pool.connect()` agotado, una base caída y un
+      #      proceso muerto se ven distinto y se arreglan distinto.
+      #   3. ¿Cómo están las conexiones? Diez `idle` es un pool sano; diez
+      #      `active` o `idle in transaction` es una fuga.
+      #
+      # Sin esto un fallo obliga a adivinar, y adivinar ya costó tres hipótesis
+      # falsas en este mismo problema.
+      - name: Qué le pasó al backend
         if: failure()
-        run: cat /tmp/backend.log
+        run: |
+          echo "=== ¿sigue vivo? ==="
+          pgrep -af "ts-node" || echo "NO: el proceso ya no está"
+          echo
+          echo "=== conexiones a PostgreSQL ==="
+          PGPASSWORD=postgres psql -h localhost -U postgres -d carwash_ci -c \
+            "SELECT state, count(*), max(now() - state_change) AS mas_vieja
+               FROM pg_stat_activity
+              WHERE datname='carwash_ci' AND application_name <> 'psql'
+              GROUP BY state" || echo "no se pudo consultar la base"
+          echo
+          echo "=== memoria y carga ==="
+          free -m || true
+          uptime || true
+          echo
+          echo "=== log del backend, últimas 200 líneas ==="
+          tail -200 /tmp/backend.log
+
+      # Y entero como artefacto: 200 líneas no siempre alcanzan, y es lo primero
+      # que hace falta para diagnosticar.
+      - name: Log del backend, completo
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-log
+          path: /tmp/backend.log
+          retention-days: 7
 
       - name: Informe
         if: failure()
