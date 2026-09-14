@@ -30,8 +30,22 @@ jobs:
       - run: npm run build
 
   navegadores:
-    name: Pruebas en navegador
+    # **Un runner por navegador**, no los cinco en el mismo. Corriéndolos juntos,
+    # dos veces seguidas el backend se quedó sin conexiones a mitad del cuarto
+    # proyecto y las 36 pruebas siguientes ni se ejecutaron — o sea que un fallo
+    # de WebKit quedaba enterrado bajo un backend muerto.
+    #
+    # Separados: cada navegador tiene su backend y su base, un fallo no arrastra
+    # a los demás, y el informe dice cuál de los cinco falló sin tener que
+    # deducirlo. Además corren en paralelo, así que tarda menos.
+    name: ${{ matrix.navegador }}
     runs-on: ubuntu-latest
+    strategy:
+      # Que uno falle no cancela a los otros: si WebKit encuentra algo, se
+      # quiere ver igual si Firefox pasó.
+      fail-fast: false
+      matrix:
+        navegador: [escritorio, móvil, firefox, safari, safari-móvil]
 
     services:
       postgres:
@@ -121,12 +135,22 @@ jobs:
       - name: Dependencias del panel
         run: npm ci
 
-      # `--with-deps` instala las librerías de sistema que Firefox y WebKit
-      # necesitan en Ubuntu. Sin eso los binarios están y no arrancan.
-      - name: Navegadores
-        run: npx playwright install --with-deps
+      # Sólo el motor de este job: bajar los tres en cada uno de los cinco
+      # runners es tiempo y ancho de banda por nada. `--with-deps` instala las
+      # librerías de sistema que Firefox y WebKit necesitan en Ubuntu; sin eso
+      # los binarios están y no arrancan.
+      - name: El navegador de este job
+        run: |
+          case "${{ matrix.navegador }}" in
+            firefox) motor=firefox ;;
+            safari|safari-móvil) motor=webkit ;;
+            *) motor=chromium ;;
+          esac
+          npx playwright install --with-deps "$motor"
 
       - name: Pruebas
+        env:
+          NAVEGADORES: ${{ matrix.navegador }}
         run: npm run e2e
 
       # Cuando la suite falla, lo que hace falta no es el fallo de Playwright
@@ -167,7 +191,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-log
+          name: backend-log-${{ matrix.navegador }}
           path: /tmp/backend.log
           retention-days: 7
 
@@ -175,6 +199,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.navegador }}
           path: playwright-report/
           retention-days: 7
