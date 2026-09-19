@@ -316,9 +316,8 @@ limpieza.
 
 La tercera resultó ser trabajo muerto: **nadie lee `mv_daily_summary`**. Se
 creaba, se indexaba y se refrescaba cada quince minutos, y ningún controller,
-prueba ni reporte la consulta. Se quitó el refresco; la vista sigue en el
-esquema, y quien la vaya a usar tiene que decidir quién la refresca —con RLS
-aplicándose, el refresco necesita bypass o la vista se llena vacía.
+prueba ni reporte la consulta. Se quitó el refresco, y más abajo se cuenta por
+qué terminó borrándose la vista entera.
 
 **La regla que sale de esto:** todo lo que escriba en la base **fuera de una
 petición** cruza tenants por definición, y necesita el bypass explícito. Los
@@ -345,6 +344,16 @@ conectara a una pantalla. Se borró.
 `__tests__/sin-objetos-sin-rls.test.ts` lo deja fijo: ninguna vista materializada
 con `tenant_id`, y ninguna tabla con `tenant_id` sin RLS y sin política. Se
 comprobó creando una vista de prueba: la suite se pone en rojo y la nombra.
+
+**Borrar el objeto no alcanza: hay que borrar a quien lo nombra.** El `REFRESH`
+del cron se quitó, pero quedó otro en `demo-seed.ts`, y ahí nadie lo vio durante
+seis días porque **ninguna prueba corre los seeds**. `npm run db:demo` insertaba
+todo y recién en la última línea moría con `relation "mv_daily_summary" does not
+exist`: datos correctos, código de salida 1, y sin llegar a imprimir el usuario
+con el que se entra. El arreglo de fondo no es la línea borrada sino el paso
+**«Los datos de demo»** del CI, que corre ese script en cada PR — un script que
+habla con la base y que nada ejecuta es un script que ya está roto y todavía no
+se sabe.
 
 Si alguna vez hace falta precalcular reportes, va una **tabla normal** con su
 política, llenada por una tarea con bypass.

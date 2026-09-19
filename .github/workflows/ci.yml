@@ -107,3 +107,14 @@ jobs:
         env:
           DATABASE_URL: ${{ env.DATABASE_URL_APP }}
         run: npx jest --ci
+
+      # **Los seeds no los corre ninguna prueba**, así que se pudren sin que
+      # nadie se entere. `demo-seed.ts` quedó refrescando una vista materializada
+      # que se había borrado: insertaba los datos bien y moría en la última línea
+      # con código 1. Una semana así.
+      #
+      # Va al final a propósito: el script borra sus propios datos antes de
+      # empezar, pero los turnos y pagos que crea confundirían a las pruebas si
+      # corriera antes.
+      - name: Los datos de demo
+        run: npx ts-node --transpile-only -r dotenv/config src/shared/db/demo-seed.ts
