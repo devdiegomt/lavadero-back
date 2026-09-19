@@ -229,7 +229,14 @@ Sólo el hash. Quien lea la tabla no puede suplantar a nadie.
 | `appointment_status_log` | Quién cambió el estado de un turno y cuándo |
 | `action_log` | Quién cambió qué desde el panel. Nombres de campos, nunca valores — ver [Seguridad §5](05-seguridad.md#el-rastro-de-acciones) |
 | `invoice_archive` | La copia propia de cada factura: PDF, registro de Alegra y su SHA-256. Ver [ADR-0009](adr/0009-archivo-de-facturas.md) |
-| `mv_daily_summary` | Vista materializada; se refresca cada 15 min |
+
+> **`mv_daily_summary` ya no existe.** Era una vista materializada con los
+> ingresos diarios de todos los lavaderos, y PostgreSQL **no admite políticas de
+> RLS sobre una vista materializada**: sin contexto de tenant, `appointments`
+> devolvía 0 filas y la vista las devolvía todas. Nadie la leía. Se borró en
+> 2026-09 — ver [Seguridad §3](05-seguridad.md#3-aislamiento-multi-tenant). Si alguien
+> necesita ese resumen otra vez, tiene que resolver antes quién lo refresca y
+> cómo se filtra por tenant.
 
 ## 5. Índices
 

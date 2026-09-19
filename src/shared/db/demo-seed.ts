@@ -266,8 +266,12 @@ async function demoSeed() {
       WHERE c.tenant_id = $1
     `, [TENANT_ID]);
 
-    // Refresh materialized view
-    await cliente.query('REFRESH MATERIALIZED VIEW mv_daily_summary');
+    // Acá se refrescaba `mv_daily_summary`. La vista se borró en 2026-09 —tenía
+    // los datos de todos los lavaderos y PostgreSQL no admite RLS sobre una
+    // vista materializada, ver docs/05-seguridad.md §3— y esta línea se quedó,
+    // así que `npm run db:demo` moría con `relation ... does not exist`
+    // *después* de haber insertado todo: los datos quedaban bien y el script
+    // salía con código 1 sin llegar a imprimir el login.
 
     // Count results
     const { rows: counts } = await cliente.query(`

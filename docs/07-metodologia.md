@@ -229,6 +229,31 @@ Así que: un cambio que toca cookies, sesión, CORS o layout no está probado
 mientras no lo haya abierto un navegador. Las pruebas están en
 [`e2e/` del frontend](https://github.com/devdiegomt/lavadero-front/tree/main/e2e).
 
+### Borrar algo es buscar quién lo nombraba
+
+Cuando se borra una tabla, una vista, una variable de entorno o una ruta, el
+trabajo no termina con el `DROP`. Hay que ir a buscar **todos** los lugares que
+la nombraban, y el `grep` tiene que incluir lo que ninguna prueba ejecuta.
+
+`mv_daily_summary` se borró bien: el cron dejó de refrescarla, la migración la
+tiró, hay una prueba que impide que vuelva. Pero `demo-seed.ts` seguía
+refrescándola, y ahí nadie lo vio durante seis días — porque **ninguna prueba
+corre los seeds**. `npm run db:demo` insertaba los 28 turnos correctamente y
+recién en la última consulta moría con `relation "mv_daily_summary" does not
+exist`: datos buenos, código de salida 1, y sin llegar a imprimir con qué
+usuario se entra. Un fallo que se ve mal —parece que la demo no se generó— sobre
+un trabajo que sí se hizo.
+
+De ahí dos cosas, y la segunda importa más que la primera:
+
+1. Antes de dar por borrado un objeto: `grep -rn '<nombre>' --include=*.ts
+   --include=*.md .` Sale en un segundo y cubre los scripts.
+2. **Un script que habla con la base y que nada ejecuta ya está roto; falta
+   enterarse.** El arreglo de fondo no fue quitar la línea sino el paso «Los
+   datos de demo» del CI, que corre `demo-seed.ts` en cada PR. Lo mismo vale
+   para cualquier script futuro de `src/shared/db/`: si no lo corre nadie,
+   se pudre callado.
+
 ## 4. Antes de mergear
 
 ```bash
@@ -252,6 +277,10 @@ PR y en cada push a `main`: tipos, el build del bot, migraciones, y la suite
 **tres veces** —una normal, otra seguida sin resetear la base, y otra con el rol
 al que RLS sí se le aplica—. Las tres están ahí porque las tres encontraron cosas
 que la primera sola no encuentra.
+
+Y al final, **los datos de demo**: `demo-seed.ts` corre entero en cada PR. No es
+una prueba de nada en particular; está para que un script que ninguna suite
+ejecuta no se pudra en silencio, que es exactamente lo que le pasó.
 
 Hasta que existió, nada verificaba un PR antes de mergearlo: las pruebas corrían
 sólo si alguien se acordaba.
