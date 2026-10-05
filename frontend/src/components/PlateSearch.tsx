@@ -102,7 +102,7 @@ export default function PlateSearch() {
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh]">
       <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
 
-      <div className="relative bg-white border border-gray-100 w-full max-w-md rounded-xl shadow-2xl shadow-black/50 mx-4 overflow-hidden">
+      <div className="relative bg-white border border-gray-100 w-full max-w-md rounded-xl shadow-2xl shadow-sombra mx-4 overflow-hidden">
         {/* Search input */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
           <Search aria-hidden="true" size={19} strokeWidth={1.6} className="text-gray-400 shrink-0" />

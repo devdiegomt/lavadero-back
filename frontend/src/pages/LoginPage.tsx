@@ -45,7 +45,7 @@ export default function LoginPage() {
         {/* Card */}
         <form
           onSubmit={handleSubmit}
-          className="bg-white border border-gray-100 rounded-xl shadow-2xl shadow-black/40 p-6 space-y-5"
+          className="bg-white border border-gray-100 rounded-xl shadow-2xl shadow-sombra p-6 space-y-5"
         >
           {error && (
             <div role="alert" className="bg-red-50 border border-red-200 text-red-800 text-sm px-4 py-3 rounded-lg">

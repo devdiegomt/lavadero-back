@@ -49,7 +49,7 @@ export default function PaymentModal({ appointment, onClose, onSaved }: PaymentM
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white border border-gray-100 w-full max-w-sm rounded-t-xl sm:rounded-xl p-5 space-y-4 shadow-2xl shadow-black/50">
+      <div className="relative bg-white border border-gray-100 w-full max-w-sm rounded-t-xl sm:rounded-xl p-5 space-y-4 shadow-2xl shadow-sombra">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-gray-900">Registrar pago</h2>
           <button onClick={onClose} aria-label="Cerrar" className="text-gray-400 hover:text-gray-800 p-1"><X aria-hidden="true" size={20} /></button>

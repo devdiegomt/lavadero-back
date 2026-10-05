@@ -508,7 +508,7 @@ function DetailModal({
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white border border-gray-100 w-full max-w-lg rounded-t-xl sm:rounded-xl max-h-[90vh] overflow-y-auto shadow-2xl shadow-black/50">
+      <div className="relative bg-white border border-gray-100 w-full max-w-lg rounded-t-xl sm:rounded-xl max-h-[90vh] overflow-y-auto shadow-2xl shadow-sombra">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between rounded-t-xl z-10">
           <div className="flex items-center gap-3">

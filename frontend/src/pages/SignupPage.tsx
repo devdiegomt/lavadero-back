@@ -201,7 +201,7 @@ export default function SignupPage() {
         <Stepper currentStep={step} />
 
         {/* Card */}
-        <div className="bg-white border border-gray-100 rounded-xl shadow-2xl shadow-black/40 p-6">
+        <div className="bg-white border border-gray-100 rounded-xl shadow-2xl shadow-sombra p-6">
           {error && (
             <div className="bg-red-50 text-red-700 text-sm px-4 py-3 rounded-lg mb-4">
               {error}

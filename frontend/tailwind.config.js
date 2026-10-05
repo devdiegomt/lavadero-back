@@ -1,5 +1,6 @@
 /**
- * Grafito latón: el panel es oscuro, con latón como único acento.
+ * Grafito latón: grafito y latón como único acento. Oscuro por defecto, y
+ * claro —«Grafito día»— cuando el teléfono está en modo claro.
  *
  * Los colores no viven acá sino en `src/index.css`, como variables. Cada
  * escala de Tailwind (`gray`, `brand`, `green`…) apunta a su variable, así que
@@ -13,8 +14,8 @@
  * sólo cambia el color. `white` es la superficie de las tarjetas, por eso
  * `text-white` sobre un botón de latón da texto oscuro.
  *
- * Un modo claro, si se decide hacerlo, es otro bloque de variables en
- * `index.css`: no hace falta tocar ningún componente.
+ * El modo día es otro bloque de variables en `index.css`, bajo
+ * `prefers-color-scheme: light`: ningún componente sabe en qué modo está.
  */
 const escala = (nombre) =>
   Object.fromEntries(
@@ -34,6 +35,8 @@ export default {
         // La barra lateral y las de arriba y abajo: un punto más oscura que el fondo.
         lateral: 'rgb(var(--lateral) / <alpha-value>)',
         black: 'rgb(var(--black) / <alpha-value>)',
+        // Sólo para sombras: trae su propia opacidad, distinta en cada modo.
+        sombra: 'rgb(var(--sombra))',
         gray: escala('gray'),
         brand: escala('brand'),
         green: escala('green'),

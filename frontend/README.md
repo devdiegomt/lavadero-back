@@ -59,7 +59,8 @@ e2e/                        # Pruebas en navegador (Playwright)
 ├── ayudas.ts               # Entrar al panel; comprobar que hay backend
 ├── sesion.spec.ts          # La cookie httpOnly, vista por un navegador
 ├── mi-cuenta.spec.ts       # Cambiar la contraseña propia, y que cierre sesiones
-└── movil.spec.ts           # RNF-COM-3: que el panel quepa y se pueda tocar
+├── movil.spec.ts           # RNF-COM-3: que el panel quepa y se pueda tocar
+└── tema.spec.ts            # Que el panel siga el modo claro u oscuro del teléfono
 
 src/
 ├── App.jsx                 # Router principal
@@ -101,8 +102,9 @@ src/
 
 ## Diseño: Grafito latón
 
-Oscuro, con **latón como único acento** y Archivo —ancha en títulos y cifras— como
-única familia, más IBM Plex Mono para placas y horas. Se eligió entre varias
+Grafito con **latón como único acento**. Es oscuro, o claro si el teléfono
+está en claro. Usa Archivo como única familia, ancha en títulos y cifras, más
+IBM Plex Mono para placas y horas. Se eligió entre varias
 propuestas: el panel anterior usaba los colores por defecto de Tailwind y 130
 emojis, y para un lavadero exclusivo se veía infantil.
 
@@ -119,8 +121,27 @@ es «insignia verde»— y el rediseño no tuvo que tocar cada clase. `white` es
 superficie de las tarjetas: `text-white` sobre un botón de latón da texto
 oscuro, que es lo correcto.
 
-Un **modo claro** es otro bloque de variables en `index.css`; no hace falta
-tocar ningún componente.
+### Modo día, automático
+
+El panel sigue el modo del teléfono o de la computadora: **oscuro** si está en
+oscuro, **claro** («Grafito día») si está en claro. No hay botón. Cambia solo
+cuando el sistema cambia, por ejemplo al atardecer si el teléfono lo hace
+automático.
+
+Ojo con una consecuencia: un equipo que nunca cambió su modo está en claro,
+porque ése es el valor por defecto de los navegadores. Así que **la mayoría de
+las computadoras van a ver el modo día**, y el oscuro aparece donde alguien lo
+eligió.
+
+Es un bloque de variables bajo `@media (prefers-color-scheme: light)` en
+`index.css`. Ahí las escalas van en el orden normal (50 claro, 900 oscuro),
+así que cada clase dice lo mismo en los dos modos y **ningún componente sabe
+en qué modo está**. El latón se oscurece en claro para que el botón principal
+tenga 5:1 de contraste con su texto; la placa queda igual en los dos, porque
+una placa es amarilla siempre.
+
+Para verlo en la computadora: DevTools → Rendering → *Emulate CSS media
+feature prefers-color-scheme*. `e2e/tema.spec.ts` comprueba los dos modos.
 
 ### Reglas
 

@@ -37,7 +37,7 @@ export default function InstallPrompt() {
 
   return (
     <div className="fixed bottom-20 lg:bottom-4 left-4 right-4 z-40 max-w-sm mx-auto">
-      <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-2xl shadow-black/40 flex items-center gap-3">
+      <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-2xl shadow-sombra flex items-center gap-3">
         <Download aria-hidden="true" size={22} strokeWidth={1.6} className="text-brand-600 shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-gray-900">Instalar el panel</p>

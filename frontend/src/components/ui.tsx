@@ -64,7 +64,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={t.id}
             role={t.type === "error" ? "alert" : "status"}
-            className={`pointer-events-auto flex items-start gap-2.5 pl-3 pr-4 py-3 rounded-lg shadow-2xl shadow-black/50 text-sm font-medium animate-slide-in max-w-sm bg-gray-100 text-gray-900 border border-gray-200 border-l-[3px] ${
+            className={`pointer-events-auto flex items-start gap-2.5 pl-3 pr-4 py-3 rounded-lg shadow-2xl shadow-sombra text-sm font-medium animate-slide-in max-w-sm bg-gray-100 text-gray-900 border border-gray-200 border-l-[3px] ${
               t.type === "success"
                 ? "border-l-green-600"
                 : t.type === "error"
@@ -180,7 +180,7 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
-      <div className="relative bg-white border border-gray-100 rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl shadow-black/50">
+      <div className="relative bg-white border border-gray-100 rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl shadow-sombra">
         <h3 className="font-semibold text-gray-900 mb-2">{title}</h3>
         <p className="text-sm text-gray-500 mb-6">{message}</p>
         <div className="flex gap-3">
