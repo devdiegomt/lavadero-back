@@ -1,3 +1,5 @@
+import { PastillaEstado, Placa } from '../lib/estados';
+import { Phone, Search, UserRound } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { formatCOP, formatDate } from '../lib/format';
@@ -93,18 +95,6 @@ type View = 'search' | 'vehicle' | 'customer';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const STATUS_LABEL: Record<AppointmentStatus, string> = {
-  pending: 'Esperando', in_progress: 'Lavando', done: 'Listo', delivered: 'Entregado', cancelled: 'Cancelado',
-};
-
-const STATUS_COLOR: Record<AppointmentStatus, string> = {
-  pending: 'bg-gray-100 text-gray-600',
-  in_progress: 'bg-yellow-100 text-yellow-700',
-  done: 'bg-green-100 text-green-700',
-  delivered: 'bg-blue-100 text-blue-700',
-  cancelled: 'bg-red-100 text-red-600',
-};
-
 // ─── HistoryPage ──────────────────────────────────────────────────────────────
 
 export default function HistoryPage() {
@@ -166,7 +156,7 @@ export default function HistoryPage() {
             ← Volver
           </button>
         )}
-        <h1 className="text-xl font-bold text-gray-900">Historial</h1>
+        <h1 className="text-xl font-semibold text-gray-900">Historial</h1>
       </div>
 
       {view === 'search' && (
@@ -193,7 +183,7 @@ export default function HistoryPage() {
                       >
                         <div className="flex items-center justify-between">
                           <div>
-                            <span className="font-bold text-sm tracking-wider">{v.plate}</span>
+                            <Placa placa={v.plate} />
                             <span className="text-gray-400 text-xs ml-2">{v.brand} {v.model}</span>
                           </div>
                           <span className="text-brand-600 text-xs">Ver historial →</span>
@@ -236,7 +226,7 @@ export default function HistoryPage() {
               )}
             </div>
           ) : !query ? (
-            <EmptyState icon="🔍" title="Busca por placa, nombre o teléfono" description="Escribe al menos 2 caracteres para buscar" />
+            <EmptyState icon={Search} title="Busca por placa, nombre o teléfono" description="Escribe al menos 2 caracteres para buscar" />
           ) : null}
         </>
       )}
@@ -261,8 +251,8 @@ function VehicleHistory({ data, onCustomerClick }: VehicleHistoryProps) {
     <div className="space-y-4">
       <div className="bg-white rounded-xl border border-gray-100 p-5">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-3xl font-bold tracking-wider">{vehicle.plate}</span>
-          <span className="text-xs bg-brand-100 text-brand-700 px-3 py-1 rounded-lg font-medium">
+          <Placa placa={vehicle.plate} className="!text-2xl" />
+          <span className="text-xs bg-gray-100 text-gray-700 px-3 py-1 rounded font-medium">
             {vehicle.vehicle_type}
           </span>
         </div>
@@ -273,9 +263,10 @@ function VehicleHistory({ data, onCustomerClick }: VehicleHistoryProps) {
         </p>
         <button
           onClick={() => onCustomerClick(customer.id)}
-          className="text-sm text-brand-600 mt-2 hover:underline"
+          className="inline-flex items-center gap-1.5 text-sm text-brand-700 mt-3 hover:underline"
         >
-          👤 {customer.first_name} {customer.last_name} · {customer.phone}
+          <UserRound aria-hidden="true" size={15} strokeWidth={1.7} />
+          {customer.first_name} {customer.last_name} · {customer.phone}
         </button>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -309,12 +300,13 @@ function CustomerHistory({ data, onVehicleClick }: CustomerHistoryProps) {
     <div className="space-y-4">
       <div className="bg-white rounded-xl border border-gray-100 p-5">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-lg font-bold">{customer.first_name} {customer.last_name}</h2>
+          <h2 className="text-lg font-semibold">{customer.first_name} {customer.last_name}</h2>
           <a
             href={`tel:${customer.phone}`}
-            className="bg-green-100 text-green-700 px-3 py-1.5 rounded-lg text-xs font-medium"
+            className="inline-flex items-center gap-1.5 border border-gray-200 text-gray-800 hover:border-gray-300 px-3 py-1.5 rounded-lg text-xs font-medium"
           >
-            📞 Llamar
+            <Phone aria-hidden="true" size={14} strokeWidth={1.8} />
+            Llamar
           </a>
         </div>
         <p className="text-sm text-gray-500">
@@ -342,7 +334,7 @@ function CustomerHistory({ data, onVehicleClick }: CustomerHistoryProps) {
               onClick={() => onVehicleClick(v.plate)}
               className="shrink-0 bg-white rounded-xl border border-gray-100 px-4 py-3 text-left hover:shadow-sm transition"
             >
-              <p className="font-bold text-sm tracking-wider">{v.plate}</p>
+              <Placa placa={v.plate} />
               <p className="text-xs text-gray-500">{v.brand} {v.model}</p>
             </button>
           ))}
@@ -373,11 +365,9 @@ function AptRow({ a, showPlate }: AptRowProps) {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 mb-0.5">
           {showPlate && a.plate && (
-            <span className="font-bold text-xs tracking-wider text-gray-700">{a.plate}</span>
+            <Placa placa={a.plate} className="!text-xs" />
           )}
-          <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLOR[a.status]}`}>
-            {STATUS_LABEL[a.status]}
-          </span>
+          <PastillaEstado status={a.status} />
           <span className="text-xs text-gray-400">{formatDate(a.scheduled_date)}</span>
         </div>
         <p className="text-sm text-gray-700">{a.service_name}</p>
@@ -396,7 +386,7 @@ function MiniStat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-3">
       <p className="text-xs text-gray-500 mb-0.5">{label}</p>
-      <p className="font-bold text-gray-900 text-sm">{value}</p>
+      <p className="font-semibold text-gray-900 text-sm">{value}</p>
     </div>
   );
 }

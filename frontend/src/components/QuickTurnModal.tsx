@@ -1,4 +1,5 @@
 import { useState, useEffect, type HTMLInputTypeAttribute } from 'react';
+import { CarFront, X } from 'lucide-react';
 import { api, ApiError } from '../lib/api';
 import { formatCOP } from '../lib/format';
 import type { Service, VehicleType } from '../types';
@@ -174,10 +175,10 @@ export default function QuickTurnModal({ onClose, onCreated }: QuickTurnModalPro
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between rounded-t-2xl z-10">
           <div>
-            <h2 className="font-bold text-gray-900">Nuevo Turno</h2>
+            <h2 className="font-semibold text-gray-900">Nuevo turno</h2>
             <p className="text-xs text-gray-500">Paso {step} de 4</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none" aria-label="Cerrar"><X aria-hidden="true" size={20} /></button>
         </div>
 
         <div className="p-5 space-y-4">
@@ -189,7 +190,7 @@ export default function QuickTurnModal({ onClose, onCreated }: QuickTurnModalPro
           {step === 1 && (
             <div className="space-y-4">
               <div className="text-center py-4">
-                <span className="text-4xl">🚗</span>
+                <CarFront aria-hidden="true" size={34} strokeWidth={1.3} className="mx-auto text-gray-400" />
                 <p className="text-gray-500 text-sm mt-2">Ingresa la placa del vehículo</p>
               </div>
               <input
@@ -200,7 +201,7 @@ export default function QuickTurnModal({ onClose, onCreated }: QuickTurnModalPro
                 placeholder="ABC123"
                 autoFocus
                 maxLength={7}
-                className="w-full text-center text-3xl font-bold tracking-widest px-4 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none uppercase"
+                className="w-full text-center text-3xl font-mono font-semibold tracking-[0.15em] px-4 py-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-600 focus:border-brand-600 outline-none uppercase text-gray-900 placeholder:text-gray-300"
               />
               <button
                 onClick={handlePlateSearch}
@@ -293,7 +294,7 @@ export default function QuickTurnModal({ onClose, onCreated }: QuickTurnModalPro
                             {svc.description} · ~{svc.estimated_minutes ?? svc.estimatedMinutes} min
                           </p>
                         </div>
-                        <p className="font-bold text-brand-700 text-sm">{formatCOP(price)}</p>
+                        <p className="font-semibold text-brand-700 text-sm">{formatCOP(price)}</p>
                       </div>
                     </button>
                   );
@@ -339,7 +340,7 @@ export default function QuickTurnModal({ onClose, onCreated }: QuickTurnModalPro
               <button
                 onClick={handleSubmit}
                 disabled={loading}
-                className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl transition disabled:opacity-50 text-sm"
+                className="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg transition disabled:opacity-50 text-sm"
               >
                 {loading ? 'Creando turno...' : `Crear turno — ${formatCOP(getSelectedServicePrice())}`}
               </button>
@@ -421,7 +422,7 @@ function SummaryRow({ label, value, bold }: { label: string; value: string; bold
   return (
     <div className="flex justify-between text-sm">
       <span className="text-gray-500">{label}</span>
-      <span className={`text-gray-900 ${bold ? 'font-bold' : ''}`}>{value}</span>
+      <span className={`text-gray-900 ${bold ? 'font-semibold' : ''}`}>{value}</span>
     </div>
   );
 }

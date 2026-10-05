@@ -1,3 +1,5 @@
+import { ESTADOS, PastillaEstado, Placa, PuntoEstado } from "../lib/estados";
+import { CalendarDays } from 'lucide-react';
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../lib/api";
 import { formatCOP, formatTime } from "../lib/format";
@@ -26,40 +28,6 @@ interface Appointment {
   created_at: string;
   operator_first_name: string | null;
 }
-
-interface StatusConfig {
-  label: string;
-  color: string;
-  dot: string;
-}
-
-const STATUS_CONFIG: Record<AppointmentStatus, StatusConfig> = {
-  pending: {
-    label: "Esperando",
-    color: "bg-gray-100 text-gray-700",
-    dot: "bg-gray-400",
-  },
-  in_progress: {
-    label: "Lavando",
-    color: "bg-yellow-100 text-yellow-800",
-    dot: "bg-yellow-400",
-  },
-  done: {
-    label: "Listo",
-    color: "bg-green-100 text-green-700",
-    dot: "bg-green-500",
-  },
-  delivered: {
-    label: "Entregado",
-    color: "bg-blue-100 text-blue-700",
-    dot: "bg-blue-400",
-  },
-  cancelled: {
-    label: "Cancelado",
-    color: "bg-red-100 text-red-700",
-    dot: "bg-red-400",
-  },
-};
 
 // ─── AppointmentsPage ─────────────────────────────────────────────────────────
 
@@ -121,7 +89,7 @@ export default function AppointmentsPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Agenda</h1>
+          <h1 className="text-xl font-semibold text-gray-900">Agenda</h1>
           <p className="text-sm text-gray-500">
             {appointments.length} turnos{" "}
             {isToday ? "hoy" : `el ${selectedDate}`}
@@ -148,16 +116,18 @@ export default function AppointmentsPage() {
       {!loading && appointments.length > 0 && (
         <div className="flex gap-2 flex-wrap">
           {(
-            Object.entries(STATUS_CONFIG) as [AppointmentStatus, StatusConfig][]
-          ).map(([key, config]) => {
+            Object.keys(ESTADOS) as AppointmentStatus[]
+          ).map((key) => {
             const count = appointments.filter((a) => a.status === key).length;
             if (count === 0) return null;
             return (
               <span
                 key={key}
-                className={`text-xs font-medium px-3 py-1 rounded-full ${config.color}`}
+                className="inline-flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-100 bg-white text-gray-700"
               >
-                {config.label}: {count}
+                <PuntoEstado status={key} />
+                {ESTADOS[key].label}
+                <span className="font-mono text-gray-900">{count}</span>
               </span>
             );
           })}
@@ -176,7 +146,7 @@ export default function AppointmentsPage() {
         </div>
       ) : appointments.length === 0 ? (
         <div className="text-center py-16">
-          <span className="text-5xl block mb-4">📅</span>
+          <CalendarDays aria-hidden="true" size={36} strokeWidth={1.3} className="mx-auto mb-4 text-gray-400" />
           <p className="text-gray-500 mb-4">No hay turnos para este día</p>
           <button
             onClick={() => setShowModal(true)}
@@ -232,7 +202,6 @@ function AppointmentCard({
   onStatusChange,
 }: AppointmentCardProps) {
   const [confirmCancel, setConfirmCancel] = useState(false);
-  const config = STATUS_CONFIG[a.status] ?? STATUS_CONFIG.pending;
   const nextStatus = NEXT_STATUS[a.status];
   const nextLabel = NEXT_LABEL[a.status];
 
@@ -253,25 +222,20 @@ function AppointmentCard({
   const elapsed = getElapsed();
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-4">
+    <div className={`bg-white rounded-xl border border-gray-100 border-l-[3px] ${ESTADOS[a.status]?.borde ?? ""} p-4`}>
       <div className="flex items-start justify-between gap-3">
         {/* Left side */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span
-              className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full ${config.color}`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${config.dot}`} />
-              {config.label}
-            </span>
+            <PastillaEstado status={a.status} />
             {a.scheduled_time && (
-              <span className="text-xs text-gray-400">
+              <span className="font-mono text-xs text-gray-500">
                 {formatTime(a.scheduled_time)}
               </span>
             )}
             {elapsed &&
               (a.status === "pending" || a.status === "in_progress") && (
-                <span className="text-xs text-orange-500 font-medium">
+                <span className="font-mono text-xs text-orange-700 font-medium">
                   {elapsed}
                 </span>
               )}
@@ -282,9 +246,10 @@ function AppointmentCard({
             )}
           </div>
 
-          <p className="font-semibold text-gray-900 text-sm">
-            {a.plate} — {a.brand} {a.model}{" "}
-            <span className="font-normal text-gray-400">{a.color}</span>
+          <p className="text-gray-900 text-sm flex items-center gap-2 flex-wrap mt-2">
+            <Placa placa={a.plate} />
+            <span>{a.brand} {a.model}</span>
+            <span className="text-gray-500">{a.color}</span>
           </p>
           <p className="text-sm text-gray-500">
             {a.customer_first_name} {a.customer_last_name} — {a.customer_phone}

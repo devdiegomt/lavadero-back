@@ -1,3 +1,4 @@
+import { Check, X } from 'lucide-react';
 import { useState, type Dispatch, type SetStateAction, type HTMLInputTypeAttribute } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
@@ -181,22 +182,26 @@ export default function SignupPage() {
     setServices((arr) => arr.filter((_, i) => i !== idx));
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-700 to-brand-900 px-4 py-8">
+    <div className="min-h-screen bg-gray-50 px-4 py-10">
       <div className="max-w-xl mx-auto">
         {/* Brand */}
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-white/10 rounded-2xl mb-3">
-            <span className="text-2xl">🚿</span>
-          </div>
-          <h1 className="text-xl font-bold text-white">Crea tu cuenta</h1>
-          <p className="text-brand-200 text-sm mt-1">Pon tu lavadero a operar en 2 minutos</p>
+        <div className="mb-8">
+          <p
+            className="text-xl font-semibold uppercase text-gray-900 leading-none"
+            style={{ fontStretch: '125%', letterSpacing: '0.18em' }}
+          >
+            Carwash
+          </p>
+          <div aria-hidden="true" className="w-10 h-px bg-brand-600 my-4" />
+          <h1 className="text-xl font-semibold text-gray-900">Crea tu cuenta</h1>
+          <p className="text-gray-500 text-sm mt-1">Pon tu lavadero a operar en 2 minutos</p>
         </div>
 
         {/* Stepper */}
         <Stepper currentStep={step} />
 
         {/* Card */}
-        <div className="bg-white rounded-2xl shadow-xl p-6">
+        <div className="bg-white border border-gray-100 rounded-xl shadow-2xl shadow-black/40 p-6">
           {error && (
             <div className="bg-red-50 text-red-700 text-sm px-4 py-3 rounded-lg mb-4">
               {error}
@@ -256,20 +261,20 @@ function Stepper({ currentStep }: { currentStep: Step }) {
           <div key={s.num} className="flex items-center">
             <div className="flex flex-col items-center">
               <div
-                className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition ${
-                  isDone ? 'bg-green-500 text-white' :
-                  isActive ? 'bg-white text-brand-700' :
-                  'bg-white/20 text-white/60'
+                className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold transition ${
+                  isDone ? 'bg-brand-600 text-white' :
+                  isActive ? 'border border-brand-600 text-brand-700' :
+                  'border border-gray-200 text-gray-400'
                 }`}
               >
-                {isDone ? '✓' : s.num}
+                {isDone ? <Check aria-hidden="true" size={15} strokeWidth={2.4} /> : s.num}
               </div>
-              <span className={`text-xs mt-1.5 ${isActive ? 'text-white font-semibold' : 'text-white/60'}`}>
+              <span className={`text-xs mt-1.5 ${isActive ? 'text-gray-900 font-semibold' : 'text-gray-500'}`}>
                 {s.label}
               </span>
             </div>
             {idx < STEPS.length - 1 && (
-              <div className={`w-10 h-0.5 mx-2 mb-5 transition ${isDone ? 'bg-green-500' : 'bg-white/20'}`} />
+              <div className={`w-10 h-0.5 mx-2 mb-5 transition ${isDone ? 'bg-brand-600' : 'bg-gray-200'}`} />
             )}
           </div>
         );
@@ -293,7 +298,7 @@ function BusinessStep({ value, onChange, onNext }: BusinessStepProps) {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="font-bold text-gray-900">Datos del lavadero</h2>
+        <h2 className="font-semibold text-gray-900">Datos del lavadero</h2>
         <p className="text-xs text-gray-500 mt-0.5">Información básica de tu negocio.</p>
       </div>
 
@@ -349,7 +354,7 @@ function AdminStep({ value, onChange, onBack, onSubmit, submitting }: AdminStepP
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="font-bold text-gray-900">Tu cuenta de administrador</h2>
+        <h2 className="font-semibold text-gray-900">Tu cuenta de administrador</h2>
         <p className="text-xs text-gray-500 mt-0.5">
           Con esta cuenta entrarás al sistema. Podrás invitar a tus operadores después.
         </p>
@@ -369,8 +374,8 @@ function AdminStep({ value, onChange, onBack, onSubmit, submitting }: AdminStepP
       <Field label="Confirma contraseña *" value={value.confirmPassword} onChange={(v) => set('confirmPassword', v)}
         type="password" placeholder="Repite la contraseña" autoComplete="new-password" />
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900">
-        🎁 Tu cuenta empieza en el plan <strong>Gratis</strong> con 14 días de prueba en funciones avanzadas.
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-700">
+        Tu cuenta empieza en el plan <strong>Gratis</strong> con 14 días de prueba en funciones avanzadas.
         Sin tarjeta de crédito.
       </div>
 
@@ -403,7 +408,7 @@ function ServicesStep({ services, onUpdate, onAdd, onRemove, onFinish, submittin
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="font-bold text-gray-900">Configura tus servicios</h2>
+        <h2 className="font-semibold text-gray-900">Configura tus servicios</h2>
         <p className="text-xs text-gray-500 mt-0.5">
           Estos son los lavados que ofreces. Puedes ajustar precios o saltarte este paso (luego los configuras desde Settings).
         </p>
@@ -430,8 +435,8 @@ function ServicesStep({ services, onUpdate, onAdd, onRemove, onFinish, submittin
               {services.length > 1 && (
                 <button onClick={() => onRemove(idx)}
                   className="text-gray-400 hover:text-red-600 text-lg p-1 transition shrink-0"
-                  title="Eliminar servicio">
-                  ✕
+                  title="Eliminar servicio" aria-label="Eliminar servicio">
+                  <X aria-hidden="true" size={17} />
                 </button>
               )}
             </div>

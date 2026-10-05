@@ -28,31 +28,34 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-700 to-brand-900 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-10">
       <div className="w-full max-w-sm">
-        {/* Logo / Brand */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-white/10 rounded-2xl mb-4">
-            <span className="text-3xl">🚿</span>
-          </div>
-          <h1 className="text-2xl font-bold text-white">Carwash</h1>
-          <p className="text-brand-200 text-sm mt-1">Gestión de lavadero</p>
+        {/* Marca: la palabra sola, ancha y espaciada, con una línea de latón. */}
+        <div className="mb-10">
+          <p
+            className="text-[1.6rem] font-semibold uppercase text-gray-900 leading-none"
+            style={{ fontStretch: '125%', letterSpacing: '0.18em' }}
+          >
+            Carwash
+          </p>
+          <div aria-hidden="true" className="w-10 h-px bg-brand-600 my-4" />
+          <h1 className="text-sm font-normal text-gray-500" style={{ fontStretch: '100%' }}>Panel del lavadero</h1>
         </div>
 
         {/* Card */}
         <form
           onSubmit={handleSubmit}
-          className="bg-white rounded-2xl shadow-xl p-6 space-y-4"
+          className="bg-white border border-gray-100 rounded-xl shadow-2xl shadow-black/40 p-6 space-y-5"
         >
           {error && (
-            <div className="bg-red-50 text-red-600 text-sm px-4 py-3 rounded-lg">
+            <div role="alert" className="bg-red-50 border border-red-200 text-red-800 text-sm px-4 py-3 rounded-lg">
               {error}
             </div>
           )}
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-              Email
+            <label htmlFor="email" className="block etiqueta text-gray-500 mb-2">
+              Correo
             </label>
             <input
               id="email"
@@ -61,13 +64,13 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               required
               autoComplete="email"
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition text-sm"
-              placeholder="admin@elbrillante.co"
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-600 focus:border-transparent outline-none transition text-sm text-gray-900 placeholder:text-gray-400"
+              placeholder="tu@correo.com"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="password" className="block etiqueta text-gray-500 mb-2">
               Contraseña
             </label>
             <input
@@ -77,7 +80,7 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               autoComplete="current-password"
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition text-sm"
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-600 focus:border-transparent outline-none transition text-sm text-gray-900 placeholder:text-gray-400"
               placeholder="••••••••"
             />
           </div>
@@ -85,7 +88,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            className="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
             {loading ? 'Ingresando...' : 'Ingresar'}
           </button>
@@ -93,7 +96,7 @@ export default function LoginPage() {
           {/* Signup link - feature de Phase 3 (onboarding self-service) */}
           <div className="text-center text-sm text-gray-500 pt-3 border-t border-gray-100">
             ¿No tienes cuenta?{' '}
-            <Link to="/signup" className="text-brand-600 hover:text-brand-800 font-semibold">
+            <Link to="/signup" className="text-brand-700 hover:text-brand-800 font-semibold">
               Crea tu lavadero
             </Link>
           </div>

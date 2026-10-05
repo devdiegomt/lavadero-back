@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, type HTMLInputTypeAttribute } from 'react';
+import { Users, X } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast, ConfirmDialog } from '../components/ui';
 
@@ -121,7 +122,7 @@ export default function CustomersPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-xl font-bold text-gray-900">Clientes</h1>
+        <h1 className="text-xl font-semibold text-gray-900">Clientes</h1>
         <button
           onClick={openNew}
           className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition"
@@ -146,7 +147,7 @@ export default function CustomersPage() {
         </div>
       ) : customers.length === 0 ? (
         <div className="text-center py-16">
-          <span className="text-5xl block mb-4">👥</span>
+          <Users aria-hidden="true" size={36} strokeWidth={1.3} className="mx-auto mb-4 text-gray-400" />
           <p className="text-gray-500">
             {search ? 'No se encontraron resultados' : 'Aún no hay clientes registrados'}
           </p>
@@ -217,8 +218,8 @@ export default function CustomersPage() {
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowForm(false)} />
           <div className="relative bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="font-bold text-gray-900">{editingId ? 'Editar Cliente' : 'Nuevo Cliente'}</h2>
-              <button onClick={() => setShowForm(false)} className="text-gray-400 text-2xl">&times;</button>
+              <h2 className="font-semibold text-gray-900">{editingId ? 'Editar Cliente' : 'Nuevo Cliente'}</h2>
+              <button onClick={() => setShowForm(false)} aria-label="Cerrar" className="text-gray-400 hover:text-gray-800 p-1"><X aria-hidden="true" size={20} /></button>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

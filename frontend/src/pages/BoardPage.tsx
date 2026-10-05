@@ -1,3 +1,5 @@
+import { ESTADOS, PastillaEstado, Placa, PuntoEstado } from "../lib/estados";
+import { Clock, RotateCw, X } from 'lucide-react';
 import {
   useState,
   useEffect,
@@ -57,47 +59,15 @@ interface Operator {
 interface Column {
   key: AppointmentStatus;
   label: string;
-  icon: string;
-  color: string;
-  headerBg: string;
-  dot: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const COLUMNS: Column[] = [
-  {
-    key: "pending",
-    label: "Esperando",
-    icon: "⏳",
-    color: "border-gray-300",
-    headerBg: "bg-gray-50",
-    dot: "bg-gray-400",
-  },
-  {
-    key: "in_progress",
-    label: "Lavando",
-    icon: "🔄",
-    color: "border-yellow-300",
-    headerBg: "bg-yellow-50",
-    dot: "bg-yellow-400",
-  },
-  {
-    key: "done",
-    label: "Listo",
-    icon: "✅",
-    color: "border-green-300",
-    headerBg: "bg-green-50",
-    dot: "bg-green-500",
-  },
-  {
-    key: "delivered",
-    label: "Entregado",
-    icon: "🏁",
-    color: "border-blue-300",
-    headerBg: "bg-blue-50",
-    dot: "bg-blue-400",
-  },
+  { key: "pending", label: "Esperando" },
+  { key: "in_progress", label: "Lavando" },
+  { key: "done", label: "Listo" },
+  { key: "delivered", label: "Entregado" },
 ];
 
 const NEXT_STATUS: Partial<Record<AppointmentStatus, AppointmentStatus>> = {
@@ -237,7 +207,7 @@ export default function BoardPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Tablero</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">Tablero</h1>
           <p className="text-sm text-gray-500">
             {activeCount} activos · {deliveredCount} entregados hoy
           </p>
@@ -254,10 +224,11 @@ export default function BoardPage() {
           </label>
           <button
             onClick={fetchData}
-            className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition"
+            className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-gray-300 transition"
             title="Actualizar"
           >
-            🔄 Actualizar
+            <RotateCw aria-hidden="true" size={15} strokeWidth={1.8} />
+            Actualizar
           </button>
         </div>
       </div>
@@ -284,23 +255,13 @@ export default function BoardPage() {
             {columnsToShow.map((col) => {
               const items = getColumnAppointments(col.key);
               return (
-                <div
-                  key={col.key}
-                  className={`rounded-xl border-2 ${col.color} bg-white min-h-[300px]`}
-                >
-                  <div
-                    className={`${col.headerBg} px-4 py-3 rounded-t-lg border-b`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-sm text-gray-700">
-                        {col.icon} {col.label}
-                      </span>
-                      <span className="text-xs font-bold bg-white/80 px-2 py-0.5 rounded-full text-gray-600">
-                        {items.length}
-                      </span>
-                    </div>
+                <div key={col.key} className="min-h-[300px] min-w-0">
+                  <div className="flex items-center gap-2 px-1 pb-3 mb-1 border-b border-gray-100">
+                    <PuntoEstado status={col.key} />
+                    <span className="etiqueta font-semibold text-gray-600">{col.label}</span>
+                    <span className="ml-auto font-mono text-xs text-gray-800">{items.length}</span>
                   </div>
-                  <div className="p-2 space-y-2">
+                  <div className="pt-2 space-y-2">
                     {items.length === 0 ? (
                       <p className="text-center text-xs text-gray-400 py-8">
                         Sin turnos
@@ -332,10 +293,9 @@ export default function BoardPage() {
               return (
                 <div key={col.key}>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className={`w-2.5 h-2.5 rounded-full ${col.dot}`} />
-                    <h2 className="font-semibold text-sm text-gray-700">
-                      {col.label} ({items.length})
-                    </h2>
+                    <PuntoEstado status={col.key} />
+                    <h2 className="etiqueta font-semibold text-gray-600">{col.label}</h2>
+                    <span className="ml-auto font-mono text-xs text-gray-800">{items.length}</span>
                   </div>
                   {items.length === 0 ? (
                     <p className="text-xs text-gray-400 pl-5 pb-2">
@@ -414,23 +374,20 @@ function KanbanCard({
 
   return (
     <div
-      className={`bg-white rounded-lg border border-gray-100 p-3 hover:shadow-sm transition cursor-pointer ${
-        isOvertime ? "ring-2 ring-orange-300" : ""
+      className={`bg-white rounded-lg border border-gray-100 border-l-[3px] ${ESTADOS[a.status].borde} p-3 hover:border-gray-300 transition cursor-pointer ${
+        isOvertime ? "ring-1 ring-orange-600/60" : ""
       }`}
       onClick={onDetail}
     >
       {/* Top row: plate + elapsed */}
       <div className="flex items-center justify-between mb-1">
-        <span className="font-bold text-sm text-gray-900 tracking-wide">
-          {a.plate}
-        </span>
+        <Placa placa={a.plate} />
         {elapsed && (a.status === "pending" || a.status === "in_progress") && (
           <span
-            className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-              isOvertime
-                ? "bg-orange-100 text-orange-700"
-                : "bg-gray-100 text-gray-500"
+            className={`font-mono text-xs tabular-nums ${
+              isOvertime ? "text-orange-700 font-semibold" : "text-gray-500"
             }`}
+            title={isOvertime ? "Lleva más tiempo del estimado" : undefined}
           >
             {elapsed}
           </span>
@@ -438,12 +395,12 @@ function KanbanCard({
       </div>
 
       {/* Vehicle info */}
-      <p className="text-xs text-gray-500 truncate">
+      <p className="text-xs text-gray-600 truncate mt-1.5">
         {a.brand} {a.model} {a.color ? `· ${a.color}` : ""}
       </p>
 
       {/* Service */}
-      <p className="text-xs text-gray-400 mt-0.5">
+      <p className="text-xs text-gray-500 mt-0.5">
         {a.service_name} · {formatCOP(a.price)}
       </p>
 
@@ -456,8 +413,9 @@ function KanbanCard({
 
       {/* Scheduled time */}
       {a.scheduled_time && (
-        <p className="text-xs text-gray-400 mt-0.5">
-          ⏰ {formatTime(a.scheduled_time)}
+        <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+          <Clock aria-hidden="true" size={12} strokeWidth={1.8} />
+          {formatTime(a.scheduled_time)}
         </p>
       )}
 
@@ -483,7 +441,7 @@ function KanbanCard({
 
       {/* Bay number */}
       {a.bay_number && (
-        <span className="inline-block mt-1.5 text-xs bg-brand-50 text-brand-700 px-2 py-0.5 rounded font-medium">
+        <span className="inline-block mt-1.5 text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-medium">
           Bahía {a.bay_number}
         </span>
       )}
@@ -495,9 +453,9 @@ function KanbanCard({
             e.stopPropagation();
             onStatusChange(a.id, nextStatus);
           }}
-          className="mt-2 w-full text-xs font-semibold py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white transition"
+          className="mt-3 w-full text-xs font-semibold py-2 rounded-lg border border-brand-400 text-brand-800 hover:bg-brand-600 hover:text-white hover:border-brand-600 transition"
         >
-          {nextLabel} →
+          {nextLabel}
         </button>
       )}
     </div>
@@ -536,14 +494,13 @@ function DetailModal({
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-        <div className="relative bg-white rounded-2xl p-8">
-          <span className="text-2xl animate-spin inline-block">🔄</span>
+        <div className="relative bg-white border border-gray-100 rounded-xl p-8" role="status" aria-label="Cargando">
+          <div aria-hidden="true" className="w-7 h-7 border-2 border-gray-200 border-t-brand-600 rounded-full animate-spin" />
         </div>
       </div>
     );
   }
 
-  const config = COLUMNS.find((c) => c.key === data.status);
   const nextStatus = NEXT_STATUS[data.status];
   const nextLabel = NEXT_LABEL[data.status];
   const elapsed = getElapsedTime(data);
@@ -551,25 +508,17 @@ function DetailModal({
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white w-full max-w-lg rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto">
+      <div className="relative bg-white border border-gray-100 w-full max-w-lg rounded-t-xl sm:rounded-xl max-h-[90vh] overflow-y-auto shadow-2xl shadow-black/50">
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b px-5 py-4 flex items-center justify-between rounded-t-2xl z-10">
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between rounded-t-xl z-10">
           <div className="flex items-center gap-3">
-            <span className="text-2xl font-bold tracking-wider text-gray-900">
-              {data.plate}
-            </span>
-            <span
-              className={`text-xs font-medium px-2.5 py-1 rounded-full ${config?.headerBg ?? ""} text-gray-700`}
-            >
-              {config?.icon} {config?.label}
-            </span>
+            <Placa placa={data.plate} className="!text-lg" />
+            <PastillaEstado status={data.status} />
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-2xl"
-          >
-            &times;
-          </button>
+            className="text-gray-400 hover:text-gray-800 p-1"
+            aria-label="Cerrar"><X aria-hidden="true" size={20} /></button>
         </div>
 
         <div className="p-5 space-y-5">
@@ -666,7 +615,7 @@ function DetailModal({
                 onClick={() => onStatusChange(data.id, nextStatus)}
                 className="flex-1 py-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl transition text-sm"
               >
-                {nextLabel} →
+                {nextLabel}
               </button>
             )}
             {data.status !== "cancelled" && data.status !== "delivered" && (
@@ -723,7 +672,7 @@ function InfoRow({ label, value, bold }: InfoRowProps) {
   return (
     <div className="flex justify-between text-sm">
       <span className="text-gray-500">{label}</span>
-      <span className={`text-gray-900 ${bold ? "font-bold" : ""}`}>
+      <span className={`text-gray-900 ${bold ? "font-semibold" : ""}`}>
         {value}
       </span>
     </div>

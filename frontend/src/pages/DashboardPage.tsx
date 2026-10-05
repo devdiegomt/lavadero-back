@@ -5,6 +5,8 @@ import { api } from '../lib/api';
 import { formatCOP } from '../lib/format';
 import { useToast } from '../components/ui';
 import QuickTurnModal from '../components/QuickTurnModal';
+import { ESTADOS, Placa, PuntoEstado } from '../lib/estados';
+import { CalendarDays, Columns3, History, Plus, Users, type LucideIcon } from 'lucide-react';
 import type { AppointmentStatus } from '../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -58,67 +60,49 @@ export default function DashboardPage() {
     return 'Buenas noches';
   };
 
+  const hoy = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">
-          {greeting()}, {user?.firstName} 👋
-        </h1>
-        <p className="text-gray-500 text-sm mt-1">
-          {user?.tenant?.name} — Resumen del día
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl lg:text-[1.9rem] font-semibold text-gray-900" style={{ fontStretch: '118%' }}>
+            {greeting()}, {user?.firstName}
+          </h1>
+          <p className="text-gray-500 text-sm mt-1.5 first-letter:uppercase">{hoy}</p>
+        </div>
+        <button
+          onClick={() => setShowQuickTurn(true)}
+          className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition"
+        >
+          <Plus aria-hidden="true" size={17} strokeWidth={2} />
+          Nuevo turno
+        </button>
       </div>
 
-      {/* Stats cards */}
+      {/* Stats: una sola franja dividida, no cuatro tarjetas sueltas */}
       {loading ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="bg-white rounded-xl p-4 h-24 animate-pulse" />
-          ))}
-        </div>
+        <div className="h-24 bg-white border border-gray-100 rounded-xl animate-pulse" />
       ) : stats ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            label="Turnos hoy"
-            value={stats.appointments.total_appointments}
-            icon="📋"
-            color="bg-blue-50 text-blue-700"
-          />
-          <StatCard
-            label="En lavado"
-            value={stats.appointments.in_progress}
-            icon="🔄"
-            color="bg-yellow-50 text-yellow-700"
-          />
-          <StatCard
-            label="Listos"
-            value={stats.appointments.done}
-            icon="✅"
-            color="bg-green-50 text-green-700"
-          />
-          <StatCard
-            label="Ingresos hoy"
-            value={formatCOP(stats.revenue.total)}
-            icon="💰"
-            color="bg-emerald-50 text-emerald-700"
-          />
+        <div className="grid grid-cols-2 lg:grid-cols-4 bg-white border border-gray-100 rounded-xl divide-gray-100 [&>*]:border-gray-100 [&>*:nth-child(n+3)]:border-t lg:[&>*:nth-child(n+3)]:border-t-0 [&>*:nth-child(even)]:border-l lg:[&>*:not(:first-child)]:border-l">
+          <StatCard label="Turnos hoy" value={stats.appointments.total_appointments} />
+          <StatCard label="Lavando" value={stats.appointments.in_progress} />
+          <StatCard label="Listos" value={stats.appointments.done} />
+          <StatCard label="Ingresos hoy" value={formatCOP(stats.revenue.total)} />
         </div>
       ) : null}
 
-      {/* Quick actions */}
-      <div className="bg-white rounded-xl p-6 border border-gray-100">
-        <h2 className="font-semibold text-gray-900 mb-4">Acciones rápidas</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <QuickAction href="/appointments" icon="📅" label="Ver Agenda" />
-          <QuickAction onClick={() => setShowQuickTurn(true)} icon="➕" label="Nuevo Turno" />
-          <QuickAction href="/board" icon="📊" label="Tablero" />
-          <QuickAction href="/customers" icon="👥" label="Clientes" />
-        </div>
-      </div>
-
       {/* Live board summary */}
       <LiveBoardSummary />
+
+      {/* Accesos */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <QuickAction href="/appointments" icon={CalendarDays} label="Ver agenda" />
+        <QuickAction href="/board" icon={Columns3} label="Tablero" />
+        <QuickAction href="/customers" icon={Users} label="Clientes" />
+        <QuickAction href="/history" icon={History} label="Historial" />
+      </div>
 
       {/* Quick turn modal */}
       {showQuickTurn && (
@@ -136,20 +120,13 @@ export default function DashboardPage() {
 interface StatCardProps {
   label: string;
   value: ReactNode;
-  icon: string;
-  color: string;
 }
 
-function StatCard({ label, value, icon, color }: StatCardProps) {
+function StatCard({ label, value }: StatCardProps) {
   return (
-    <div className="bg-white rounded-xl p-4 border border-gray-100">
-      <div className="flex items-center gap-2 mb-2">
-        <span className={`text-xs px-2 py-1 rounded-lg font-medium ${color}`}>
-          {icon}
-        </span>
-        <span className="text-xs text-gray-500">{label}</span>
-      </div>
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
+    <div className="px-5 py-4 grid gap-2">
+      <span className="etiqueta text-gray-500">{label}</span>
+      <p className="cifra text-[1.7rem] leading-none font-semibold text-gray-900 whitespace-nowrap">{value}</p>
     </div>
   );
 }
@@ -157,21 +134,19 @@ function StatCard({ label, value, icon, color }: StatCardProps) {
 // ─── QuickAction ──────────────────────────────────────────────────────────────
 
 interface QuickActionProps {
-  href?: string;
-  onClick?: () => void;
-  icon: string;
+  href: string;
+  icon: LucideIcon;
   label: string;
 }
 
-function QuickAction({ href, onClick, icon, label }: QuickActionProps) {
+function QuickAction({ href, icon: Icono, label }: QuickActionProps) {
   const navigate = useNavigate();
-  const handleClick = onClick ?? (() => href && navigate(href));
   return (
     <button
-      onClick={handleClick}
-      className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-100 hover:bg-gray-50 transition text-sm font-medium text-gray-700 text-left w-full"
+      onClick={() => navigate(href)}
+      className="flex items-center gap-3 px-4 py-3 rounded-lg border border-gray-100 bg-white hover:border-gray-300 transition text-sm font-medium text-gray-700 text-left w-full"
     >
-      <span className="text-lg">{icon}</span>
+      <Icono aria-hidden="true" size={18} strokeWidth={1.6} className="text-gray-400" />
       {label}
     </button>
   );
@@ -196,58 +171,58 @@ function LiveBoardSummary() {
     done:        active.filter((a) => a.status === 'done'),
   };
 
+  const columnas: { status: AppointmentStatus; label: string; items: SummaryAppointment[] }[] = [
+    { status: 'pending', label: 'Esperando', items: byStatus.pending },
+    { status: 'in_progress', label: 'Lavando', items: byStatus.in_progress },
+    { status: 'done', label: 'Listos', items: byStatus.done },
+  ];
+
   return (
-    <div className="bg-white rounded-xl p-6 border border-gray-100">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-semibold text-gray-900">En el lavadero ahora</h2>
+    <section className="space-y-4">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-base font-semibold text-gray-900">En el lavadero ahora</h2>
         <button
           onClick={() => navigate('/board')}
-          className="text-xs text-brand-600 hover:text-brand-800 font-medium"
+          className="text-sm text-brand-700 hover:text-brand-800 font-medium"
         >
-          Ver tablero →
+          Ver tablero
         </button>
       </div>
-      <div className="grid grid-cols-3 gap-3">
-        {byStatus.in_progress.length > 0 && (
-          <MiniColumn label="Lavando" color="bg-yellow-400" items={byStatus.in_progress} />
-        )}
-        {byStatus.pending.length > 0 && (
-          <MiniColumn label="Esperando" color="bg-gray-400" items={byStatus.pending} />
-        )}
-        {byStatus.done.length > 0 && (
-          <MiniColumn label="Listos" color="bg-green-500" items={byStatus.done} />
-        )}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {columnas.map((c) => (
+          <MiniColumn key={c.status} status={c.status} label={c.label} items={c.items} />
+        ))}
       </div>
-    </div>
+    </section>
   );
 }
 
 // ─── MiniColumn ───────────────────────────────────────────────────────────────
 
 interface MiniColumnProps {
+  status: AppointmentStatus;
   label: string;
-  color: string;
   items: SummaryAppointment[];
 }
 
-function MiniColumn({ label, color, items }: MiniColumnProps) {
+function MiniColumn({ status, label, items }: MiniColumnProps) {
   return (
-    <div>
-      <div className="flex items-center gap-1.5 mb-2">
-        <span className={`w-2 h-2 rounded-full ${color}`} />
-        <span className="text-xs font-medium text-gray-500">{label} ({items.length})</span>
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 pb-1">
+        <PuntoEstado status={status} />
+        <span className="etiqueta font-semibold text-gray-500">{label}</span>
+        <span className="ml-auto font-mono text-xs text-gray-700">{items.length}</span>
       </div>
-      <div className="space-y-1">
-        {items.slice(0, 3).map((a) => (
-          <div key={a.id} className="bg-gray-50 rounded-lg px-3 py-2">
-            <p className="text-xs font-bold text-gray-900">{a.plate}</p>
-            <p className="text-xs text-gray-400">{a.service_name}</p>
-          </div>
-        ))}
-        {items.length > 3 && (
-          <p className="text-xs text-gray-400 pl-3">+{items.length - 3} más</p>
-        )}
-      </div>
+      {items.length === 0 && <p className="text-xs text-gray-400 py-2">Ninguno</p>}
+      {items.slice(0, 3).map((a) => (
+        <div key={a.id} className={`bg-white border border-gray-100 border-l-[3px] ${ESTADOS[status].borde} rounded-lg px-3 py-2.5 space-y-1.5`}>
+          <Placa placa={a.plate} />
+          <p className="text-xs text-gray-500">{a.service_name}</p>
+        </div>
+      ))}
+      {items.length > 3 && (
+        <p className="text-xs text-gray-500 pl-1">y {items.length - 3} más</p>
+      )}
     </div>
   );
 }

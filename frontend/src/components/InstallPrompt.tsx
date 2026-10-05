@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Download } from 'lucide-react';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -36,16 +37,16 @@ export default function InstallPrompt() {
 
   return (
     <div className="fixed bottom-20 lg:bottom-4 left-4 right-4 z-40 max-w-sm mx-auto">
-      <div className="bg-brand-700 text-white rounded-2xl p-4 shadow-xl flex items-center gap-3">
-        <span className="text-3xl">🚿</span>
+      <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-2xl shadow-black/40 flex items-center gap-3">
+        <Download aria-hidden="true" size={22} strokeWidth={1.6} className="text-brand-600 shrink-0" />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold">Instalar Carwash</p>
-          <p className="text-xs text-brand-200">Accede más rápido desde tu pantalla de inicio</p>
+          <p className="text-sm font-semibold text-gray-900">Instalar el panel</p>
+          <p className="text-xs text-gray-500">Accede más rápido desde tu pantalla de inicio</p>
         </div>
         <div className="flex gap-2 shrink-0">
-          <button onClick={handleDismiss} className="text-xs text-brand-300 hover:text-white px-2 py-1">No</button>
+          <button onClick={handleDismiss} className="text-xs text-gray-500 hover:text-gray-800 px-2 py-1">Ahora no</button>
           <button onClick={handleInstall}
-            className="bg-white text-brand-700 text-xs font-semibold px-3 py-1.5 rounded-lg">
+            className="bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg">
             Instalar
           </button>
         </div>

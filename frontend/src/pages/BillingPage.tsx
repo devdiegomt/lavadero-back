@@ -1,3 +1,4 @@
+import { Ban, CircleCheck, CircleHelp, CircleX, Clock, FileMinus, FileText, RotateCw, Search, TriangleAlert, Wallet, X, type LucideIcon } from 'lucide-react';
 import {
   useState,
   useEffect,
@@ -112,15 +113,15 @@ interface CreditNoteResponse {
 interface StatusConfig {
   label: string;
   variant: "success" | "warning" | "danger" | "default";
-  emoji: string;
+  icon: LucideIcon;
 }
 
 const INVOICE_STATUS: Record<InvoiceStatus, StatusConfig> = {
-  accepted: { label: "Aceptada por DIAN", variant: "success", emoji: "✅" },
-  pending: { label: "Pendiente DIAN", variant: "warning", emoji: "⏳" },
-  failed: { label: "Falló", variant: "danger", emoji: "❌" },
-  rejected: { label: "Rechazada", variant: "danger", emoji: "⚠️" },
-  voided: { label: "Anulada", variant: "default", emoji: "🚫" },
+  accepted: { label: "Aceptada por DIAN", variant: "success", icon: CircleCheck },
+  pending: { label: "Pendiente DIAN", variant: "warning", icon: Clock },
+  failed: { label: "Falló", variant: "danger", icon: CircleX },
+  rejected: { label: "Rechazada", variant: "danger", icon: TriangleAlert },
+  voided: { label: "Anulada", variant: "default", icon: Ban },
 };
 
 const PAYMENT_METHOD_LABEL: Record<PaymentMethodKey, string> = {
@@ -132,9 +133,9 @@ const PAYMENT_METHOD_LABEL: Record<PaymentMethodKey, string> = {
   other: "Otro",
 };
 
-const TABS: { key: Tab; label: string; icon: string }[] = [
-  { key: "invoices", label: "Facturas emitidas", icon: "📄" },
-  { key: "pending", label: "Pendientes", icon: "⏳" },
+const TABS: { key: Tab; label: string; icon: LucideIcon }[] = [
+  { key: "invoices", label: "Facturas emitidas", icon: FileText },
+  { key: "pending", label: "Pendientes", icon: Clock },
 ];
 
 // ─── BillingPage ──────────────────────────────────────────────────────────────
@@ -145,7 +146,7 @@ export default function BillingPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Facturación</h1>
+        <h1 className="text-xl font-semibold text-gray-900">Facturación</h1>
       </div>
 
       {/* Tabs */}
@@ -160,7 +161,7 @@ export default function BillingPage() {
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            <span>{t.icon}</span>
+            <t.icon aria-hidden="true" size={16} strokeWidth={1.6} />
             <span>{t.label}</span>
           </button>
         ))}
@@ -251,20 +252,20 @@ function InvoicesTab({ onGoToPending }: { onGoToPending(): void }) {
         <StatCard
           label="Aceptadas"
           value={summary.accepted}
-          icon="✅"
+          icon={CircleCheck}
           sub={`de ${summary.total} totales`}
         />
-        <StatCard label="Pendientes" value={summary.pendingDian} icon="⏳" />
+        <StatCard label="Pendientes" value={summary.pendingDian} icon={Clock} />
         <StatCard
           label="Fallidas"
           value={summary.failed + summary.rejected}
-          icon="❌"
+          icon={CircleX}
           sub={summary.failed > 0 ? "reintentables" : ""}
         />
         <StatCard
           label="Facturado"
           value={formatCOP(summary.totalInvoiced)}
-          icon="💰"
+          icon={Wallet}
           sub="solo aceptadas"
         />
       </div>
@@ -342,7 +343,7 @@ function InvoicesTab({ onGoToPending }: { onGoToPending(): void }) {
       {/* Lista */}
       {invoices.length === 0 ? (
         <EmptyState
-          icon="📄"
+          icon={FileText}
           title="Sin facturas todavía"
           description={
             summary.total === 0
@@ -359,9 +360,9 @@ function InvoicesTab({ onGoToPending }: { onGoToPending(): void }) {
               ? (INVOICE_STATUS[inv.invoice_status] ?? {
                   label: String(inv.invoice_status),
                   variant: "default",
-                  emoji: "❓",
+                  icon: CircleHelp,
                 })
-              : { label: "Desconocido", variant: "default", emoji: "❓" };
+              : { label: "Desconocido", variant: "default", icon: CircleHelp };
             return (
               <div
                 key={inv.id}
@@ -374,7 +375,8 @@ function InvoicesTab({ onGoToPending }: { onGoToPending(): void }) {
                         {inv.invoice_number ?? "(sin número)"}
                       </p>
                       <Badge variant={status.variant}>
-                        {status.emoji} {status.label}
+                        <status.icon aria-hidden="true" size={13} strokeWidth={2} />
+                        {status.label}
                       </Badge>
                     </div>
                     <p className="text-sm text-gray-600 mt-1 truncate">
@@ -412,21 +414,24 @@ function InvoicesTab({ onGoToPending }: { onGoToPending(): void }) {
                       rel="noopener"
                       className="text-xs font-medium text-brand-600 hover:text-brand-800 px-3 py-1.5 rounded-lg hover:bg-brand-50 transition"
                     >
-                      📄 Ver PDF
+                      <FileText aria-hidden="true" size={14} className="inline -mt-0.5 mr-1" />
+                      Ver PDF
                     </a>
                   )}
                   <button
                     onClick={() => setDetailFor(inv)}
                     className="text-xs font-medium text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition"
                   >
-                    🔍 Detalle / Refrescar
+                    <Search aria-hidden="true" size={14} className="inline -mt-0.5 mr-1" />
+                    Detalle / Refrescar
                   </button>
                   {inv.invoice_status === "failed" && (
                     <button
                       onClick={() => setConfirmRetry(inv)}
                       className="text-xs font-medium text-yellow-700 hover:text-yellow-900 px-3 py-1.5 rounded-lg hover:bg-yellow-50 transition"
                     >
-                      🔁 Reintentar
+                      <RotateCw aria-hidden="true" size={14} className="inline -mt-0.5 mr-1" />
+                      Reintentar
                     </button>
                   )}
                   {inv.invoice_status === "accepted" && (
@@ -434,7 +439,8 @@ function InvoicesTab({ onGoToPending }: { onGoToPending(): void }) {
                       onClick={() => setCreditNoteFor(inv)}
                       className="text-xs font-medium text-red-600 hover:text-red-800 px-3 py-1.5 rounded-lg hover:bg-red-50 transition"
                     >
-                      ❌ Nota crédito
+                      <FileMinus aria-hidden="true" size={14} className="inline -mt-0.5 mr-1" />
+                      Nota crédito
                     </button>
                   )}
                 </div>
@@ -560,7 +566,7 @@ function PendingTab() {
   if (payments.length === 0) {
     return (
       <EmptyState
-        icon="🎉"
+        icon={CircleCheck}
         title="Todos los pagos están facturados"
         description="No hay pagos pendientes de facturación. Cuando registres nuevos pagos aparecerán aquí si Alegra está configurado en automático."
       />
@@ -690,7 +696,7 @@ function InvoiceDetailModal({
     ? (INVOICE_STATUS[data.invoice.status] ?? {
         label: String(data.invoice.status),
         variant: "default",
-        emoji: "❓",
+        icon: CircleHelp,
       })
     : null;
 
@@ -699,13 +705,11 @@ function InvoiceDetailModal({
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white w-full max-w-lg rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-bold text-gray-900">Detalle de factura</h2>
+          <h2 className="font-semibold text-gray-900">Detalle de factura</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 text-2xl"
-          >
-            &times;
-          </button>
+           aria-label="Cerrar"><X aria-hidden="true" size={20} /></button>
         </div>
 
         {loading ? (
@@ -720,7 +724,8 @@ function InvoiceDetailModal({
             {status && (
               <div className="flex items-center gap-2">
                 <Badge variant={status.variant}>
-                  {status.emoji} {status.label}
+                  <status.icon aria-hidden="true" size={13} strokeWidth={2} />
+                        {status.label}
                 </Badge>
                 <span className="text-xs text-gray-400">
                   consultado en Alegra ahora
@@ -793,7 +798,8 @@ function InvoiceDetailModal({
                   rel="noopener"
                   className="flex-1 text-center bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold py-2.5 rounded-lg transition"
                 >
-                  📄 Abrir PDF
+                  <FileText aria-hidden="true" size={15} className="inline -mt-0.5 mr-1.5" />
+                  Abrir PDF
                 </a>
               )}
               <button
@@ -882,19 +888,18 @@ function CreditNoteModal({
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-bold text-gray-900">Generar nota crédito</h2>
+          <h2 className="font-semibold text-gray-900">Generar nota crédito</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 text-2xl"
-          >
-            &times;
-          </button>
+           aria-label="Cerrar"><X aria-hidden="true" size={20} /></button>
         </div>
 
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-900">
-          ⚠️ Vas a anular la factura <strong>{payment.invoice_number}</strong>{" "}
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-900 flex gap-2">
+          <TriangleAlert aria-hidden="true" size={15} className="shrink-0 text-yellow-600" />
+          <span>Vas a anular la factura <strong>{payment.invoice_number}</strong>{" "}
           por {formatCOP(payment.amount)}. Esta acción se reportará a la DIAN y
-          no se puede deshacer.
+          no se puede deshacer.</span>
         </div>
 
         <div>

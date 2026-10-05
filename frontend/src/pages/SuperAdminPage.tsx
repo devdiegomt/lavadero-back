@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { Building2, CalendarDays, CalendarRange, CarFront, Check, Columns3, CreditCard, Gift, Layers, LayoutDashboard, MessageCircle, ReceiptText, Sparkles, TrendingUp, UserRound, Users, Wallet, X, type LucideIcon } from 'lucide-react';
 import { api } from "../lib/api";
 import { formatCOP, formatDateTime } from "../lib/format";
 import {
@@ -141,10 +142,10 @@ interface ChangePlanResponse {
   message: string;
 }
 
-const TABS: { key: Tab; label: string; icon: string }[] = [
-  { key: "dashboard", label: "Dashboard", icon: "📊" },
-  { key: "tenants", label: "Tenants", icon: "🏢" },
-  { key: "plans", label: "Planes", icon: "⭐" },
+const TABS: { key: Tab; label: string; icon: LucideIcon }[] = [
+  { key: "dashboard", label: "Resumen", icon: LayoutDashboard },
+  { key: "tenants", label: "Lavaderos", icon: Building2 },
+  { key: "plans", label: "Planes", icon: Layers },
 ];
 
 const PLAN_COLORS: Record<PlanId, string> = {
@@ -167,11 +168,11 @@ export default function SuperAdminPage() {
             onClick={() => setTab(t.key)}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-medium transition ${
               tab === t.key
-                ? "bg-gray-900 text-white shadow-sm"
+                ? "bg-gray-50 text-gray-900 shadow-sm"
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            <span>{t.icon}</span>
+            <t.icon aria-hidden="true" size={16} strokeWidth={1.6} />
             <span>{t.label}</span>
           </button>
         ))}
@@ -213,7 +214,7 @@ function DashboardTab() {
         <StatCard
           label="Tenants activos"
           value={overview.activeTenants}
-          icon="🏢"
+          icon={Building2}
           sub={
             overview.inactiveTenants > 0
               ? `${overview.inactiveTenants} inactivos`
@@ -223,18 +224,18 @@ function DashboardTab() {
         <StatCard
           label="En período de prueba"
           value={overview.inTrial}
-          icon="🎁"
+          icon={Gift}
           sub="trial activo"
         />
         <StatCard
           label="Usuarios totales"
           value={overview.totalUsers}
-          icon="👥"
+          icon={Users}
         />
         <StatCard
           label="Ingresos del mes"
           value={formatCOP(overview.monthRevenue)}
-          icon="💰"
+          icon={Wallet}
           sub="suma de todos los lavaderos"
         />
       </div>
@@ -243,28 +244,28 @@ function DashboardTab() {
         <StatCard
           label="Citas hoy"
           value={overview.todayAppointments}
-          icon="📅"
+          icon={CalendarDays}
         />
         <StatCard
           label="Citas del mes"
           value={overview.monthAppointments}
-          icon="📆"
+          icon={CalendarRange}
         />
         <StatCard
           label="Nuevos esta semana"
           value={overview.newTenantsWeek}
-          icon="✨"
+          icon={Sparkles}
         />
         <StatCard
           label="Nuevos del mes"
           value={overview.newTenantsMonth}
-          icon="🚀"
+          icon={TrendingUp}
         />
       </div>
 
       {/* Plan distribution */}
       <div className="bg-white rounded-xl border border-gray-100 p-5">
-        <h2 className="font-bold text-gray-900 mb-4">Distribución por plan</h2>
+        <h2 className="font-semibold text-gray-900 mb-4">Distribución por plan</h2>
         <div className="space-y-3">
           <PlanBar
             label="Free"
@@ -295,7 +296,7 @@ function DashboardTab() {
 
       {/* Top tenants */}
       <div className="bg-white rounded-xl border border-gray-100 p-5">
-        <h2 className="font-bold text-gray-900 mb-4">
+        <h2 className="font-semibold text-gray-900 mb-4">
           Top 5 lavaderos por ingresos del mes
         </h2>
         {topTenants.length === 0 ? (
@@ -309,7 +310,7 @@ function DashboardTab() {
                 key={t.id}
                 className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0"
               >
-                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-600 shrink-0">
+                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-sm font-semibold text-gray-600 shrink-0">
                   #{idx + 1}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -327,7 +328,7 @@ function DashboardTab() {
                     {t.appointments} citas este mes
                   </p>
                 </div>
-                <p className="font-bold text-sm text-gray-900 shrink-0">
+                <p className="font-semibold text-sm text-gray-900 shrink-0">
                   {formatCOP(t.revenue)}
                 </p>
               </div>
@@ -507,7 +508,7 @@ function TenantsTab() {
       {/* Lista */}
       {tenants.length === 0 ? (
         <EmptyState
-          icon="🏢"
+          icon={Building2}
           title="Sin tenants"
           description={
             filters.search || filters.plan || filters.status
@@ -538,13 +539,13 @@ function TenantsTab() {
                       </span>
                       {!t.isActive && <Badge variant="danger">Inactivo</Badge>}
                       {inTrial && <Badge variant="warning">Trial</Badge>}
-                      {t.whatsappEnabled && <span className="text-xs">💬</span>}
+                      {t.whatsappEnabled && <MessageCircle aria-hidden="true" size={15} strokeWidth={1.6} className="text-green-700" aria-label="WhatsApp activo" />}
                       {t.billingProvider && (
                         <span
-                          className="text-xs"
+                          className="text-gray-500"
                           title={`Facturación: ${t.billingProvider}`}
                         >
-                          🧾
+                          <ReceiptText aria-hidden="true" size={15} strokeWidth={1.6} />
                         </span>
                       )}
                     </div>
@@ -552,9 +553,9 @@ function TenantsTab() {
                       {t.email ?? "—"} · {t.phone ?? "—"} · {t.city ?? "—"}
                     </p>
                     <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5 text-xs text-gray-400">
-                      <span>👤 {t.userCount} usuarios</span>
+                      <span className="inline-flex items-center gap-1"><UserRound aria-hidden="true" size={13} strokeWidth={1.7} />{t.userCount} usuarios</span>
                       <span>·</span>
-                      <span>📅 {t.todayAppointments} hoy</span>
+                      <span className="inline-flex items-center gap-1"><CalendarDays aria-hidden="true" size={13} strokeWidth={1.7} />{t.todayAppointments} hoy</span>
                       <span>·</span>
                       <span className="font-semibold text-gray-700">
                         {formatCOP(t.monthRevenue)} este mes
@@ -712,13 +713,11 @@ function TenantDetailModal({
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white w-full max-w-2xl rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between">
-          <h2 className="font-bold text-gray-900">Detalle del tenant</h2>
+          <h2 className="font-semibold text-gray-900">Detalle del tenant</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
-          >
-            &times;
-          </button>
+           aria-label="Cerrar"><X aria-hidden="true" size={20} /></button>
         </div>
 
         {loading || !data ? (
@@ -730,7 +729,7 @@ function TenantDetailModal({
             {/* Header con datos del tenant */}
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-bold text-lg text-gray-900">
+                <h3 className="font-semibold text-lg text-gray-900">
                   {data.tenant.name}
                 </h3>
                 <span
@@ -813,27 +812,27 @@ function TenantDetailModal({
                 <StatCard
                   label="Clientes"
                   value={data.stats.customers}
-                  icon="👥"
+                  icon={Users}
                 />
                 <StatCard
                   label="Vehículos"
                   value={data.stats.vehicles}
-                  icon="🚗"
+                  icon={CarFront}
                 />
                 <StatCard
                   label="Total citas"
                   value={data.stats.total_appointments}
-                  icon="📅"
+                  icon={CalendarDays}
                 />
                 <StatCard
                   label="Total pagos"
                   value={data.stats.total_payments}
-                  icon="💳"
+                  icon={CreditCard}
                 />
                 <StatCard
                   label="Ingreso histórico"
                   value={formatCOP(data.stats.total_revenue)}
-                  icon="💰"
+                  icon={Wallet}
                 />
               </div>
             </Section>
@@ -879,7 +878,7 @@ function TenantDetailModal({
                   {
                     label: "Facturación",
                     value: data.tenant.billing_provider
-                      ? `${data.tenant.billing_provider} ✅`
+                      ? `${data.tenant.billing_provider} · activa`
                       : "No configurada",
                   },
                   {
@@ -942,7 +941,7 @@ function TenantDetailModal({
                 <ol className="space-y-2 text-xs">
                   {data.onboarding.map((log, idx) => (
                     <li key={idx} className="flex items-center gap-2">
-                      <span className="text-green-500">✓</span>
+                      <Check aria-hidden="true" size={14} className="text-green-600" />
                       <span className="font-medium text-gray-700">
                         {log.step}
                       </span>
@@ -1085,8 +1084,8 @@ function PlanCard({ plan, onEdit }: { plan: Plan; onEdit(): void }) {
     <div className="bg-white rounded-xl border border-gray-100 p-5 flex flex-col">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h3 className="font-bold text-lg text-gray-900">{plan.name}</h3>
-          <p className="text-2xl font-bold text-gray-900 mt-1">
+          <h3 className="font-semibold text-lg text-gray-900">{plan.name}</h3>
+          <p className="text-2xl font-semibold text-gray-900 mt-1">
             {plan.price_monthly === 0
               ? "Gratis"
               : formatCOP(plan.price_monthly)}
@@ -1104,25 +1103,25 @@ function PlanCard({ plan, onEdit }: { plan: Plan; onEdit(): void }) {
 
       <ul className="space-y-1.5 text-sm text-gray-700 flex-1 mb-4">
         <li className="flex items-center gap-2">
-          <span className="text-gray-400">📅</span>
+          <CalendarDays aria-hidden="true" size={15} strokeWidth={1.6} className="text-gray-400" />
           <span>
             {plan.max_appointments_month?.toLocaleString("es-CO") ?? "—"}{" "}
             citas/mes
           </span>
         </li>
         <li className="flex items-center gap-2">
-          <span className="text-gray-400">👥</span>
+          <Users aria-hidden="true" size={15} strokeWidth={1.6} className="text-gray-400" />
           <span>
             {plan.max_operators}{" "}
             {plan.max_operators === 1 ? "operador" : "operadores"}
           </span>
         </li>
         <li className="flex items-center gap-2">
-          <span className="text-gray-400">🧽</span>
+          <Sparkles aria-hidden="true" size={15} strokeWidth={1.6} className="text-gray-400" />
           <span>{plan.max_services} servicios activos</span>
         </li>
         <li className="flex items-center gap-2">
-          <span className="text-gray-400">🚿</span>
+          <Columns3 aria-hidden="true" size={15} strokeWidth={1.6} className="text-gray-400" />
           <span>
             {plan.max_bays} {plan.max_bays === 1 ? "bahía" : "bahías"}
           </span>
@@ -1130,26 +1129,26 @@ function PlanCard({ plan, onEdit }: { plan: Plan; onEdit(): void }) {
         <li
           className={`flex items-center gap-2 ${plan.whatsapp_enabled ? "" : "opacity-40"}`}
         >
-          <span>{plan.whatsapp_enabled ? "✅" : "❌"}</span>
+          <SiNo si={plan.whatsapp_enabled} />
           <span>WhatsApp Bot</span>
         </li>
         <li
           className={`flex items-center gap-2 ${plan.billing_enabled ? "" : "opacity-40"}`}
         >
-          <span>{plan.billing_enabled ? "✅" : "❌"}</span>
+          <SiNo si={plan.billing_enabled} />
           <span>Facturación electrónica</span>
         </li>
         <li
           className={`flex items-center gap-2 ${plan.reports_enabled ? "" : "opacity-40"}`}
         >
-          <span>{plan.reports_enabled ? "✅" : "❌"}</span>
+          <SiNo si={plan.reports_enabled} />
           <span>Reportes avanzados</span>
         </li>
       </ul>
 
       <button
         onClick={onEdit}
-        className="w-full py-2 bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold rounded-lg transition"
+        className="w-full py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-lg transition"
       >
         Editar plan
       </button>
@@ -1229,15 +1228,13 @@ function PlanEditModal({
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-bold text-gray-900">
+          <h2 className="font-semibold text-gray-900">
             Editar plan: {plan.id.toUpperCase()}
           </h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
-          >
-            &times;
-          </button>
+           aria-label="Cerrar"><X aria-hidden="true" size={20} /></button>
         </div>
 
         <div>
@@ -1320,7 +1317,7 @@ function PlanEditModal({
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex-1 py-2.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold rounded-xl transition disabled:opacity-50"
+            className="flex-1 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-xl transition disabled:opacity-50"
           >
             {saving ? "Guardando..." : "Guardar plan"}
           </button>
@@ -1385,5 +1382,14 @@ function Toggle({
         />
       </span>
     </button>
+  );
+}
+
+/** Incluido o no en el plan: con forma, no sólo con color. */
+function SiNo({ si }: { si: boolean }) {
+  return si ? (
+    <Check aria-label="Incluido" size={15} strokeWidth={2} className="text-green-600" />
+  ) : (
+    <X aria-label="No incluido" size={15} strokeWidth={2} className="text-gray-400" />
   );
 }
