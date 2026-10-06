@@ -1,3 +1,6 @@
+import { Placa } from '../lib/estados';
+import { METODOS_PAGO as METHODS } from '../lib/metodos-pago';
+import { ReceiptText, Wallet, type LucideIcon } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 import { formatCOP } from '../lib/format';
@@ -30,21 +33,8 @@ interface Summary {
 
 type Range = 'today' | 'week' | 'month';
 
-interface MethodInfo {
-  value: PaymentMethod;
-  label: string;
-  icon: string;
-}
-
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const METHODS: MethodInfo[] = [
-  { value: 'cash',      label: 'Efectivo',      icon: '💵' },
-  { value: 'nequi',     label: 'Nequi',         icon: '📱' },
-  { value: 'daviplata', label: 'Daviplata',      icon: '📱' },
-  { value: 'transfer',  label: 'Transferencia',  icon: '🏦' },
-  { value: 'card',      label: 'Tarjeta',        icon: '💳' },
-];
 
 const RANGES: { key: Range; label: string }[] = [
   { key: 'today', label: 'Hoy' },
@@ -102,7 +92,7 @@ export default function PaymentsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-xl font-bold text-gray-900">Pagos</h1>
+        <h1 className="text-xl font-semibold text-gray-900">Pagos</h1>
         <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
           {RANGES.map((r) => (
             <button
@@ -121,8 +111,8 @@ export default function PaymentsPage() {
       {/* Summary cards */}
       {summary && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <SummaryCard label="Total ingresos"    value={formatCOP(summary.total.amount)} icon="💰" />
-          <SummaryCard label="Pagos registrados" value={summary.total.count}             icon="🧾" />
+          <SummaryCard label="Total ingresos"    value={formatCOP(summary.total.amount)} icon={Wallet} />
+          <SummaryCard label="Pagos registrados" value={summary.total.count}             icon={ReceiptText} />
           {summary.byMethod.slice(0, 2).map((m) => {
             const method = METHODS.find((mt) => mt.value === m.method);
             return (
@@ -131,7 +121,7 @@ export default function PaymentsPage() {
                 label={method?.label ?? m.method}
                 value={formatCOP(m.amount)}
                 sub={`${m.count} pagos`}
-                icon={method?.icon ?? '💰'}
+                icon={method?.icon ?? Wallet}
               />
             );
           })}
@@ -148,14 +138,14 @@ export default function PaymentsPage() {
               const pct = summary.total.amount > 0 ? (m.amount / summary.total.amount) * 100 : 0;
               return (
                 <div key={m.method} className="flex items-center gap-3">
-                  <span className="text-lg w-8">{method?.icon ?? '💰'}</span>
+                  <Icono icon={method?.icon} size={18} className="w-8 text-gray-400" />
                   <div className="flex-1">
                     <div className="flex justify-between text-sm mb-1">
                       <span className="font-medium text-gray-700">{method?.label ?? m.method}</span>
                       <span className="text-gray-900 font-semibold">{formatCOP(m.amount)}</span>
                     </div>
                     <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-brand-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                      <div className="h-full bg-brand-600 rounded-full transition-all" style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                   <span className="text-xs text-gray-400 w-12 text-right">{m.count}</span>
@@ -173,7 +163,7 @@ export default function PaymentsPage() {
         </div>
       ) : payments.length === 0 ? (
         <div className="text-center py-16">
-          <span className="text-5xl block mb-4">💰</span>
+          <Wallet aria-hidden="true" size={36} strokeWidth={1.3} className="mx-auto mb-4 text-gray-400" />
           <p className="text-gray-500">No hay pagos registrados en este periodo</p>
         </div>
       ) : (
@@ -183,10 +173,11 @@ export default function PaymentsPage() {
             return (
               <div key={p.id} className="bg-white rounded-xl border border-gray-100 p-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="text-2xl">{method?.icon ?? '💰'}</span>
+                  <span className="w-10 h-10 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center shrink-0"><Icono icon={method?.icon} size={19} className="text-gray-500" /></span>
                   <div className="min-w-0">
-                    <p className="font-semibold text-sm text-gray-900">
-                      {p.plate} — {p.service_name}
+                    <p className="text-sm text-gray-900 flex items-center gap-2 flex-wrap">
+                      {p.plate && <Placa placa={p.plate} />}
+                      {p.service_name}
                     </p>
                     <p className="text-xs text-gray-500">
                       {p.customer_first_name} {p.customer_last_name} · {method?.label ?? p.payment_method}
@@ -197,7 +188,7 @@ export default function PaymentsPage() {
                     </p>
                   </div>
                 </div>
-                <p className="font-bold text-gray-900 text-sm whitespace-nowrap">{formatCOP(p.amount)}</p>
+                <p className="font-semibold text-gray-900 text-sm whitespace-nowrap">{formatCOP(p.amount)}</p>
               </div>
             );
           })}
@@ -236,18 +227,22 @@ interface SummaryCardProps {
   label: string;
   value: React.ReactNode;
   sub?: string;
-  icon: string;
+  icon?: LucideIcon;
 }
 
 function SummaryCard({ label, value, sub, icon }: SummaryCardProps) {
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-4">
-      <div className="flex items-center gap-2 mb-1">
-        <span className="text-lg">{icon}</span>
-        <span className="text-xs text-gray-500">{label}</span>
+    <div className="bg-white rounded-xl border border-gray-100 px-5 py-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Icono icon={icon} size={15} className="text-gray-400" />
+        <span className="etiqueta text-gray-500">{label}</span>
       </div>
-      <p className="text-xl font-bold text-gray-900">{value}</p>
+      <p className="cifra text-xl font-semibold text-gray-900 whitespace-nowrap">{value}</p>
       {sub && <p className="text-xs text-gray-400">{sub}</p>}
     </div>
   );
+}
+/** Un ícono de Lucide que puede no venir: un método de pago desconocido cae en la billetera. */
+function Icono({ icon: I = Wallet, size, className }: { icon?: LucideIcon; size: number; className?: string }) {
+  return <I aria-hidden="true" size={size} strokeWidth={1.6} className={className} />;
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, type HTMLInputTypeAttribute, type ReactNode } from 'react';
+import { Sparkles, Store, Users, X, type LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { formatCOP } from '../lib/format';
@@ -48,10 +49,10 @@ interface User {
   last_login_at: string | null;
 }
 
-const TABS: { key: Tab; label: string; icon: string }[] = [
-  { key: 'general',  label: 'General',   icon: '🏪' },
-  { key: 'services', label: 'Servicios', icon: '🧽' },
-  { key: 'team',     label: 'Equipo',    icon: '👥' },
+const TABS: { key: Tab; label: string; icon: LucideIcon }[] = [
+  { key: 'general',  label: 'General',   icon: Store },
+  { key: 'services', label: 'Servicios', icon: Sparkles },
+  { key: 'team',     label: 'Equipo',    icon: Users },
 ];
 
 // ─── SettingsPage ─────────────────────────────────────────────────────────────
@@ -61,7 +62,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-gray-900">Configuración</h1>
+      <h1 className="text-xl font-semibold text-gray-900">Configuración</h1>
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
@@ -73,7 +74,7 @@ export default function SettingsPage() {
               tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            <span>{t.icon}</span>
+            <t.icon aria-hidden="true" size={16} strokeWidth={1.6} />
             <span className="hidden sm:inline">{t.label}</span>
           </button>
         ))}
@@ -437,7 +438,7 @@ function TeamTab() {
             className={`bg-white rounded-xl border border-gray-100 p-4 flex items-center justify-between gap-3 ${!u.is_active ? 'opacity-50' : ''}`}
           >
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-bold text-sm shrink-0">
+              <div className="w-10 h-10 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-semibold text-sm shrink-0">
                 {u.first_name[0]}
               </div>
               <div className="min-w-0">
@@ -566,8 +567,8 @@ function Modal({ title, onClose, children }: ModalProps) {
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-bold text-gray-900">{title}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+          <h2 className="font-semibold text-gray-900">{title}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl" aria-label="Cerrar"><X aria-hidden="true" size={20} /></button>
         </div>
         {children}
       </div>

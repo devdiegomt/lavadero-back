@@ -8,6 +8,7 @@ import {
   type ReactNode,
   type FC,
 } from "react";
+import { Check, Inbox, Info, X, type LucideIcon } from "lucide-react";
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
@@ -62,18 +63,23 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`pointer-events-auto px-4 py-3 rounded-xl shadow-lg text-sm font-medium animate-slide-in max-w-sm ${
+            role={t.type === "error" ? "alert" : "status"}
+            className={`pointer-events-auto flex items-start gap-2.5 pl-3 pr-4 py-3 rounded-lg shadow-2xl shadow-sombra text-sm font-medium animate-slide-in max-w-sm bg-gray-100 text-gray-900 border border-gray-200 border-l-[3px] ${
               t.type === "success"
-                ? "bg-green-600 text-white"
+                ? "border-l-green-600"
                 : t.type === "error"
-                  ? "bg-red-600 text-white"
-                  : "bg-gray-800 text-white"
+                  ? "border-l-red-600"
+                  : "border-l-brand-600"
             }`}
           >
-            <span className="mr-2">
-              {t.type === "success" ? "✓" : t.type === "error" ? "✕" : "ℹ"}
-            </span>
-            {t.message}
+            {t.type === "success" ? (
+              <Check aria-hidden="true" size={17} className="text-green-600 shrink-0 mt-px" />
+            ) : t.type === "error" ? (
+              <X aria-hidden="true" size={17} className="text-red-600 shrink-0 mt-px" />
+            ) : (
+              <Info aria-hidden="true" size={17} className="text-brand-600 shrink-0 mt-px" />
+            )}
+            <span>{t.message}</span>
           </div>
         ))}
       </div>
@@ -90,7 +96,7 @@ export function useToast(): ToastApi {
 // ─── EmptyState ───────────────────────────────────────────────────────────────
 
 interface EmptyStateProps {
-  icon?: string;
+  icon?: LucideIcon;
   title: string;
   description?: string;
   action?: (() => void) | null;
@@ -98,14 +104,14 @@ interface EmptyStateProps {
 }
 
 export const EmptyState: FC<EmptyStateProps> = ({
-  icon = "📭",
+  icon: Icono = Inbox,
   title,
   description,
   action,
   actionLabel,
 }) => (
   <div className="text-center py-16 px-4">
-    <span className="text-5xl block mb-4">{icon}</span>
+    <Icono aria-hidden="true" size={36} strokeWidth={1.3} className="mx-auto mb-4 text-gray-400" />
     <p className="text-gray-700 font-semibold mb-1">{title}</p>
     {description && (
       <p className="text-gray-400 text-sm mb-6 max-w-xs mx-auto">
@@ -129,7 +135,7 @@ export const LoadingSpinner: FC<{ text?: string }> = ({
   text = "Cargando...",
 }) => (
   <div className="flex flex-col items-center justify-center py-16">
-    <div className="w-8 h-8 border-3 border-brand-200 border-t-brand-600 rounded-full animate-spin mb-3" />
+    <div className="w-7 h-7 border-2 border-gray-200 border-t-brand-600 rounded-full animate-spin mb-3" />
     <p className="text-sm text-gray-400">{text}</p>
   </div>
 );
@@ -174,8 +180,8 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
-      <div className="relative bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl">
-        <h3 className="font-bold text-gray-900 mb-2">{title}</h3>
+      <div className="relative bg-white border border-gray-100 rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl shadow-sombra">
+        <h3 className="font-semibold text-gray-900 mb-2">{title}</h3>
         <p className="text-sm text-gray-500 mb-6">{message}</p>
         <div className="flex gap-3">
           <button
@@ -211,7 +217,7 @@ type BadgeVariant =
   | "brand";
 
 const BADGE_STYLES: Record<BadgeVariant, string> = {
-  default: "bg-gray-100 text-gray-600",
+  default: "bg-gray-100 text-gray-700",
   success: "bg-green-100 text-green-700",
   warning: "bg-yellow-100 text-yellow-700",
   danger: "bg-red-100 text-red-700",
@@ -224,7 +230,7 @@ export const Badge: FC<{ children: ReactNode; variant?: BadgeVariant }> = ({
   variant = "default",
 }) => (
   <span
-    className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full ${BADGE_STYLES[variant]}`}
+    className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded ${BADGE_STYLES[variant]}`}
   >
     {children}
   </span>
@@ -235,7 +241,7 @@ export const Badge: FC<{ children: ReactNode; variant?: BadgeVariant }> = ({
 interface StatCardProps {
   label: string;
   value: React.ReactNode;
-  icon?: string;
+  icon?: LucideIcon;
   sub?: string;
   onClick?: () => void;
 }
@@ -243,7 +249,7 @@ interface StatCardProps {
 export const StatCard: FC<StatCardProps> = ({
   label,
   value,
-  icon,
+  icon: Icono,
   sub,
   onClick,
 }) => {
@@ -251,13 +257,13 @@ export const StatCard: FC<StatCardProps> = ({
   return (
     <Comp
       onClick={onClick}
-      className={`bg-white rounded-xl border border-gray-100 p-4 text-left ${onClick ? "hover:shadow-md transition cursor-pointer" : ""}`}
+      className={`bg-white rounded-xl border border-gray-100 px-5 py-4 text-left ${onClick ? "hover:border-gray-300 transition cursor-pointer" : ""}`}
     >
-      <div className="flex items-center gap-2 mb-1">
-        {icon && <span className="text-lg">{icon}</span>}
-        <span className="text-xs text-gray-500">{label}</span>
+      <div className="flex items-center gap-2 mb-2">
+        {Icono && <Icono aria-hidden="true" size={15} strokeWidth={1.6} className="text-gray-400" />}
+        <span className="etiqueta text-gray-500">{label}</span>
       </div>
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
+      <p className="cifra text-2xl font-semibold text-gray-900">{value}</p>
       {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
     </Comp>
   );

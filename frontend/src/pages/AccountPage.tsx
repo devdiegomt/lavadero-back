@@ -21,6 +21,7 @@
  * sesión de forma explícita en vez de dejar que muera sola en la próxima
  * renovación, que es lo mismo pero desconcertante.
  */
+import { KeyRound } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { api, ApiError } from '../lib/api';
@@ -81,8 +82,8 @@ export default function AccountPage() {
     return (
       <div className="max-w-md mx-auto space-y-4">
         <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center space-y-2">
-          <span className="text-3xl">🔐</span>
-          <h1 className="text-lg font-bold text-gray-900">Contraseña actualizada</h1>
+          <KeyRound aria-hidden="true" size={30} strokeWidth={1.4} className="mx-auto text-brand-600" />
+          <h1 className="text-lg font-semibold text-gray-900">Contraseña actualizada</h1>
           <p className="text-sm text-gray-500">
             Se cerraron todas las sesiones, incluida ésta. Vas a volver al inicio de sesión.
           </p>
@@ -93,7 +94,7 @@ export default function AccountPage() {
 
   return (
     <div className="max-w-md mx-auto space-y-4">
-      <h1 className="text-xl font-bold text-gray-900">Mi cuenta</h1>
+      <h1 className="text-xl font-semibold text-gray-900">Mi cuenta</h1>
 
       <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-1">
         <p className="text-sm font-medium text-gray-900">

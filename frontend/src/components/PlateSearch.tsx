@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
+import { CarFront, Phone, Search } from 'lucide-react';
+import { PastillaEstado, Placa } from '../lib/estados';
 import { api, ApiError } from '../lib/api';
 import { formatCOP } from '../lib/format';
 import type { AppointmentStatus } from '../types';
@@ -86,11 +88,12 @@ export default function PlateSearch() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 transition text-sm"
+        className="flex items-center gap-2 w-full px-3 py-2 rounded-lg border border-gray-200 hover:border-gray-300 text-gray-500 hover:text-gray-700 transition text-sm"
         title="Buscar por placa"
+        aria-label="Buscar por placa"
       >
-        <span>🔍</span>
-        <span className="hidden sm:inline">Buscar placa...</span>
+        <Search aria-hidden="true" size={16} strokeWidth={1.6} />
+        <span className="hidden sm:inline">Buscar placa</span>
       </button>
     );
   }
@@ -99,10 +102,10 @@ export default function PlateSearch() {
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh]">
       <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
 
-      <div className="relative bg-white w-full max-w-md rounded-2xl shadow-2xl mx-4 overflow-hidden">
+      <div className="relative bg-white border border-gray-100 w-full max-w-md rounded-xl shadow-2xl shadow-sombra mx-4 overflow-hidden">
         {/* Search input */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b">
-          <span className="text-xl">🔍</span>
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+          <Search aria-hidden="true" size={19} strokeWidth={1.6} className="text-gray-400 shrink-0" />
           <input
             ref={inputRef}
             type="text"
@@ -110,7 +113,7 @@ export default function PlateSearch() {
             onChange={(e) => setQuery(e.target.value.toUpperCase())}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             placeholder="Buscar por placa..."
-            className="flex-1 text-lg font-bold tracking-wider outline-none uppercase placeholder:font-normal placeholder:tracking-normal placeholder:text-sm"
+            className="flex-1 min-w-0 bg-transparent text-lg font-mono font-semibold tracking-[0.12em] text-gray-900 outline-none uppercase placeholder:font-sans placeholder:font-normal placeholder:tracking-normal placeholder:text-sm placeholder:text-gray-400"
             maxLength={7}
           />
           <button
@@ -135,10 +138,8 @@ export default function PlateSearch() {
               {/* Vehicle card */}
               <div className="bg-gray-50 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-2xl font-bold tracking-wider text-gray-900">
-                    {result.vehicle.plate}
-                  </span>
-                  <span className="text-xs bg-brand-100 text-brand-700 px-2 py-1 rounded-lg font-medium">
+                  <Placa placa={result.vehicle.plate} className="!text-xl" />
+                  <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded font-medium">
                     {result.vehicle.vehicle_type}
                   </span>
                 </div>
@@ -166,9 +167,10 @@ export default function PlateSearch() {
                     {result.customer.phone && (
                       <a
                         href={`tel:${result.customer.phone}`}
-                        className="bg-green-100 text-green-700 px-3 py-2 rounded-lg text-xs font-medium hover:bg-green-200 transition"
+                        className="inline-flex items-center gap-1.5 border border-gray-200 text-gray-800 px-3 py-2 rounded-lg text-xs font-medium hover:border-gray-300 transition"
                       >
-                        📞 Llamar
+                        <Phone aria-hidden="true" size={14} strokeWidth={1.8} />
+                        Llamar
                       </a>
                     )}
                   </div>
@@ -181,7 +183,7 @@ export default function PlateSearch() {
                   <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Últimos servicios</p>
                   <div className="space-y-2">
                     {result.appointments.map((a) => (
-                      <div key={a.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                      <div key={a.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
                         <div>
                           <p className="text-sm text-gray-700">{a.service_name}</p>
                           <p className="text-xs text-gray-400">{a.scheduled_date}</p>
@@ -200,7 +202,7 @@ export default function PlateSearch() {
 
           {!result && !error && !loading && (
             <div className="p-8 text-center">
-              <span className="text-4xl block mb-2">🚗</span>
+              <CarFront aria-hidden="true" size={34} strokeWidth={1.3} className="mx-auto mb-3 text-gray-400" />
               <p className="text-sm text-gray-400">
                 Escribe una placa para ver el vehículo, su dueño, y el historial de servicios
               </p>
@@ -214,15 +216,6 @@ export default function PlateSearch() {
 
 // ─── StatusPill ───────────────────────────────────────────────────────────────
 
-const STATUS_CONFIG: Record<AppointmentStatus, { label: string; cls: string }> = {
-  pending:     { label: 'Esperando', cls: 'bg-gray-100 text-gray-600' },
-  in_progress: { label: 'Lavando',   cls: 'bg-yellow-100 text-yellow-700' },
-  done:        { label: 'Listo',     cls: 'bg-green-100 text-green-700' },
-  delivered:   { label: 'Entregado', cls: 'bg-blue-100 text-blue-700' },
-  cancelled:   { label: 'Cancelado', cls: 'bg-red-100 text-red-600' },
-};
-
 function StatusPill({ status }: { status: AppointmentStatus }) {
-  const c = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending;
-  return <span className={`text-xs px-2 py-0.5 rounded-full ${c.cls}`}>{c.label}</span>;
+  return <PastillaEstado status={status} />;
 }

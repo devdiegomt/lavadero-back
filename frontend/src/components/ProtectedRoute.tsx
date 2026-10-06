@@ -9,7 +9,7 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="text-center">
-        <span className="text-4xl animate-bounce inline-block">🚿</span>
+        <div aria-hidden="true" className="w-7 h-7 mx-auto border-2 border-gray-200 border-t-brand-600 rounded-full animate-spin" />
         <p className="text-sm text-gray-500 mt-3">Cargando...</p>
       </div>
     </div>

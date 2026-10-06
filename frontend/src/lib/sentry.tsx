@@ -13,6 +13,7 @@
  * Requiere: npm install @sentry/react
  */
 
+import { TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { AuthUser } from '../types';
 
@@ -117,8 +118,8 @@ export function ErrorBoundary({ children }: { children: ReactNode }) {
       fallback={({ error, resetError }) => (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
           <div className="max-w-md text-center">
-            <span className="text-5xl mb-4 inline-block">😔</span>
-            <h1 className="text-xl font-bold text-gray-900 mb-2">Algo salió mal</h1>
+            <TriangleAlert aria-hidden="true" size={36} strokeWidth={1.4} className="mx-auto mb-4 text-brand-600" />
+            <h1 className="text-xl font-semibold text-gray-900 mb-2">Algo salió mal</h1>
             <p className="text-sm text-gray-600 mb-6">
               Recibimos el error y lo estamos revisando. Puedes intentar recargar la app.
             </p>

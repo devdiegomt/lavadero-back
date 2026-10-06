@@ -1,3 +1,4 @@
+import { CircleCheck, ReceiptText, Users, Wallet, type LucideIcon } from 'lucide-react';
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../lib/api";
 import { formatCOP } from "../lib/format";
@@ -141,7 +142,7 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-xl font-bold text-gray-900">Reportes</h1>
+        <h1 className="text-xl font-semibold text-gray-900">Reportes</h1>
         <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
           {PERIODS.map((p) => (
             <button
@@ -169,23 +170,23 @@ export default function ReportsPage() {
               label="Ingresos"
               value={formatCOP(dashboard.summary.total_revenue)}
               change={dashboard.comparison.revenue_change_pct}
-              icon="💰"
+              icon={Wallet}
             />
             <KpiCard
               label="Turnos completados"
               value={dashboard.summary.completed}
               change={dashboard.comparison.appointment_change_pct}
-              icon="✅"
+              icon={CircleCheck}
             />
             <StatCard
               label="Clientes únicos"
               value={dashboard.summary.unique_customers}
-              icon="👥"
+              icon={Users}
             />
             <StatCard
               label="Ticket promedio"
               value={formatCOP(dashboard.summary.avg_ticket)}
-              icon="🧾"
+              icon={ReceiptText}
             />
           </div>
 
@@ -214,18 +215,24 @@ export default function ReportsPage() {
                   return (
                     <div
                       key={i}
-                      className="flex-1 flex flex-col items-center gap-1 min-w-0"
+                      className="flex-1 h-full flex flex-col items-center gap-1 min-w-0"
                     >
                       <span className="text-xs text-gray-400 truncate">
                         {d.revenue > 0
                           ? formatCOP(d.revenue).replace("COP", "").trim()
                           : ""}
                       </span>
-                      <div
-                        className="w-full max-w-[40px] rounded-t-md bg-brand-500 transition-all"
-                        style={{ height: `${Math.max(pct, 2)}%` }}
-                        title={`${dayLabel}: ${formatCOP(d.revenue)} (${d.completed} turnos)`}
-                      />
+                      {/* La barra va dentro de un contenedor con altura propia.
+                          Antes colgaba directo de una columna de altura
+                          automática, y un `height: N%` sobre algo sin altura
+                          definida vale cero: el gráfico salía vacío. */}
+                      <div className="flex-1 w-full flex items-end justify-center">
+                        <div
+                          className="w-full max-w-[40px] rounded-t-sm bg-brand-600 transition-all"
+                          style={{ height: `${Math.max(pct, 2)}%` }}
+                          title={`${dayLabel}: ${formatCOP(d.revenue)} (${d.completed} turnos)`}
+                        />
+                      </div>
                       <span className="text-xs text-gray-500 truncate">
                         {dayLabel}
                       </span>
@@ -323,7 +330,7 @@ export default function ReportsPage() {
                       className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0"
                     >
                       <div className="flex items-center gap-3">
-                        <span className="w-6 h-6 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 text-xs font-bold">
+                        <span className="w-6 h-6 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 text-xs font-semibold">
                           {i + 1}
                         </span>
                         <div>
@@ -393,23 +400,23 @@ export default function ReportsPage() {
                   return (
                     <div
                       key={hour}
-                      className="flex-1 flex flex-col items-center gap-1"
+                      className="flex-1 h-full flex flex-col items-center gap-1"
                     >
-                      {count > 0 && (
-                        <span className="text-xs text-gray-400">{count}</span>
-                      )}
+                      <span className="text-xs text-gray-400 h-4">{count > 0 ? count : ""}</span>
+                      <div className="flex-1 w-full flex items-end justify-center">
                       <div
-                        className="w-full max-w-[32px] rounded-t-md transition-all"
+                        className="w-full max-w-[32px] rounded-t-sm transition-all"
                         style={{
                           height: `${Math.max(pct, 4)}%`,
                           backgroundColor:
                             pct > 70
-                              ? "#ef4444"
+                              ? "rgb(var(--red-600))"
                               : pct > 40
-                                ? "#f59e0b"
-                                : "#2E86C1",
+                                ? "rgb(var(--yellow-600))"
+                                : "rgb(var(--brand-600))",
                         }}
                       />
+                      </div>
                       <span className="text-xs text-gray-500">{hour}h</span>
                     </div>
                   );
@@ -432,20 +439,20 @@ interface KpiCardProps {
   label: string;
   value: React.ReactNode;
   change: number | null;
-  icon: string;
+  icon: LucideIcon;
 }
 
-function KpiCard({ label, value, change, icon }: KpiCardProps) {
+function KpiCard({ label, value, change, icon: Icono }: KpiCardProps) {
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-4">
-      <div className="flex items-center gap-2 mb-1">
-        <span className="text-lg">{icon}</span>
-        <span className="text-xs text-gray-500">{label}</span>
+    <div className="bg-white rounded-xl border border-gray-100 px-5 py-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Icono aria-hidden="true" size={15} strokeWidth={1.6} className="text-gray-400" />
+        <span className="etiqueta text-gray-500">{label}</span>
       </div>
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
+      <p className="cifra text-2xl font-semibold text-gray-900 whitespace-nowrap">{value}</p>
       {change !== null && change !== undefined && (
         <p
-          className={`text-xs font-medium mt-0.5 ${change >= 0 ? "text-green-600" : "text-red-600"}`}
+          className={`text-xs font-medium mt-1.5 ${change >= 0 ? "text-green-700" : "text-red-700"}`}
         >
           {change >= 0 ? "↑" : "↓"} {Math.abs(change)}% vs periodo anterior
         </p>

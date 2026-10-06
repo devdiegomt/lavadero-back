@@ -59,7 +59,8 @@ e2e/                        # Pruebas en navegador (Playwright)
 ├── ayudas.ts               # Entrar al panel; comprobar que hay backend
 ├── sesion.spec.ts          # La cookie httpOnly, vista por un navegador
 ├── mi-cuenta.spec.ts       # Cambiar la contraseña propia, y que cierre sesiones
-└── movil.spec.ts           # RNF-COM-3: que el panel quepa y se pueda tocar
+├── movil.spec.ts           # RNF-COM-3: que el panel quepa y se pueda tocar
+└── tema.spec.ts            # Que el panel siga el modo claro u oscuro del teléfono
 
 src/
 ├── App.jsx                 # Router principal
@@ -77,6 +78,8 @@ src/
 │   └── SuperAdminLayout.jsx
 ├── lib/
 │   ├── api.js              # Wrapper de fetch; access token en memoria, refresh en cookie
+│   ├── estados.tsx         # Estados de un turno, la placa, y cómo se dibujan
+│   ├── metodos-pago.ts     # Métodos de pago con su ícono
 │   ├── format.js           # formatCOP, formatDateTime
 │   └── sentry.jsx          # Init opcional de Sentry
 └── pages/
@@ -92,8 +95,69 @@ src/
     ├── ReportsPage.jsx
     ├── CustomersPage.jsx
     ├── SettingsPage.jsx        # 6 tabs incluyendo Facturación, WhatsApp, Plan
-    └── SuperAdminPage.jsx      # 3 tabs: Dashboard, Tenants, Planes
+    └── SuperAdminPage.jsx      # 3 tabs: Resumen, Lavaderos, Planes
 ```
+
+---
+
+## Diseño: Grafito latón
+
+Grafito con **latón como único acento**. Es oscuro, o claro si el teléfono
+está en claro. Usa Archivo como única familia, ancha en títulos y cifras, más
+IBM Plex Mono para placas y horas. Se eligió entre varias
+propuestas: el panel anterior usaba los colores por defecto de Tailwind y 130
+emojis, y para un lavadero exclusivo se veía infantil.
+
+### Dónde viven los colores
+
+En `src/index.css`, como variables. `tailwind.config.js` hace que cada escala
+(`gray`, `brand`, `green`, `red`…) lea de ahí, así que **ningún componente tiene
+un color escrito a mano**.
+
+Las escalas están **invertidas**: `gray-50` es el fondo más oscuro y `gray-900`
+el texto más claro. Por eso las clases conservan su significado —`bg-gray-50`
+es «fondo», `text-gray-900` es «texto principal», `bg-green-50 text-green-700`
+es «insignia verde»— y el rediseño no tuvo que tocar cada clase. `white` es la
+superficie de las tarjetas: `text-white` sobre un botón de latón da texto
+oscuro, que es lo correcto.
+
+### Modo día, automático
+
+El panel sigue el modo del teléfono o de la computadora: **oscuro** si está en
+oscuro, **claro** («Grafito día») si está en claro. No hay botón. Cambia solo
+cuando el sistema cambia, por ejemplo al atardecer si el teléfono lo hace
+automático.
+
+Ojo con una consecuencia: un equipo que nunca cambió su modo está en claro,
+porque ése es el valor por defecto de los navegadores. Así que **la mayoría de
+las computadoras van a ver el modo día**, y el oscuro aparece donde alguien lo
+eligió.
+
+Es un bloque de variables bajo `@media (prefers-color-scheme: light)` en
+`index.css`. Ahí las escalas van en el orden normal (50 claro, 900 oscuro),
+así que cada clase dice lo mismo en los dos modos y **ningún componente sabe
+en qué modo está**. El latón se oscurece en claro para que el botón principal
+tenga 5:1 de contraste con su texto; la placa queda igual en los dos, porque
+una placa es amarilla siempre.
+
+Para verlo en la computadora: DevTools → Rendering → *Emulate CSS media
+feature prefers-color-scheme*. `e2e/tema.spec.ts` comprueba los dos modos.
+
+### Reglas
+
+- **Sin emojis.** Íconos de `lucide-react`, con `aria-hidden` cuando acompañan
+  un texto. Un emoji entra en el nombre accesible del botón y un lector de
+  pantalla lo lee.
+- **Un solo acento.** Latón (`brand`) para la acción principal y lo activo.
+  Verde, azul, rojo y amarillo son **estados**, no decoración.
+- **El estado se ve por la forma**, no sólo por el color: Esperando es un
+  anillo, Lavando un punto con halo, Listo un punto lleno. Están en
+  `src/lib/estados.tsx` y todas las pantallas leen de ahí.
+- **La placa se dibuja como placa** —amarilla, letras negras— con `<Placa>`.
+  Es lo que el operario busca cuando llega un carro.
+- **Tipografías empaquetadas** (`@fontsource`), no de Google Fonts: la PWA
+  tiene que verse igual sin red, y cada fuente externa es un tercero más
+  recibiendo datos de quien usa el panel.
 
 ---
 
@@ -183,7 +247,9 @@ apunta al binario y se saltea la descarga.
 
 ## PWA
 
-La app es instalable como PWA. La configuración está en `vite.config.js` con `vite-plugin-pwa`. Service worker generado automáticamente en `npm run build`.
+La app es instalable como PWA. La configuración está en `vite.config.ts` con `vite-plugin-pwa`. Service worker generado automáticamente en `npm run build`.
+
+Los íconos `public/icon-192.png` y `icon-512.png` salen de `public/favicon.svg`. El manifiesto los pedía desde el principio, pero no existían: instalar el panel daba un ícono genérico.
 
 Para probar la PWA en local **necesitas el build, no el dev server**:
 

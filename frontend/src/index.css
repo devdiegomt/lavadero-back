@@ -1,14 +1,331 @@
+/* Tipografías propias, sin pedirle nada a Google: el panel es una PWA y tiene
+   que verse igual sin red, y cada visita a un CDN externo es un tercero más
+   recibiendo datos de quien usa el panel. */
+@import '@fontsource-variable/archivo/wdth.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+@import '@fontsource/ibm-plex-mono/600.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Grafito latón ───────────────────────────────────────────────────────────
+   Todas las clases de color de Tailwind apuntan a estas variables (ver
+   tailwind.config.js). Los valores son canales RGB sueltos para que funcionen
+   las opacidades: `bg-white/80`, `bg-black/40`. */
+:root {
+  /* Grises de grafito, invertidos: 50 es el fondo más oscuro, 900 el texto más claro.
+     Así `bg-gray-50` sigue siendo «fondo» y `text-gray-900` sigue siendo «texto». */
+  --gray-50: 23 25 27;
+  --gray-100: 38 42 46;
+  --gray-200: 47 52 56;
+  --gray-300: 66 71 76;
+  /* 400 y 500 son texto secundario: los dos pasan 4,5:1 sobre tarjeta y fondo. */
+  --gray-400: 138 142 144;
+  --gray-500: 158 161 158;
+  --gray-600: 182 184 180;
+  --gray-700: 204 201 194;
+  --gray-800: 224 220 213;
+  --gray-900: 236 232 225;
+  --gray-950: 245 242 236;
+  --white: 31 34 37;   /* superficie de tarjeta (#1F2225) */
+  --black: 0 0 0;
+  --lateral: 18 20 22;  /* barras de navegación (#121416) */
+  /* brand: #C8A766 */
+  --brand-50: 41 39 34;
+  --brand-100: 53 49 40;
+  --brand-200: 73 65 48;
+  --brand-300: 103 89 61;
+  --brand-400: 150 127 81;
+  --brand-500: 182 153 94;
+  --brand-600: 200 167 102;
+  --brand-700: 210 183 131;
+  --brand-800: 219 198 157;
+  --brand-900: 227 211 181;
+  /* green: #7CC09B */
+  --green-50: 33 42 40;
+  --green-100: 40 53 49;
+  --green-200: 51 72 63;
+  --green-300: 68 100 85;
+  --green-400: 96 145 119;
+  --green-500: 114 175 142;
+  --green-600: 124 192 155;
+  --green-700: 151 203 172;
+  --green-800: 175 213 188;
+  --green-900: 197 221 202;
+  /* emerald: #6CC5A0 */
+  --emerald-50: 32 42 40;
+  --emerald-100: 37 54 50;
+  --emerald-200: 47 73 64;
+  --emerald-300: 61 102 87;
+  --emerald-400: 84 149 123;
+  --emerald-500: 100 180 147;
+  --emerald-600: 108 197 160;
+  --emerald-700: 138 207 176;
+  --emerald-800: 166 215 191;
+  --emerald-900: 190 223 204;
+  /* red: #E07A6F */
+  --red-50: 43 35 35;
+  --red-100: 57 41 41;
+  --red-200: 79 52 51;
+  --red-300: 113 69 65;
+  --red-400: 168 95 87;
+  --red-500: 204 112 103;
+  --red-600: 224 122 111;
+  --red-700: 229 148 138;
+  --red-800: 233 172 163;
+  --red-900: 237 193 185;
+  /* blue: #6FA3D8 */
+  --blue-50: 32 39 46;
+  --blue-100: 38 48 59;
+  --blue-200: 48 64 80;
+  --blue-300: 63 87 112;
+  --blue-400: 86 124 163;
+  --blue-500: 102 149 197;
+  --blue-600: 111 163 216;
+  --blue-700: 140 180 220;
+  --blue-800: 167 196 224;
+  --blue-900: 191 210 227;
+  /* yellow: #E0B04F */
+  --yellow-50: 43 40 32;
+  --yellow-100: 57 51 36;
+  --yellow-200: 79 67 42;
+  --yellow-300: 113 93 50;
+  --yellow-400: 168 134 64;
+  --yellow-500: 204 161 74;
+  --yellow-600: 224 176 79;
+  --yellow-700: 229 190 113;
+  --yellow-800: 233 203 144;
+  --yellow-900: 237 215 172;
+  /* orange: #E39A5F */
+  --orange-50: 43 38 34;
+  --orange-100: 58 47 39;
+  --orange-200: 80 61 46;
+  --orange-300: 115 83 58;
+  --orange-400: 170 118 76;
+  --orange-500: 207 141 88;
+  --orange-600: 227 154 95;
+  --orange-700: 231 173 126;
+  --orange-800: 235 191 153;
+  --orange-900: 238 206 178;
+  /* purple: #A99BD8 */
+  --purple-50: 38 38 46;
+  --purple-100: 48 47 59;
+  --purple-200: 64 61 80;
+  --purple-300: 89 84 112;
+  --purple-400: 128 119 163;
+  --purple-500: 154 142 197;
+  --purple-600: 169 155 216;
+  --purple-700: 186 174 220;
+  --purple-800: 201 191 224;
+  --purple-900: 215 207 227;
+  /* Sombra con su propia transparencia: en oscuro tiene que ser negra y
+     densa para notarse; en claro, la misma sombra se ve sucia. */
+  --sombra: 0 0 0 / 0.5;
+  color-scheme: dark;
+}
+
+/* ─── Grafito día ─────────────────────────────────────────────────────────────
+   La misma marca con fondo claro, para el celular bajo el sol. Se activa sola
+   cuando el teléfono o la computadora están en modo claro, que es el valor
+   por defecto de los navegadores: el oscuro aparece donde alguien lo eligió.
+
+   Acá las escalas van en el orden normal (50 claro, 900 oscuro), así que
+   cada clase sigue diciendo lo mismo: `bg-gray-50` es fondo y `text-gray-900`
+   es texto, en los dos modos. El latón se oscurece para que se lea sobre
+   blanco: el botón principal queda con 5:1 de contraste con su texto. */
+@media (prefers-color-scheme: light) {
+  :root {
+    /* Grises claros, en el orden de siempre: 50 fondo, 900 texto. */
+    --gray-50: 242 241 238;
+    --gray-100: 231 229 224;
+    --gray-200: 217 214 207;
+    --gray-300: 194 190 182;
+    --gray-400: 106 109 108;
+    --gray-500: 88 91 93;
+    --gray-600: 74 77 80;
+    --gray-700: 60 63 66;
+    --gray-800: 40 43 46;
+    --gray-900: 27 29 31;
+    --gray-950: 17 19 21;
+    --white: 255 255 255;
+    /* Más clara que el fondo, no más oscura: así el ítem activo (`bg-gray-100`)
+       se distingue de la barra. Con 233 231 226 eran casi el mismo color. */
+    --lateral: 248 247 244;
+    /* brand: #8A6A2C */
+    --brand-50: 247 245 240;
+    --brand-100: 239 234 225;
+    --brand-200: 225 216 200;
+    --brand-300: 206 192 166;
+    --brand-400: 175 154 112;
+    --brand-500: 154 127 74;
+    --brand-600: 138 106 44;
+    --brand-700: 118 92 42;
+    --brand-800: 100 80 40;
+    --brand-900: 82 68 38;
+    /* green: #2B7D53 */
+    --green-50: 240 246 243;
+    --green-100: 225 237 231;
+    --green-200: 200 221 210;
+    --green-300: 166 200 183;
+    --green-400: 111 167 138;
+    --green-500: 73 143 107;
+    --green-600: 43 125 83;
+    --green-700: 40 108 74;
+    --green-800: 38 92 65;
+    --green-900: 35 77 57;
+    /* emerald: #1E7D5E */
+    --emerald-50: 239 246 244;
+    --emerald-100: 223 237 232;
+    --emerald-200: 196 221 213;
+    --emerald-300: 160 200 187;
+    --emerald-400: 102 167 146;
+    --emerald-500: 62 143 117;
+    --emerald-600: 30 125 94;
+    --emerald-700: 29 108 83;
+    --emerald-800: 29 92 73;
+    --emerald-900: 28 77 62;
+    /* red: #B8443A */
+    --red-50: 250 242 241;
+    --red-100: 245 229 227;
+    --red-200: 237 206 204;
+    --red-300: 225 176 172;
+    --red-400: 207 128 121;
+    --red-500: 194 94 86;
+    --red-600: 184 68 58;
+    --red-700: 156 61 53;
+    --red-800: 131 55 49;
+    --red-900: 106 48 44;
+    /* blue: #2C67A8 */
+    --blue-50: 240 244 249;
+    --blue-100: 225 234 243;
+    --blue-200: 200 215 232;
+    --blue-300: 166 191 218;
+    --blue-400: 112 152 196;
+    --blue-500: 74 124 180;
+    --blue-600: 44 103 168;
+    --blue-700: 41 90 143;
+    --blue-800: 38 78 121;
+    --blue-900: 36 66 100;
+    /* yellow: #A07508 */
+    --yellow-50: 248 245 238;
+    --yellow-100: 242 236 220;
+    --yellow-200: 230 219 191;
+    --yellow-300: 215 197 151;
+    --yellow-400: 190 161 87;
+    --yellow-500: 173 136 43;
+    --yellow-600: 160 117 8;
+    --yellow-700: 136 101 12;
+    --yellow-800: 115 87 16;
+    --yellow-900: 94 73 20;
+    /* orange: #B4611B */
+    --orange-50: 250 244 239;
+    --orange-100: 244 233 223;
+    --orange-200: 236 214 196;
+    --orange-300: 224 189 159;
+    --orange-400: 204 148 100;
+    --orange-500: 190 119 59;
+    --orange-600: 180 97 27;
+    --orange-700: 152 85 28;
+    --orange-800: 128 74 28;
+    --orange-900: 104 63 29;
+    /* purple: #6655AE */
+    --purple-50: 244 243 249;
+    --purple-100: 234 231 244;
+    --purple-200: 215 211 234;
+    --purple-300: 191 184 221;
+    --purple-400: 151 139 200;
+    --purple-500: 123 109 185;
+    --purple-600: 102 85 174;
+    --purple-700: 88 75 148;
+    --purple-800: 76 66 125;
+    --purple-900: 64 57 102;
+    --sombra: 40 32 16 / 0.14;
+    color-scheme: light;
+  }
+}
+
 @layer base {
+  html {
+    background: rgb(var(--gray-50));
+  }
   body {
     -webkit-tap-highlight-color: transparent;
+    background: rgb(var(--gray-50));
+    color: rgb(var(--gray-900));
+  }
+  /* Los títulos van en Archivo ancha: es lo que le da carácter de tablero de
+     carro sin necesitar otra familia. */
+  h1, h2, h3 {
+    font-stretch: 115%;
+    letter-spacing: -0.005em;
+    text-wrap: balance;
+  }
+  /* Campos sin fondo propio: sin esto toman el gris del navegador en modo
+     oscuro, más claro que todo lo demás. Los que traen clase la conservan
+     (las utilidades de Tailwind van después de esta capa). */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    background-color: rgb(var(--gray-50));
+    color: rgb(var(--gray-900));
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: rgb(var(--gray-400));
+  }
+  input[type='checkbox'],
+  input[type='radio'] {
+    accent-color: rgb(var(--brand-600));
+  }
+  ::selection {
+    background: rgb(var(--brand-300));
+    color: rgb(var(--gray-950));
+  }
+  :focus-visible {
+    outline: 2px solid rgb(var(--brand-600));
+    outline-offset: 2px;
+  }
+  /* Los campos nativos (fecha, hora, select) toman el esquema oscuro por
+     `color-scheme`; el autocompletado de Chrome pinta fondo amarillo claro
+     si no se le dice otra cosa. */
+  input:-webkit-autofill {
+    -webkit-text-fill-color: rgb(var(--gray-900));
+    box-shadow: 0 0 0 1000px rgb(var(--white)) inset;
   }
   /* Safe area for bottom nav on notched devices */
   .safe-area-bottom {
     padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+}
+
+@layer components {
+  /* La placa colombiana: amarilla con letras negras. Es lo primero que busca
+     el operario, así que se dibuja como placa y no como texto en negrita.
+     Colores fijos a propósito: una placa es amarilla en cualquier tema. */
+  .placa {
+    display: inline-block;
+    font-family: theme('fontFamily.mono');
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.35;
+    padding: 0.05rem 0.4rem 0;
+    border-radius: 3px;
+    border: 1.5px solid #111;
+    background: #F2C318;
+    color: #111;
+    white-space: nowrap;
+  }
+  .cifra {
+    font-stretch: 115%;
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+  .etiqueta {
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
   }
 }
 
@@ -20,7 +337,7 @@
     background: transparent;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
+    background: rgb(var(--gray-300));
     border-radius: 2px;
   }
   /* Custom spinner */
@@ -36,4 +353,12 @@
 }
 .animate-slide-in {
   animation: slide-in 0.3s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
