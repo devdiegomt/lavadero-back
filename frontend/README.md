@@ -43,7 +43,7 @@ Credenciales demo (necesitas que el backend esté seedeado):
 
 | Variable | Default | Descripción |
 |---|---|---|
-| `VITE_API_URL` | `/api` | URL del backend. En prod típicamente `https://api.tu-dominio.com/api` |
+| `VITE_API_URL` | `/api` | URL del backend. En producción se deja en `/api`: Vercel la reenvía al backend (ver «Despliegue») |
 | `VITE_SENTRY_DSN` | — | Si está, activa Sentry. Opcional |
 | `VITE_SENTRY_RELEASE` | — | Tag de release para Sentry. Opcional |
 | `VITE_SENTRY_TRACES_RATE` | `0.1` | Sample rate de tracing (0.0–1.0) |
@@ -303,11 +303,12 @@ setSentryUser(user);
 1. Conectar el repo
 2. Build command: `npm run build`
 3. Output directory: `dist`
-4. Environment variables: `VITE_API_URL=https://api.tu-dominio.com/api` (apunta al backend en producción)
-5. Configurar **rewrites** para SPA: cualquier ruta no encontrada → `/index.html`. Vercel lo hace automático con `vercel.json`:
-   ```json
-   { "rewrites": [{ "source": "/(.*)", "destination": "/" }] }
-   ```
+4. **`VITE_API_URL` sin definir**, o en `/api`. El panel le habla a su propio
+   dominio y Vercel reenvía `/api/*` al backend (ver abajo). Si quedó definida
+   con la URL de Render, el reenvío no se usa y vuelve el problema de la cookie.
+5. `vercel.json` tiene los dos *rewrites*: primero `/api/*` → el backend en
+   Render, y después cualquier otra ruta → `/index.html`, que es lo que necesita
+   una SPA. El orden importa: al revés, `/api/*` devolvería el HTML del panel.
 
 ### CORS y la cookie de sesión
 
@@ -321,7 +322,8 @@ mira el sitio, no el origen:
 |---|---|---|---|
 | `localhost:5173` | `localhost:3000` | Sí (el puerto no cuenta) | Nada: `Lax` alcanza |
 | `panel.tu-dominio.com` | `api.tu-dominio.com` | Sí | Nada: `Lax` alcanza |
-| `tu-panel.vercel.app` | `tu-api.up.railway.app` | **No** | `AUTH_COOKIE_SAMESITE=none` en el backend, y HTTPS |
+| `tu-panel.vercel.app` | `tu-api.up.railway.app` | **No** | `AUTH_COOKIE_SAMESITE=none` en el backend, y HTTPS. **No alcanza en Safari** |
+| `tu-panel.vercel.app` | `/api` reenviado por Vercel | Sí | Nada: es lo que está desplegado |
 
 El tercer caso es el que muerde: todo anda en local, se despliega, el login
 parece funcionar y la sesión se cae en la primera recarga sin ningún error que
@@ -329,8 +331,28 @@ lo explique —el navegador simplemente no mandó la cookie—. Con `SameSite=No
 la cookie es obligatoriamente `Secure`, así que el backend tiene que estar en
 HTTPS.
 
-Lo más simple es evitar el caso: poner el panel y la API bajo el mismo dominio
-con subdominios distintos.
+Lo más simple es evitar el caso, y es lo que hace este repositorio.
+
+**Lo que está desplegado: `/api` pasa por Vercel.** `vercel.json` reenvía
+`/api/*` a `https://carwash-api-lnst.onrender.com/api/*`. Para el navegador el
+panel y la API son el mismo origen, así que la cookie es de primera parte:
+`SameSite=Lax` alcanza, no hace falta `AUTH_COOKIE_SAMESITE` y tampoco CORS.
+
+Se eligió esto y no `SameSite=None` por **Safari**: bloquea las cookies entre
+sitios aunque tengan `SameSite=None`. Con el panel en `vercel.app` y la API en
+`onrender.com`, en un iPhone la sesión se habría cerrado a los 15 minutos, al
+vencer el primer token, sin ningún error. Y un iPhone es justo donde un dueño
+de lavadero mira el tablero.
+
+Dos cosas que vienen con el reenvío:
+
+- **La primera petición después de un rato puede tardar o fallar.** El plan
+  gratuito de Render apaga el servidor tras 15 minutos sin uso y tarda cerca de
+  un minuto en despertar, y Vercel puede cortar la espera antes. Si el
+  login falla con un error de red justo al entrar, reintentar a los pocos
+  segundos.
+- **Si cambia la URL del backend, hay que cambiarla acá.** `vercel.json` no lee
+  variables de entorno.
 
 ---
 
