@@ -178,6 +178,21 @@ ciegas ante síntomas mal entendidos. Los casos concretos:
   cuarta —que el runner fuera lento y bcrypt saturara el event loop— la tiró el
   propio log: un login tarda 340 ms en local y 310 ms en CI. **Descartar con una
   medición cuesta minutos; arreglar la hipótesis equivocada cuesta días.**
+- **Y una de las tres descartadas era la buena.** En noviembre el CI del panel
+  volvió a morir igual —`abiertas=10 libres=0`— en Firefox y Safari móvil, con
+  el arreglo de septiembre ya puesto. La causa: el middleware de RLS esperaba
+  `pool.connect()` y **recién después** se suscribía a `res.on('close')` para
+  devolver la conexión. Si el navegador cortaba la petición durante esa espera,
+  `close` ya había sonado y no vuelve a sonar.
+  La medición de septiembre que la descartó cortaba peticiones **con el pool
+  libre**, cuando `connect()` resuelve al instante y la ventana no existe. Midió
+  bien otra cosa. Ahora `conexion-de-peticion-cortada.test.ts` ocupa el pool
+  entero para que la espera sea larga, corta la petición y suelta: con el error
+  queda una conexión tomada para siempre, sin depender del azar.
+  Y la frase de arriba —«la causa era un `release()` que colgaba…»— afirmaba
+  más de lo que se sabía: el propio código lo marcaba como *no confirmado*.
+  **Una medición descarta lo que mide, en las condiciones en que se midió.** Si
+  la ventana del error depende de la carga, medir sin carga no la cierra.
 
 - El primer CI del backend fallo con cuatro pruebas en rojo, y las cuatro eran
   **frágiles, no rotas**. Tres decían `Expected: 400, Received: 401` y apuntaban a
