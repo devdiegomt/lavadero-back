@@ -47,6 +47,9 @@ import logger from '../utils/logger';
  * aunque después resulte que el fallo era otro.
  *
  * El corte a los 2 s deja rastro: si aparece en el log, la hipótesis era buena.
+ *
+ * (Noviembre: el pool se volvió a agotar con esto puesto. La fuga que sí estaba
+ * confirmada es la de `vigilarCierre`, más abajo.)
  */
 function devolverAlPool(cliente: PoolClient, ajuste: string, ruta: string): void {
   let devuelta = false;
@@ -73,6 +76,35 @@ function devolverAlPool(cliente: PoolClient, ajuste: string, ruta: string): void
     });
 }
 
+/**
+ * Avisa si la petición se cortó mientras se esperaba la conexión.
+ *
+ * Los middlewares de abajo se suscriben a `res.on('close')` para devolver la
+ * conexión, pero sólo pueden hacerlo **después** de tenerla, y conseguirla es
+ * esperar a `pool.connect()`. Si el navegador corta la petición durante esa
+ * espera —Firefox y WebKit cancelan lo que esté en vuelo al navegar—, `close`
+ * ya sonó y no vuelve a sonar: la conexión no se devolvía nunca.
+ *
+ * Pasó en el CI del panel, con el mismo cuadro que la vez anterior: diez
+ * conexiones tomadas, las diez `idle` en PostgreSQL, y cada login dando 500 a
+ * los 5 s. Y se alimenta solo: cuanto más ocupado el pool, más larga la espera
+ * y más ancha la ventana. Lo reproduce `conexion-de-peticion-cortada.test.ts`.
+ *
+ * Se mira el cierre desde **antes** de pedir la conexión; la función que
+ * devuelve dice si llegó a cerrarse, y deja de mirar.
+ */
+function vigilarCierre(res: Response): () => boolean {
+  let cerrada = res.destroyed || res.writableFinished;
+  const marcar = (): void => {
+    cerrada = true;
+  };
+  res.once('close', marcar);
+  return () => {
+    res.off('close', marcar);
+    return cerrada;
+  };
+}
+
 export async function abrirContextoDeTenant(
   req: Request,
   res: Response,
@@ -81,10 +113,13 @@ export async function abrirContextoDeTenant(
   const tenantId = req.tenantId;
   if (!tenantId) return next();
 
+  const seCorto = vigilarCierre(res);
+
   let cliente;
   try {
     cliente = await pool.connect();
   } catch (err) {
+    seCorto();
     // Sin conexión no hay nada que hacer, pero el error tiene que decir qué
     // pasó: "pool agotado" y "base caída" se arreglan distinto.
     logger.error({ err }, 'No se pudo tomar una conexión para el contexto de tenant');
@@ -98,8 +133,16 @@ export async function abrirContextoDeTenant(
     // y `SET LOCAL` sólo duraría hasta el final de la transacción actual.
     await cliente.query('SELECT set_config($1, $2, false)', ['app.tenant_id', tenantId]);
   } catch (err) {
+    seCorto();
     cliente.release();
     next(err);
+    return;
+  }
+
+  // El navegador ya se fue: no hay a quién responder, y nadie va a avisar
+  // cuándo devolver la conexión. Se devuelve ahora.
+  if (seCorto()) {
+    devolverAlPool(cliente, 'app.tenant_id', req.originalUrl);
     return;
   }
 
@@ -140,14 +183,23 @@ export async function abrirContextoDeTenant(
  */
 export function conBypassRls(motivo: string): RequestHandler {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const seCorto = vigilarCierre(res);
+
     let cliente;
     try {
       cliente = await pool.connect();
       await cliente.query('SELECT set_config($1, $2, false)', ['app.bypass_rls', 'on']);
     } catch (err) {
+      seCorto();
       cliente?.release();
       logger.error({ err, motivo }, 'No se pudo abrir el contexto con bypass de RLS');
       next(err);
+      return;
+    }
+
+    // Igual que arriba: cortada durante la espera, se devuelve ya.
+    if (seCorto()) {
+      devolverAlPool(cliente, 'app.bypass_rls', req.originalUrl);
       return;
     }
 
