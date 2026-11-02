@@ -185,7 +185,7 @@ que se saltea las comodidades de desarrollo es exactamente el de producción.
 |---|---|---|
 | `helmet()` | Por defecto | Cabeceras de seguridad estándar |
 | CORS | Origen desde `CORS_ORIGIN`, `credentials: true` | Un solo origen, no comodín |
-| Rate limit | 100 peticiones / 15 min sobre `/api/` | Global, por IP — **excepto `/api/wa-bridge`** |
+| Rate limit | 100 peticiones / 15 min sobre `/api/` | **Por usuario** si hay sesión, por IP si no — **excepto `/api/wa-bridge`**. Ver abajo |
 | Rate limit de `wa-bridge` | 120 / 15 min **por cliente de WhatsApp** | Ver abajo |
 | Body limit | 1 MB | Contra cargas grandes |
 | Validación | Zod en altas, `PATCH` y query; `validarUuid` en todo `:id`; códigos de PostgreSQL traducidos a 400 | `wa-bridge` valida a mano, a propósito (§7) |
@@ -204,6 +204,29 @@ que se saltea las comodidades de desarrollo es exactamente el de producción.
 La clave compuesta es la parte que más importa: limitar sólo por IP permitiría
 recorrer cuentas desde una misma dirección, y limitar sólo por email dejaría
 bloquear a cualquiera a voluntad.
+
+### Por qué el límite global va por usuario
+
+Iba por IP, y en producción **la IP no es la del usuario**. El servidor no
+declara `trust proxy`, así que detrás del balanceador de Render `req.ip` es la
+del balanceador: la misma para todos. Las 100 peticiones cada 15 minutos las
+compartía todo el panel, y el Tablero se refresca cada 30 segundos: dos tablets
+con el Tablero abierto ya las agotaban, y a partir de ahí todos recibían
+«Demasiadas solicitudes».
+
+Ahora la clave es el usuario del token cuando hay sesión
+(`shared/middleware/limiteGlobal.ts`). **Se verifica la firma**: leer el `sub`
+sin verificarlo dejaría a cualquiera gastar la cuota de otro, o estrenar cuota
+en cada petición. Un token que no verifica cuenta por IP. Lo prueba
+`__tests__/limite-por-usuario.test.ts`, que con la clave por IP falla.
+
+No se arregló con `trust proxy` porque cuántos saltos confiar depende de lo que
+haya delante —Render solo, o Render detrás del reenvío de Vercel—, y con el
+número mal puesto cualquiera elige su IP escribiendo `X-Forwarded-For`. El
+usuario del token no depende de eso.
+
+**Lo que sigue roto por la misma causa**, anotado en la §7: todo lo demás que
+usa `req.ip` en producción ve la del balanceador.
 
 ### Por qué `wa-bridge` no va por IP
 
@@ -738,6 +761,14 @@ Ordenadas por relación entre riesgo y esfuerzo.
 | # | Brecha | Riesgo | Esfuerzo |
 |---|---|---|---|
 | 6 | **Clientes sin autorización que no han vuelto** — a los que vuelven ya se les pide (§5) | Pasivo decreciente | Bajo (decisión del responsable) |
+| 7 | **`req.ip` es la del balanceador en producción.** Sin `trust proxy`, todo lo que usa la IP ve la misma para todos: el límite del login (`email\|IP`) queda en la práctica **por email**, así que cinco intentos fallidos desde cualquier lado bloquean 15 minutos a esa cuenta; y la auditoría registra una IP que no es la de nadie | Medio: dejar a alguien sin poder entrar no requiere saber nada | Bajo, una vez se sepa cuántos saltos hay delante (Render, o Render detrás de Vercel) |
+
+**Brecha #7: por qué no se cerró junto con el límite global.** `trust proxy`
+pide decir cuántos proxies hay delante, y equivocarse para arriba deja a
+cualquiera elegir su IP escribiendo `X-Forwarded-For` —que es peor que lo que
+hay ahora—. Con el panel reenviando `/api` por Vercel hay un salto más que con
+Render solo, y ese número hay que **medirlo** en el despliegue, no suponerlo:
+registrar `X-Forwarded-For` de una petición conocida y contar.
 
 **Brecha #6: el número, que antes no se podía ver.** Estaba clasificada como
 *"decisión del responsable"*, y la decisión no se podía tomar: `clientesSinAutorizacion()`

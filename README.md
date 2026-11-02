@@ -135,7 +135,7 @@ Ver `.env.example` para la lista completa. Las críticas:
 | `JWT_SECRET` | ✅ | 64+ chars random. Cifra los access tokens |
 | `ENCRYPTION_KEY` | ✅ | 64 hex chars. Cifra `billing_api_key` y otros datos sensibles. **No se puede perder** sin perder los datos cifrados |
 | `CORS_ORIGIN` | ✅ | URL del frontend (ej. `https://app.tu-dominio.com`) |
-| `RATE_LIMIT_MAX` | ⬜ | Default 100 req/15min por IP. En producción ajustar al uso |
+| `RATE_LIMIT_MAX` | ⬜ | Default 100 req/15min **por usuario** (por IP sin sesión). En producción ajustar al uso |
 | `STRICT_RATE_LIMIT_MAX` | ⬜ | Default 5 req/15min para `/auth/login` y `/onboarding/register` |
 | `SENTRY_DSN` | ⬜ | Si está, activa Sentry. Si no, error tracking desactivado |
 | `SENTRY_TRACES_SAMPLE_RATE` | ⬜ | 0.0–1.0. En prod usar 0.1 |
@@ -282,7 +282,7 @@ Resumen rápido:
 - **Health check**: `GET /api/health` → 200 OK
 - **Logs**: Pino JSON estructurado. En Railway/Fly se ven directo. Local: `npm run dev` los formatea con `pino-pretty`.
 - **Errores**: Sentry (si `SENTRY_DSN` configurado). Solo captura 5xx, ignora 4xx (errores de validación esperados).
-- **Rate limit**: 100 req/15min global, 5 req/15min en login y signup. Ajustable vía env.
+- **Rate limit**: 100 req/15min por usuario (por IP sin sesión), 5 req/15min en login y signup. Ajustable vía env.
 - **Backups**: configurar en el proveedor de Postgres (Railway hace daily automático).
 - **Rotación de `ENCRYPTION_KEY`**: usar `src/shared/db/rotate-encryption-key.js`. Hacer backup ANTES.
 
