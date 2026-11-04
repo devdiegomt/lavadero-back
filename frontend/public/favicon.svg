@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Qlarity: una Q en latón cuya cola es una gota que se desprende. -->
+  <rect width="100" height="100" rx="22" fill="#17191B"/>
+  <circle cx="45" cy="44" r="23" fill="none" stroke="#C8A766" stroke-width="10"/>
+  <path transform="translate(74.5 73.5) rotate(-45)" d="M0 -17 C 5 -9 9 -3 9 3 A 9 9 0 1 1 -9 3 C -9 -3 -5 -9 0 -17 Z" fill="#C8A766"/>
+</svg>
