@@ -5,6 +5,7 @@ import { config } from '../../config';
 import type { JwtPayload } from '../../types/api';
 import type { UserRole } from '../../types/entities';
 import { abrirContextoDeTenant } from './rls';
+import { exigirSuscripcionVigente } from './suscripcion';
 
 /**
  * Verifica el JWT del header `Authorization: Bearer <token>`.
@@ -83,5 +84,12 @@ export function requireTenant(req: Request, res: Response, next: NextFunction): 
   // un middleware más que cada router tiene que acordarse de encadenar. Todos
   // los routers ya usan `requireTenant`, así que poniéndolo acá no queda ninguno
   // afuera — que es exactamente el error que ya se cometió con `validateId`.
-  void abrirContextoDeTenant(req, res, next);
+  //
+  // Y después, la prueba gratis: con la prueba vencida o la cuenta suspendida,
+  // se puede ver todo pero no cambiar nada (ver suscripcion.ts). Va acá por la
+  // misma razón: así ninguna ruta de negocio queda afuera.
+  void abrirContextoDeTenant(req, res, (err?: unknown) => {
+    if (err) return next(err);
+    void exigirSuscripcionVigente(req, res, next);
+  });
 }

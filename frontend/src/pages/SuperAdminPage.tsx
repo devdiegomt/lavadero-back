@@ -15,7 +15,8 @@ import type { UserRole } from "../types";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Tab = "dashboard" | "tenants" | "plans";
-type PlanId = "free" | "basic" | "pro";
+type PlanId = "estudio" | "estudio_pro" | "free" | "basic" | "pro";
+type EstadoSuscripcion = "trial" | "active" | "suspended";
 
 interface TenantListItem {
   id: string;
@@ -52,7 +53,7 @@ interface DashboardData {
     newTenantsWeek: number;
     newTenantsMonth: number;
   };
-  planDistribution: { free: number; basic: number; pro: number };
+  planDistribution: Partial<Record<PlanId, number>>;
   topTenants: Array<{
     id: string;
     name: string;
@@ -82,8 +83,8 @@ interface TenantStats {
 
 interface TenantUsageMetric {
   current: number;
-  limit: number;
-  pct: number;
+  limit: number | null; // null = sin límite
+  pct: number | null;
 }
 
 interface TenantUsage {
@@ -110,6 +111,9 @@ interface TenantDetailData {
     opening_time: string;
     closing_time: string;
     trial_ends_at: string | null;
+    subscription_status: EstadoSuscripcion;
+    discount_pct: number;
+    discount_until: string | null;
     whatsapp_enabled: boolean;
     whatsapp_provider: string | null;
     whatsapp_phone: string | null;
@@ -128,13 +132,15 @@ interface Plan {
   id: PlanId;
   name: string;
   price_monthly: number; // centavos
-  max_operators: number;
-  max_appointments_month: number;
-  max_services: number;
-  max_bays: number;
+  // null = sin límite
+  max_operators: number | null;
+  max_appointments_month: number | null;
+  max_services: number | null;
+  max_bays: number | null;
   whatsapp_enabled: boolean;
   billing_enabled: boolean;
   reports_enabled: boolean;
+  is_active: boolean;
   tenantCount: number;
 }
 
@@ -149,9 +155,19 @@ const TABS: { key: Tab; label: string; icon: LucideIcon }[] = [
 ];
 
 const PLAN_COLORS: Record<PlanId, string> = {
+  estudio: "bg-brand-100 text-brand-800",
+  estudio_pro: "bg-brand-200 text-brand-900",
   free: "bg-gray-100 text-gray-700",
   basic: "bg-blue-100 text-blue-700",
   pro: "bg-purple-100 text-purple-700",
+};
+
+const NOMBRE_PLAN: Record<PlanId, string> = {
+  estudio: "Estudio",
+  estudio_pro: "Estudio Pro",
+  free: "Gratis (ya no se ofrece)",
+  basic: "Básico (ya no se ofrece)",
+  pro: "Pro (ya no se ofrece)",
 };
 
 // ─── SuperAdminPage ───────────────────────────────────────────────────────────
@@ -204,8 +220,9 @@ function DashboardTab() {
 
   const { overview, planDistribution, topTenants } = data;
   const totalTenants = overview.activeTenants + overview.inactiveTenants;
-  const totalPlans =
-    planDistribution.free + planDistribution.basic + planDistribution.pro;
+  // Por plan, sin nombres fijos: cuenta lo que venga del backend.
+  const porPlan = Object.entries(planDistribution) as [PlanId, number][];
+  const totalPlans = porPlan.reduce((s, [, n]) => s + n, 0);
 
   return (
     <div className="space-y-4">
@@ -267,24 +284,11 @@ function DashboardTab() {
       <div className="bg-white rounded-xl border border-gray-100 p-5">
         <h2 className="font-semibold text-gray-900 mb-4">Distribución por plan</h2>
         <div className="space-y-3">
-          <PlanBar
-            label="Free"
-            count={planDistribution.free}
-            total={totalPlans}
-            color="bg-gray-400"
-          />
-          <PlanBar
-            label="Basic"
-            count={planDistribution.basic}
-            total={totalPlans}
-            color="bg-blue-500"
-          />
-          <PlanBar
-            label="Pro"
-            count={planDistribution.pro}
-            total={totalPlans}
-            color="bg-purple-500"
-          />
+          {porPlan
+            .sort((x, y) => y[1] - x[1])
+            .map(([id, n]) => (
+              <PlanBar key={id} label={NOMBRE_PLAN[id] ?? id} count={n} total={totalPlans} color="bg-brand-600" />
+            ))}
         </div>
         {totalTenants > totalPlans && (
           <p className="text-xs text-gray-400 mt-3">
@@ -479,9 +483,9 @@ function TenantsTab() {
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 outline-none bg-white"
             >
               <option value="">Todos</option>
-              <option value="free">Free</option>
-              <option value="basic">Basic</option>
-              <option value="pro">Pro</option>
+              {(Object.keys(NOMBRE_PLAN) as PlanId[]).map((id) => (
+                <option key={id} value={id}>{NOMBRE_PLAN[id]}</option>
+              ))}
             </select>
           </div>
           <div>
@@ -747,8 +751,8 @@ function TenantDetailModal({
             </div>
 
             {/* Cambio de plan */}
-            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
-              <p className="text-xs font-semibold text-purple-900 uppercase tracking-wide mb-2">
+            <div className="bg-white border border-gray-100 rounded-xl p-4">
+              <p className="etiqueta font-semibold text-gray-600 mb-2">
                 Cambiar plan
               </p>
               <div className="flex gap-2">
@@ -756,9 +760,11 @@ function TenantDetailModal({
                   title="Selecciona un plan"
                   value={newPlan}
                   onChange={(e) => setNewPlan(e.target.value as PlanId)}
-                  className="flex-1 px-3 py-2 border border-purple-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-purple-500 outline-none"
+                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-600 outline-none"
                 >
-                  {plans.map((p) => (
+                  {/* Sólo los que se ofrecen, más el actual: el backend no deja
+                      pasar a un lavadero a un plan desactivado. */}
+                  {plans.filter((p) => p.is_active || p.id === data.tenant.plan).map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name} —{" "}
                       {p.price_monthly === 0
@@ -770,12 +776,14 @@ function TenantDetailModal({
                 <button
                   onClick={handleChangePlan}
                   disabled={changingPlan || newPlan === data.tenant.plan}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg transition disabled:opacity-50"
+                  className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-lg transition disabled:opacity-50"
                 >
                   {changingPlan ? "Cambiando..." : "Aplicar"}
                 </button>
               </div>
             </div>
+
+            <Suscripcion tenant={data.tenant} onGuardado={() => { onChanged(); fetchAll(); }} />
 
             {/* Datos generales */}
             <Section title="Datos del lavadero">
@@ -1002,10 +1010,10 @@ function UsageRow({
 }: {
   label: string;
   current: number;
-  limit: number;
-  pct: number;
+  limit: number | null;
+  pct: number | null;
 }) {
-  const safe = Math.min(pct, 100);
+  const safe = Math.min(pct ?? 0, 100);
   const color =
     safe >= 90 ? "bg-red-500" : safe >= 70 ? "bg-yellow-500" : "bg-green-500";
   return (
@@ -1013,7 +1021,7 @@ function UsageRow({
       <div className="flex justify-between text-sm mb-1">
         <span className="text-gray-700">{label}</span>
         <span className="text-gray-500">
-          {current} / {limit}
+          {current} / {limit ?? "sin límite"}
         </span>
       </div>
       <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -1105,25 +1113,24 @@ function PlanCard({ plan, onEdit }: { plan: Plan; onEdit(): void }) {
         <li className="flex items-center gap-2">
           <CalendarDays aria-hidden="true" size={15} strokeWidth={1.6} className="text-gray-400" />
           <span>
-            {plan.max_appointments_month?.toLocaleString("es-CO") ?? "—"}{" "}
+            {plan.max_appointments_month === null ? "Sin límite de" : plan.max_appointments_month.toLocaleString("es-CO")}{" "}
             citas/mes
           </span>
         </li>
         <li className="flex items-center gap-2">
           <Users aria-hidden="true" size={15} strokeWidth={1.6} className="text-gray-400" />
           <span>
-            {plan.max_operators}{" "}
-            {plan.max_operators === 1 ? "operador" : "operadores"}
+            {plan.max_operators === null ? "Operadores sin límite" : `${plan.max_operators} ${plan.max_operators === 1 ? "operador" : "operadores"}`}
           </span>
         </li>
         <li className="flex items-center gap-2">
           <Sparkles aria-hidden="true" size={15} strokeWidth={1.6} className="text-gray-400" />
-          <span>{plan.max_services} servicios activos</span>
+          <span>{plan.max_services === null ? "Servicios sin límite" : `${plan.max_services} servicios activos`}</span>
         </li>
         <li className="flex items-center gap-2">
           <Columns3 aria-hidden="true" size={15} strokeWidth={1.6} className="text-gray-400" />
           <span>
-            {plan.max_bays} {plan.max_bays === 1 ? "bahía" : "bahías"}
+            {plan.max_bays === null ? "Bahías sin límite" : `${plan.max_bays} ${plan.max_bays === 1 ? "bahía" : "bahías"}`}
           </span>
         </li>
         <li
@@ -1183,10 +1190,10 @@ function PlanEditModal({
   const [form, setForm] = useState<PlanEditForm>({
     name: plan.name,
     priceMonthly: plan.price_monthly,
-    maxOperators: plan.max_operators,
-    maxAppointmentsMonth: plan.max_appointments_month,
-    maxServices: plan.max_services,
-    maxBays: plan.max_bays,
+    maxOperators: plan.max_operators ?? "",
+    maxAppointmentsMonth: plan.max_appointments_month ?? "",
+    maxServices: plan.max_services ?? "",
+    maxBays: plan.max_bays ?? "",
     whatsappEnabled: plan.whatsapp_enabled,
     billingEnabled: plan.billing_enabled,
     reportsEnabled: plan.reports_enabled,
@@ -1201,11 +1208,13 @@ function PlanEditModal({
         body: {
           name: form.name,
           priceMonthly: parseInt(String(form.priceMonthly), 10) || 0,
-          maxOperators: parseInt(String(form.maxOperators), 10) || 1,
-          maxAppointmentsMonth:
-            parseInt(String(form.maxAppointmentsMonth), 10) || 100,
-          maxServices: parseInt(String(form.maxServices), 10) || 5,
-          maxBays: parseInt(String(form.maxBays), 10) || 1,
+          // Vacío es «sin límite» (null). Antes un vacío se guardaba como 1
+          // operador o 100 turnos: abrir Estudio Pro —sin límites— y darle
+          // Guardar lo habría dejado en 1 operador para todos sus lavaderos.
+          maxOperators: limiteDe(form.maxOperators),
+          maxAppointmentsMonth: limiteDe(form.maxAppointmentsMonth),
+          maxServices: limiteDe(form.maxServices),
+          maxBays: limiteDe(form.maxBays),
           whatsappEnabled: form.whatsappEnabled,
           billingEnabled: form.billingEnabled,
           reportsEnabled: form.reportsEnabled,
@@ -1329,14 +1338,121 @@ function PlanEditModal({
 
 // ─── NumField / Toggle ───────────────────────────────────────────────────────
 
+// ─── Suscripción de un lavadero ──────────────────────────────────────────────
+
+/**
+ * Mientras no haya cobro con tarjeta, esto es el cobro: cuando el lavadero
+ * paga, se marca «Activo»; el precio fundador se carga acá.
+ */
+function Suscripcion({
+  tenant,
+  onGuardado,
+}: {
+  tenant: TenantDetailData["tenant"];
+  onGuardado(): void;
+}) {
+  const toast = useToast();
+  const [estado, setEstado] = useState<EstadoSuscripcion>(tenant.subscription_status);
+  const [descuento, setDescuento] = useState<string>(String(tenant.discount_pct ?? 0));
+  const [hasta, setHasta] = useState<string>(tenant.discount_until ? tenant.discount_until.slice(0, 10) : "");
+  const [guardando, setGuardando] = useState(false);
+
+  const guardar = async () => {
+    const pct = Math.min(100, Math.max(0, parseInt(descuento, 10) || 0));
+    setGuardando(true);
+    try {
+      await api(`/superadmin/tenants/${tenant.id}`, {
+        method: "PATCH",
+        body: { subscription_status: estado, discount_pct: pct, discount_until: hasta || null },
+      });
+      toast.success("Suscripción actualizada");
+      onGuardado();
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const vence = tenant.trial_ends_at
+    ? new Date(tenant.trial_ends_at).toLocaleDateString("es-CO", { day: "numeric", month: "long" })
+    : null;
+
+  return (
+    <div className="bg-white border border-gray-100 rounded-xl p-4 space-y-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="etiqueta font-semibold text-gray-600">Suscripción</p>
+        {vence && tenant.subscription_status === "trial" && (
+          <span className="text-xs text-gray-500">La prueba vence el {vence}</span>
+        )}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <label htmlFor="sus-estado" className="block text-xs font-medium text-gray-600 mb-1">Estado</label>
+          <select
+            id="sus-estado"
+            value={estado}
+            onChange={(e) => setEstado(e.target.value as EstadoSuscripcion)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+          >
+            <option value="trial">En prueba</option>
+            <option value="active">Activo (pagando)</option>
+            <option value="suspended">Suspendido</option>
+          </select>
+        </div>
+        <div>
+          <label htmlFor="sus-descuento" className="block text-xs font-medium text-gray-600 mb-1">Descuento %</label>
+          <input
+            id="sus-descuento"
+            type="number"
+            min={0}
+            max={100}
+            value={descuento}
+            onChange={(e) => setDescuento(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+          />
+        </div>
+        <div>
+          <label htmlFor="sus-hasta" className="block text-xs font-medium text-gray-600 mb-1">Descuento hasta</label>
+          <input
+            id="sus-hasta"
+            type="date"
+            value={hasta}
+            onChange={(e) => setHasta(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+          />
+        </div>
+      </div>
+      <p className="text-xs text-gray-500">
+        Precio fundador: 30% durante un año. «Suspendido» y una prueba vencida dejan el panel del lavadero en sólo lectura; nada se borra.
+      </p>
+      <button
+        onClick={guardar}
+        disabled={guardando}
+        className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-lg transition disabled:opacity-50"
+      >
+        {guardando ? "Guardando..." : "Guardar suscripción"}
+      </button>
+    </div>
+  );
+}
+
+/** Un límite del formulario: vacío es «sin límite». */
+function limiteDe(v: number | string): number | null {
+  const n = parseInt(String(v), 10);
+  return Number.isNaN(n) ? null : Math.max(0, n);
+}
+
 function NumField({
   label,
   value,
   onChange,
+  placeholder = "Sin límite",
 }: {
   label: string;
   value: number | string;
   onChange(v: string): void;
+  placeholder?: string;
 }) {
   return (
     <div>
@@ -1347,6 +1463,7 @@ function NumField({
         title={String(value)}
         type="number"
         value={value}
+        placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 outline-none"
       />

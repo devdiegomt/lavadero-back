@@ -16,6 +16,7 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import PlateSearch from '../components/PlateSearch';
 import InstallPrompt from '../components/InstallPrompt';
+import AvisoSuscripcion from '../components/AvisoSuscripcion';
 import type { UserRole } from '../types';
 
 interface NavItem {
@@ -174,6 +175,7 @@ export default function AppLayout() {
         </header>
 
         <div className="p-4 lg:p-10 max-w-7xl mx-auto">
+          <AvisoSuscripcion />
           <Outlet />
         </div>
       </main>

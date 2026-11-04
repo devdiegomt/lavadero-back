@@ -14,6 +14,7 @@ import * as db from '../db';
 import { AppError } from './errorHandler';
 import type { PlanRow } from '../../types/entities';
 import type { TenantUsageDto } from '../../types/api';
+import { estadoDeSuscripcion, precioConDescuento, type FilaSuscripcion } from './suscripcion';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -43,7 +44,12 @@ async function getPlans(): Promise<Record<string, PlanRow>> {
     return plansCache;
   }
 
-  const { rows } = await db.query<Record<string, unknown>>('SELECT * FROM plans WHERE is_active = true');
+  // Todos, no sólo los activos. `is_active` dice si un plan **se ofrece**, no si
+  // vale: quien tiene Básico —que ya no se ofrece— sigue con los límites de
+  // Básico. Antes se filtraba por activos, y a un lavadero con un plan
+  // desactivado no se le encontraba el plan y se lo dejaba pasar sin ningún
+  // límite (el fail-open de abajo).
+  const { rows } = await db.query<Record<string, unknown>>('SELECT * FROM plans');
   plansCache = Object.fromEntries(rows.map((p) => [p['id'], p as unknown as PlanRow]));
   plansCacheTime = Date.now();
   return plansCache as Record<string, PlanRow>;
@@ -83,7 +89,7 @@ export function planLimit(resource: PlanResource): RequestHandler {
             [tenantId],
           );
           const current = parseInt(rows[0].count, 10);
-          if (current >= plan.max_operators) {
+          if (plan.max_operators !== null && current >= plan.max_operators) {
             throw new AppError(
               `Tu plan "${plan.name}" permite máximo ${plan.max_operators} operadores. ` +
                 `Actualmente tienes ${current}. Actualiza tu plan para agregar más.`,
@@ -104,7 +110,7 @@ export function planLimit(resource: PlanResource): RequestHandler {
             [tenantId, currentMonth],
           );
           const current = parseInt(rows[0].count, 10);
-          if (current >= plan.max_appointments_month) {
+          if (plan.max_appointments_month !== null && current >= plan.max_appointments_month) {
             throw new AppError(
               `Tu plan "${plan.name}" permite máximo ${plan.max_appointments_month} turnos por mes. ` +
                 `Este mes ya tienes ${current}. Actualiza tu plan para continuar.`,
@@ -120,7 +126,7 @@ export function planLimit(resource: PlanResource): RequestHandler {
             [tenantId],
           );
           const current = parseInt(rows[0].count, 10);
-          if (current >= plan.max_services) {
+          if (plan.max_services !== null && current >= plan.max_services) {
             throw new AppError(
               `Tu plan "${plan.name}" permite máximo ${plan.max_services} servicios activos. ` +
                 `Actualmente tienes ${current}.`,
@@ -133,8 +139,7 @@ export function planLimit(resource: PlanResource): RequestHandler {
         case 'whatsapp': {
           if (!plan.whatsapp_enabled) {
             throw new AppError(
-              'El chatbot de WhatsApp no está disponible en tu plan actual. ' +
-                'Actualiza al plan Pro para habilitarlo.',
+              `El chatbot de WhatsApp no está incluido en tu plan "${plan.name}".` + dondeEsta(plans, 'whatsapp_enabled'),
               403,
             );
           }
@@ -144,8 +149,7 @@ export function planLimit(resource: PlanResource): RequestHandler {
         case 'billing': {
           if (!plan.billing_enabled) {
             throw new AppError(
-              'La facturación electrónica no está disponible en tu plan actual. ' +
-                'Actualiza al plan Básico o Pro.',
+              `La facturación electrónica no está incluida en tu plan "${plan.name}".` + dondeEsta(plans, 'billing_enabled'),
               403,
             );
           }
@@ -155,7 +159,7 @@ export function planLimit(resource: PlanResource): RequestHandler {
         case 'reports': {
           if (!plan.reports_enabled) {
             throw new AppError(
-              'Los reportes avanzados no están disponibles en tu plan actual.',
+              `Los reportes avanzados no están incluidos en tu plan "${plan.name}".` + dondeEsta(plans, 'reports_enabled'),
               403,
             );
           }
@@ -176,6 +180,22 @@ export function planLimit(resource: PlanResource): RequestHandler {
 }
 
 /**
+ * « Está en Estudio Pro.» — el plan que sí la incluye, entre los que se
+ * ofrecen hoy. Antes el mensaje nombraba planes fijos («Actualiza al plan Básico
+ * o Pro») que dejan de existir apenas se cambian los planes.
+ */
+function dondeEsta(
+  plans: Record<string, PlanRow>,
+  campo: 'whatsapp_enabled' | 'billing_enabled' | 'reports_enabled',
+): string {
+  const nombres = Object.values(plans)
+    .filter((p) => p.is_active && p[campo])
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((p) => p.name);
+  return nombres.length > 0 ? ` Está en ${nombres.join(' y ')}.` : '';
+}
+
+/**
  * Alias de `planLimit` para features binarias (whatsapp | billing | reports).
  * Semánticamente más claro en las rutas: `planFeature('billing')`.
  */
@@ -190,14 +210,16 @@ export function planFeature(feature: Extract<PlanResource, 'whatsapp' | 'billing
  * Usado por `GET /api/tenants/me/usage` y el panel de superadmin.
  */
 export async function getTenantUsage(tenantId: string): Promise<TenantUsageDto | null> {
-  const { rows: tenantRows } = await db.query<{ plan: string }>(
-    'SELECT plan FROM tenants WHERE id = $1',
+  const { rows: tenantRows } = await db.query<{ plan: string } & FilaSuscripcion>(
+    `SELECT plan, subscription_status, trial_ends_at, discount_pct, discount_until
+       FROM tenants WHERE id = $1`,
     [tenantId],
   );
   if (tenantRows.length === 0) return null;
+  const tenant = tenantRows[0];
 
   const plans = await getPlans();
-  const plan = plans[tenantRows[0].plan];
+  const plan = plans[tenant.plan];
   if (!plan) return null;
 
   const currentMonth = new Date().toISOString().slice(0, 7) + '-01';
@@ -220,18 +242,41 @@ export async function getTenantUsage(tenantId: string): Promise<TenantUsageDto |
 
   const usage = rows[0];
 
-  const toMetric = (current: number, limit: number) => ({
+  const toMetric = (current: number, limit: number | null) => ({
     current,
     limit,
-    pct: Math.round((current / limit) * 100),
+    pct: limit === null ? null : Math.round((current / limit) * 100),
   });
+
+  const estado = estadoDeSuscripcion(tenant);
 
   return {
     plan: {
       id: plan.id as TenantUsageDto['plan']['id'],
       name: plan.name,
       priceMonthly: plan.price_monthly,
+      priceWithDiscount: precioConDescuento(plan.price_monthly, tenant),
     },
+    subscription: {
+      status: tenant.subscription_status,
+      trialEndsAt: tenant.trial_ends_at ? new Date(tenant.trial_ends_at).toISOString() : null,
+      trialDaysLeft: estado.diasDePrueba,
+      readOnly: estado.soloLectura,
+      discountPct: tenant.discount_pct,
+      discountUntil: tenant.discount_until ? new Date(tenant.discount_until).toISOString().slice(0, 10) : null,
+    },
+    availablePlans: Object.values(plans)
+      .filter((p) => p.is_active)
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        priceMonthly: p.price_monthly,
+        maxOperators: p.max_operators,
+        whatsapp: p.whatsapp_enabled,
+        billing: p.billing_enabled,
+        reports: p.reports_enabled,
+      })),
     usage: {
       operators:    toMetric(parseInt(usage.operators, 10),           plan.max_operators),
       appointments: toMetric(parseInt(usage.appointments_month, 10),  plan.max_appointments_month),
@@ -243,6 +288,11 @@ export async function getTenantUsage(tenantId: string): Promise<TenantUsageDto |
       reports:  plan.reports_enabled,
     },
   };
+}
+
+/** Para las pruebas: que el próximo `getPlans()` lea de la base. */
+export function olvidarPlanes(): void {
+  plansCache = null;
 }
 
 // ─── incrementUsage ───────────────────────────────────────────────────────────

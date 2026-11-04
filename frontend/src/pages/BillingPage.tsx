@@ -541,7 +541,7 @@ function PendingTab() {
       if (err instanceof ApiError) {
         if (err.status === 403) {
           toast.error(
-            "Tu plan no incluye facturación. Actualiza al plan Básico o Pro.",
+            "Tu plan no incluye facturación electrónica. Está en Estudio Pro: mira los planes en Configuración → Plan.",
           );
         } else if (err.status === 502) {
           toast.error(

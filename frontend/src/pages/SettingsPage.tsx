@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, type HTMLInputTypeAttribute, type ReactNode } from 'react';
-import { Sparkles, Store, Users, X, type LucideIcon } from 'lucide-react';
+import { Check, Gem, Minus, Sparkles, Store, Users, X, type LucideIcon } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { CONTACTO_VENTAS, useSuscripcion, type Metrica } from '../lib/suscripcion';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { formatCOP } from '../lib/format';
@@ -8,7 +10,7 @@ import type { UserRole } from '../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = 'general' | 'services' | 'team';
+type Tab = 'general' | 'services' | 'team' | 'plan';
 
 interface Tenant {
   id: string;
@@ -53,12 +55,20 @@ const TABS: { key: Tab; label: string; icon: LucideIcon }[] = [
   { key: 'general',  label: 'General',   icon: Store },
   { key: 'services', label: 'Servicios', icon: Sparkles },
   { key: 'team',     label: 'Equipo',    icon: Users },
+  { key: 'plan',     label: 'Plan',      icon: Gem },
 ];
+
+const esTab = (v: string | null): v is Tab => TABS.some((t) => t.key === v);
 
 // ─── SettingsPage ─────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const [tab, setTab] = useState<Tab>('general');
+  // La pestaña va en la URL (?tab=plan): así el aviso de prueba puede llevar
+  // directo a la de planes.
+  const [params, setParams] = useSearchParams();
+  const pedida = params.get('tab');
+  const tab: Tab = esTab(pedida) ? pedida : 'general';
+  const setTab = (t: Tab) => setParams(t === 'general' ? {} : { tab: t }, { replace: true });
 
   return (
     <div className="space-y-4">
@@ -70,6 +80,11 @@ export default function SettingsPage() {
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
+            // En el celular sólo se ve el ícono (el texto va `hidden sm:inline`):
+            // sin esto el botón no tiene nombre y un lector de pantalla dice
+            // «botón» a secas. Lo encontró la prueba de la pestaña Plan.
+            aria-label={t.label}
+            aria-pressed={tab === t.key}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition ${
               tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}
@@ -83,6 +98,7 @@ export default function SettingsPage() {
       {tab === 'general'  && <GeneralTab />}
       {tab === 'services' && <ServicesTab />}
       {tab === 'team'     && <TeamTab />}
+      {tab === 'plan'     && <PlanTab />}
     </div>
   );
 }
@@ -573,5 +589,155 @@ function Modal({ title, onClose, children }: ModalProps) {
         {children}
       </div>
     </div>
+  );
+}
+// ─── Plan Tab ─────────────────────────────────────────────────────────────────
+
+const ESTADO: Record<'trial' | 'active' | 'suspended', string> = {
+  trial: 'En prueba',
+  active: 'Activo',
+  suspended: 'Suspendido',
+};
+
+function PlanTab() {
+  const s = useSuscripcion();
+  if (!s) return <div className="h-48 bg-white border border-gray-100 rounded-xl animate-pulse" />;
+
+  const { plan, subscription: sub, usage, availablePlans } = s;
+  const conDescuento = plan.priceWithDiscount < plan.priceMonthly;
+  const ofrecido = availablePlans.some((p) => p.id === plan.id);
+
+  return (
+    <div className="space-y-6">
+      {/* Plan actual */}
+      <section className="bg-white rounded-xl border border-gray-100 p-6 space-y-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="etiqueta text-gray-500">Tu plan</p>
+            <h2 className="text-2xl font-semibold text-gray-900 mt-1">{plan.name}</h2>
+            {!ofrecido && (
+              <p className="text-xs text-gray-500 mt-1">Este plan ya no se ofrece; lo conservas mientras quieras.</p>
+            )}
+          </div>
+          <span
+            className={`text-xs font-semibold px-2.5 py-1 rounded ${
+              sub.readOnly ? 'bg-red-100 text-red-800' : sub.status === 'trial' ? 'bg-brand-100 text-brand-800' : 'bg-green-100 text-green-800'
+            }`}
+          >
+            {sub.readOnly && sub.status === 'trial' ? 'Prueba terminada' : ESTADO[sub.status]}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div>
+            <p className="etiqueta text-gray-500">Mensualidad</p>
+            <p className="cifra text-xl font-semibold text-gray-900 mt-1">
+              {formatCOP(plan.priceWithDiscount)}
+              {conDescuento && (
+                <span className="ml-2 text-sm font-normal text-gray-500 line-through">{formatCOP(plan.priceMonthly)}</span>
+              )}
+            </p>
+            {conDescuento && (
+              <p className="text-xs text-brand-700 mt-1">
+                Precio fundador: {sub.discountPct}% menos
+                {sub.discountUntil ? ` hasta el ${new Date(sub.discountUntil + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}` : ''}.
+              </p>
+            )}
+          </div>
+          {sub.status === 'trial' && (sub.trialDaysLeft !== null || sub.readOnly) && (
+            <div>
+              <p className="etiqueta text-gray-500">Prueba</p>
+              <p className="cifra text-xl font-semibold text-gray-900 mt-1">
+                {sub.readOnly ? 'Terminó' : sub.trialDaysLeft === 1 ? 'Último día' : `${sub.trialDaysLeft} días`}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                {sub.readOnly
+                  ? 'Puedes ver todos tus datos; para registrar cambios, elige un plan.'
+                  : 'Con todo lo de Estudio Pro. Al terminar no se borra nada.'}
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-3 pt-1">
+          <Uso label="Operarios" m={usage.operators} />
+          <Uso label="Servicios activos" m={usage.services} />
+          <Uso label="Turnos este mes" m={usage.appointments} />
+        </div>
+      </section>
+
+      {/* Comparativa */}
+      <section className="space-y-3">
+        <h3 className="text-base font-semibold text-gray-900">Planes</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {availablePlans.map((p) => (
+            <div
+              key={p.id}
+              className={`bg-white rounded-xl border p-5 space-y-4 ${p.id === plan.id ? 'border-brand-600' : 'border-gray-100'}`}
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                <h4 className="font-semibold text-gray-900">{p.name}</h4>
+                {p.id === plan.id && <span className="etiqueta text-brand-700">Tu plan</span>}
+              </div>
+              <p className="cifra text-2xl font-semibold text-gray-900">
+                {formatCOP(p.priceMonthly)}
+                <span className="text-sm font-normal text-gray-500"> / mes</span>
+              </p>
+              <ul className="space-y-1.5 text-sm">
+                <Incluye si>{p.maxOperators === null ? 'Operarios sin límite' : `Hasta ${p.maxOperators} operarios`}</Incluye>
+                <Incluye si>Turnos sin límite</Incluye>
+                <Incluye si={p.reports}>Reportes</Incluye>
+                <Incluye si={p.billing}>Facturación electrónica</Incluye>
+                <Incluye si={p.whatsapp}>Bot de WhatsApp</Incluye>
+              </ul>
+            </div>
+          ))}
+        </div>
+        <p className="text-sm text-gray-500">
+          Para elegir o cambiar de plan,{' '}
+          {CONTACTO_VENTAS ? (
+            <a href={CONTACTO_VENTAS} target="_blank" rel="noopener" className="text-brand-700 font-semibold underline underline-offset-2">
+              escríbenos
+            </a>
+          ) : (
+            'escríbenos'
+          )}
+          . Pronto se podrá pagar con tarjeta desde acá.
+        </p>
+      </section>
+    </div>
+  );
+}
+
+function Uso({ label, m }: { label: string; m: Metrica }) {
+  return (
+    <div>
+      <div className="flex justify-between text-sm">
+        <span className="text-gray-600">{label}</span>
+        <span className="font-mono text-gray-900">
+          {m.current}
+          <span className="text-gray-500">{m.limit === null ? ' · sin límite' : ` de ${m.limit}`}</span>
+        </span>
+      </div>
+      {m.limit !== null && (
+        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mt-1.5">
+          <div
+            className={`h-full rounded-full ${(m.pct ?? 0) >= 90 ? 'bg-red-600' : 'bg-brand-600'}`}
+            style={{ width: `${Math.min(m.pct ?? 0, 100)}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Incluye({ si, children }: { si: boolean; children: ReactNode }) {
+  const Icono = si ? Check : Minus;
+  return (
+    <li className={`flex items-center gap-2 ${si ? 'text-gray-800' : 'text-gray-400'}`}>
+      <Icono aria-hidden="true" size={15} strokeWidth={2} className={si ? 'text-green-600' : 'text-gray-300'} />
+      <span>{children}</span>
+      <span className="sr-only">{si ? '(incluido)' : '(no incluido)'}</span>
+    </li>
   );
 }

@@ -379,8 +379,8 @@ function AdminStep({ value, onChange, onBack, onSubmit, submitting }: AdminStepP
         type="password" placeholder="Repite la contraseña" autoComplete="new-password" />
 
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-700">
-        Tu cuenta empieza en el plan <strong>Gratis</strong> con 14 días de prueba en funciones avanzadas.
-        Sin tarjeta de crédito.
+        Empiezas con <strong>14 días de prueba</strong> con todo lo de Estudio Pro, sin tarjeta de crédito.
+        Al terminar eliges tu plan; no se borra nada.
       </div>
 
       <div className="flex gap-3 pt-2">

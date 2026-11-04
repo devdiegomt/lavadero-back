@@ -9,6 +9,7 @@
 
 import type {
   PlanId,
+  SubscriptionStatus,
   UserRole,
   InvoiceStatus,
   PaymentMethod,
@@ -73,8 +74,10 @@ export interface LoginResponseDto {
 
 export interface UsageMetric {
   current: number;
-  limit: number;
-  pct: number; // 0–100
+  /** null = sin límite en este plan. */
+  limit: number | null;
+  /** 0–100; null si no hay límite. */
+  pct: number | null;
 }
 
 export interface TenantUsageDto {
@@ -82,7 +85,29 @@ export interface TenantUsageDto {
     id: PlanId;
     name: string;
     priceMonthly: number;
+    /** Lo que paga este lavadero: el precio con su descuento, si tiene uno vigente. */
+    priceWithDiscount: number;
   };
+  subscription: {
+    status: SubscriptionStatus;
+    trialEndsAt: string | null;
+    /** Días que quedan de prueba; null si no está en prueba. */
+    trialDaysLeft: number | null;
+    /** Si el panel está en sólo lectura: prueba vencida o suspendido. */
+    readOnly: boolean;
+    discountPct: number;
+    discountUntil: string | null;
+  };
+  /** Los planes que se ofrecen hoy, para comparar. */
+  availablePlans: Array<{
+    id: PlanId;
+    name: string;
+    priceMonthly: number;
+    maxOperators: number | null;
+    whatsapp: boolean;
+    billing: boolean;
+    reports: boolean;
+  }>;
   usage: {
     appointments: UsageMetric;
     operators: UsageMetric;
@@ -169,7 +194,7 @@ export interface TopTenantDto {
 
 export interface SuperAdminDashboardDto {
   overview: SaasOverviewDto;
-  planDistribution: Record<PlanId, number>;
+  planDistribution: Partial<Record<PlanId, number>>;
   topTenants: TopTenantDto[];
 }
 
