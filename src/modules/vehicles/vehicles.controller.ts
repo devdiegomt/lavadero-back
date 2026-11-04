@@ -52,7 +52,9 @@ export async function list(req: Request, res: Response): Promise<void> {
 export async function getByPlate(req: Request, res: Response): Promise<void> {
   const { rows } = await db.query<VehicleWithCustomer>(
     `SELECT v.*, c.id AS customer_id, c.first_name AS customer_first_name,
-            c.last_name AS customer_last_name, c.phone AS customer_phone, c.email AS customer_email
+            c.last_name AS customer_last_name, c.phone AS customer_phone, c.email AS customer_email,
+            -- Para que el panel sepa si tiene que pedir la autorización.
+            c.consent_at AS customer_consent_at
      FROM vehicles v
      JOIN customers c ON c.id = v.customer_id
      WHERE UPPER(v.plate) = UPPER($1) AND v.tenant_id = $2 AND v.deleted_at IS NULL

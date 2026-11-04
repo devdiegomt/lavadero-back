@@ -1,4 +1,6 @@
 import { useState, useEffect, type HTMLInputTypeAttribute } from 'react';
+import { useAuth } from '../hooks/useAuth';
+import CasillaAutorizacion from './CasillaAutorizacion';
 import { CarFront, X } from 'lucide-react';
 import { api, ApiError } from '../lib/api';
 import { formatCOP } from '../lib/format';
@@ -28,6 +30,8 @@ interface ExistingVehicle {
   customer_phone: string;
   customer_first_name: string;
   customer_last_name: string | null;
+  /** null: el cliente nunca autorizó el tratamiento de sus datos. */
+  customer_consent_at: string | null;
 }
 
 interface QuickTurnForm {
@@ -83,6 +87,12 @@ export default function QuickTurnModal({ onClose, onCreated }: QuickTurnModalPro
   const [plate, setPlate]                     = useState('');
   const [existingVehicle, setExistingVehicle] = useState<ExistingVehicle | null>(null);
   const [form, setForm]                       = useState<QuickTurnForm>(emptyForm);
+  // Ley 1581: un cliente nuevo, o uno que nunca autorizó, tiene que autorizar
+  // antes de guardar sus datos. El backend lo exige igual; acá se pregunta
+  // antes de que llegue el error.
+  const [autoriza, setAutoriza]               = useState(false);
+  const [pedirAutorizacion, setPedirAutorizacion] = useState(false);
+  const { user } = useAuth();
 
   // Load services on mount
   useEffect(() => {
@@ -98,6 +108,7 @@ export default function QuickTurnModal({ onClose, onCreated }: QuickTurnModalPro
     try {
       const vehicle = await api<ExistingVehicle>(`/vehicles/plate/${plate.trim()}`);
       setExistingVehicle(vehicle);
+      setPedirAutorizacion(!vehicle.customer_consent_at);
       setForm((f) => ({
         ...f,
         customerPhone:     vehicle.customer_phone || '',
@@ -112,6 +123,7 @@ export default function QuickTurnModal({ onClose, onCreated }: QuickTurnModalPro
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         setExistingVehicle(null);
+        setPedirAutorizacion(true);
         setStep(2); // Go to create customer+vehicle
       } else {
         setError((err as Error).message);
@@ -152,10 +164,16 @@ export default function QuickTurnModal({ onClose, onCreated }: QuickTurnModalPro
           bayNumber:         form.bayNumber ? parseInt(form.bayNumber, 10) : undefined,
           scheduledTime:     form.scheduledTime || undefined,
           notes:             form.notes || undefined,
+          autorizaDatos:     pedirAutorizacion ? autoriza : undefined,
         },
       });
       onCreated();
     } catch (err) {
+      // Un vehículo nuevo de un cliente que ya existía sin autorización: el
+      // backend lo detecta y acá aparece la casilla.
+      if (err instanceof ApiError && (err.data as { details?: { codigo?: string } } | undefined)?.details?.codigo === 'FALTA_AUTORIZACION') {
+        setPedirAutorizacion(true);
+      }
       setError((err as Error).message);
     } finally {
       setLoading(false);
@@ -337,9 +355,21 @@ export default function QuickTurnModal({ onClose, onCreated }: QuickTurnModalPro
               <Input label="Notas" value={form.notes}
                 onChange={(v) => set('notes', v)} placeholder="Ej: Cera extra, rayón en puerta..." />
 
+              {pedirAutorizacion && (
+                <CasillaAutorizacion
+                  id="autoriza-datos-turno"
+                  marcada={autoriza}
+                  onCambio={setAutoriza}
+                  enlace={`/privacidad/${user?.tenant?.slug ?? ''}`}
+                  textoEnlace="Ver el aviso"
+                >
+                  El cliente conoce el aviso de privacidad del lavadero y autoriza que se guarden sus datos.
+                </CasillaAutorizacion>
+              )}
+
               <button
                 onClick={handleSubmit}
-                disabled={loading}
+                disabled={loading || (pedirAutorizacion && !autoriza)}
                 className="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg transition disabled:opacity-50 text-sm"
               >
                 {loading ? 'Creando turno...' : `Crear turno — ${formatCOP(getSelectedServicePrice())}`}

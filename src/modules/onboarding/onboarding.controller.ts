@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { VERSION_POLITICA_QLARITY } from '../whatsapp/consentimiento';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import type { Request, Response } from 'express';
@@ -85,6 +86,11 @@ export async function register(req: Request, res: Response): Promise<void> {
     await client.query(
       `INSERT INTO onboarding_log (tenant_id, step) VALUES ($1, 'admin_created')`,
       [tenant.id],
+    );
+    // La prueba de que aceptó la política, y cuál: si cambia, cambia la versión.
+    await client.query(
+      `INSERT INTO onboarding_log (tenant_id, step, metadata) VALUES ($1, 'politica_aceptada', $2)`,
+      [tenant.id, JSON.stringify({ version: VERSION_POLITICA_QLARITY, aceptadaEn: new Date().toISOString() })],
     );
 
     await client.query('COMMIT');

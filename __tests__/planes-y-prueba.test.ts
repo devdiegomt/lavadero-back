@@ -28,6 +28,7 @@ const ajustar = (sql: string, params: unknown[] = []) =>
 
 beforeAll(async () => {
   const res = await request(app).post('/api/onboarding/register').send({
+    aceptaPolitica: true,
     businessName: 'Estudio de Prueba Planes',
     phone: '3007776655',
     openingTime: '08:00',

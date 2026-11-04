@@ -349,7 +349,15 @@ crons van envueltos en `conBypassRlsFueraDePeticion`. Y hay una prueba —
 `__tests__/crons-bajo-rls.test.ts`— que corre la limpieza y **comprueba que
 borró**, no que no falló.
 
-**Los tres bypasses son el punto débil, y hay que tratarlos como tal.** Ahí el
+**El cuarto bypass, desde 2026-11: `GET /api/publico/lavaderos/:slug`.** Es lo
+único de la API que se lee sin sesión: el nombre, NIT y contacto del lavadero
+para su aviso de privacidad, que el Decreto 1377 exige mostrar. Va con bypass
+porque se busca por slug, sin tenant que fijar, y está acotado a una consulta
+de siete columnas fijas del negocio —ni clientes, ni usuarios, ni plan—. Lo
+prueba `__tests__/privacidad.test.ts`, que verifica exactamente qué campos
+devuelve. Un lavadero desactivado no aparece.
+
+**Los bypasses son el punto débil, y hay que tratarlos como tal.** Ahí el
 aislamiento no lo sostiene el motor sino una línea de `authorize` o el orden del
 código. `superadmin` —ocho rutas, el módulo que más poder concentra— **no tenía
 ninguna prueba** hasta 2026-09; ahora `__tests__/superadmin.test.ts` comprueba
@@ -463,14 +471,14 @@ sensible, porque el cliente puede escribir cualquier cosa ahí.
 
 | Obligación | Estado |
 |---|---|
-| Autorización previa del titular | ✅ En WhatsApp, a clientes nuevos y a los que ya existían |
-| Aviso de privacidad accesible | ✅ Parcial — se muestra en la conversación; falta publicarlo completo |
+| Autorización previa del titular | ✅ En WhatsApp, a clientes nuevos y a los que ya existían. **Y en el panel desde 2026-11** (ver abajo) |
+| Aviso de privacidad accesible | ✅ Publicado en el panel: la política de Qlarity en `/privacidad` y el aviso de cada lavadero en `/privacidad/:slug`. **Faltan los datos del responsable** (`frontend/src/lib/responsable.ts`): la página los marca en rojo mientras estén vacíos |
 | Finalidad declarada | ✅ En el texto del aviso, versionado |
 | Derecho de acceso | ✅ *MIS DATOS* por WhatsApp; también hay endpoint en el panel |
 | Derecho de rectificación | ✅ Parcial — el nombre se corrige solo por WhatsApp; el resto, por asesor (canal atendido). Ver abajo |
 | Derecho de supresión | ✅ *BORRAR MIS DATOS* + confirmación, y `POST /api/customers/:id/anonimizar` |
 | Retención limitada | ✅ Tareas de cron con plazo configurable |
-| Registro de bases ante la SIC | ⚠️ Depende del tamaño del responsable; verificar |
+| Registro de bases ante la SIC | ⚠️ El Decreto 090 de 2018 lo limita a sociedades y entidades sin ánimo de lucro con activos de más de 100.000 UVT, y a entidades públicas. Una persona natural —quien opera Qlarity— y un lavadero pequeño quedarían por fuera. **Verificar con un abogado**; no es asesoría legal |
 | Medidas de seguridad | ✅ Parcial — control de acceso y cifrado de credenciales |
 
 ### La autorización
@@ -501,6 +509,38 @@ guarda tres columnas y no un booleano:
 
 Si mañana cambia la finalidad, cambia `VERSION_AVISO` y queda registro de a
 quién se le informó qué. Un `consent = true` no permitiría reconstruir eso.
+
+#### Desde el panel
+
+**Esta tabla decía `panel` como canal posible, y ningún código lo usaba**:
+un cliente creado por un operario —en *Clientes* o en el turno rápido—
+quedaba con `consent_at` vacío. Mientras el bot de WhatsApp no está activo,
+ése es justamente como trabaja un lavadero, así que cada cliente nuevo quedaba
+sin la autorización que la ley pone primero.
+
+Ahora el operario le muestra al cliente el aviso del lavadero
+(`/privacidad/:slug`, que también se puede mandar por enlace o poner en un QR
+en el mostrador) y marca una casilla. Sin ella el backend no crea el cliente
+(`autorizaDatos` en el schema), y en el turno rápido responde
+`FALTA_AUTORIZACION` también para un cliente que ya existía sin autorización.
+Se guarda con `consent_source = 'panel'` y la versión del aviso del lavadero
+(`VERSION_AVISO_LAVADERO`). A quien ya autorizó no se le vuelve a pedir, y no se
+pisa la fecha original.
+
+#### Los dos papeles
+
+Qlarity es **responsable** de los datos de quienes usan el panel —el dueño que
+registra el lavadero y su equipo— y **encargado** de los datos de los clientes
+de cada lavadero, cuyo responsable es el lavadero. Por eso hay dos textos: la
+política de Qlarity, que acepta quien registra un lavadero (queda en
+`onboarding_log` con su versión, `VERSION_POLITICA_QLARITY`), y el aviso de cada
+lavadero, que es el que acepta su cliente.
+
+La política declara los encargados y las transferencias internacionales:
+Supabase, Render, Vercel y GitHub (respaldos cifrados), en Estados Unidos; y si
+el lavadero usa el bot, **Anthropic** —el texto de los mensajes de WhatsApp va a
+Claude para clasificar la intención— y Meta. Esto último no lo decía ningún
+texto hasta ahora.
 
 Si el titular no autoriza, el flujo termina: no se crea el cliente, no se
 agenda. Se le sigue pudiendo responder precios y servicios, que no requieren

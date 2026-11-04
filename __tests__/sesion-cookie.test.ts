@@ -186,6 +186,7 @@ describe('el registro de un lavadero nuevo', () => {
     // señalaría al onboarding.
     const slug = `cookie-${Date.now()}`;
     const res = await request(app).post('/api/onboarding/register').send({
+    aceptaPolitica: true,
       businessName: 'Lavadero Cookie',
       phone: '3009998888',
       openingTime: '07:00',

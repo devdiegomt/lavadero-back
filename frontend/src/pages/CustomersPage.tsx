@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, type HTMLInputTypeAttribute } from 'react';
 import { Users, X } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuth';
+import CasillaAutorizacion from '../components/CasillaAutorizacion';
 import { useToast, ConfirmDialog } from '../components/ui';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -39,6 +41,10 @@ export default function CustomersPage() {
   const [search, setSearch]         = useState('');
   const [pagination, setPagination] = useState({ total: 0, page: 1 });
   const [showForm, setShowForm]     = useState(false);
+  // Aparte del formulario: sólo va al crear, y se vuelve a pedir cada vez.
+  const [autoriza, setAutoriza]     = useState(false);
+  const { user } = useAuth();
+  const enlaceAviso = `/privacidad/${user?.tenant?.slug ?? ''}`;
   const [editingId, setEditingId]   = useState<string | null>(null);
   const [deleteId, setDeleteId]     = useState<string | null>(null);
   const [formData, setFormData]     = useState<CustomerFormData>(emptyForm);
@@ -73,6 +79,7 @@ export default function CustomersPage() {
   const openNew = () => {
     setEditingId(null);
     setFormData(emptyForm());
+    setAutoriza(false);
     setShowForm(true);
   };
 
@@ -94,7 +101,7 @@ export default function CustomersPage() {
       if (editingId) {
         await api(`/customers/${editingId}`, { method: 'PATCH', body: formData });
       } else {
-        await api('/customers', { method: 'POST', body: formData });
+        await api('/customers', { method: 'POST', body: { ...formData, autorizaDatos: autoriza } });
       }
       setShowForm(false);
       toast.success(editingId ? 'Cliente actualizado' : 'Cliente creado');
@@ -231,9 +238,22 @@ export default function CustomersPage() {
             <FormInput label="Cédula / NIT" value={formData.documentNumber} onChange={(v) => set('documentNumber', v)} />
             <FormInput label="Notas"        value={formData.notes}          onChange={(v) => set('notes', v)} placeholder="Preferencias del cliente..." />
 
+            {!editingId && (
+              <CasillaAutorizacion
+                id="autoriza-datos-cliente"
+                marcada={autoriza}
+                onCambio={setAutoriza}
+                enlace={enlaceAviso}
+                textoEnlace="Ver el aviso"
+              >
+                El cliente conoce el aviso de privacidad del lavadero y autoriza que se guarden sus datos.
+              </CasillaAutorizacion>
+            )}
+
             <button
               onClick={handleSave}
-              className="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl transition text-sm"
+              disabled={!editingId && !autoriza}
+              className="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {editingId ? 'Guardar cambios' : 'Crear cliente'}
             </button>
