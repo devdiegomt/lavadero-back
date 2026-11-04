@@ -27,16 +27,17 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https?:\/\/.*\/api\//,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              expiration: { maxEntries: 50, maxAgeSeconds: 300 },
-            },
-          },
-        ],
+        // **Las respuestas de la API no se guardan en el teléfono.** Antes había
+        // un `runtimeCaching` que copiaba cinco minutos todo GET a `/api/`
+        // —clientes, teléfonos, placas, pagos— en el almacenamiento del
+        // navegador. Ahí quedaban aunque se cerrara la sesión, y con la red
+        // caída se mostraban sin pedir sesión. En un teléfono que comparten
+        // varios operarios eso es entregar datos personales a quien lo levante
+        // (Ley 1581). El costo: sin red, el panel no muestra datos viejos.
+        //
+        // Y `/api` es ahora del mismo origen (Vercel la reenvía al backend):
+        // sin esto, navegar a una URL de la API devolvería el HTML del panel.
+        navigateFallbackDenylist: [/^\/api\//],
       },
     }),
   ],
