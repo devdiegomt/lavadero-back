@@ -8,7 +8,7 @@
 # encontró cosas: la corrida como `carwash_app` es la única que ve si RLS deja
 # algo sin funcionar, y la segunda corrida seguida es la que destapa el estado
 # que una suite le deja a la siguiente —pasó cuatro veces—.
-name: CI
+name: Backend
 
 on:
   push:

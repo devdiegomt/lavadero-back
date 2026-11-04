@@ -10,6 +10,12 @@ module.exports = {
   // prueban un modulo suelto se conectan al 5432 por defecto y fallan.
   setupFiles: ['dotenv/config'],
 
+  // El panel vive en frontend/ (mismo repositorio desde noviembre). Sus
+  // pruebas son de Playwright y corren con su propio comando; Jest no tiene
+  // nada que buscar ahí, y recorrer su node_modules sólo lo hace más lento.
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/frontend/'],
+  modulePathIgnorePatterns: ['<rootDir>/frontend/'],
+
   // Las suites de integración comparten una sola Postgres y un solo Redis.
   // En paralelo se pisan: el flushdb() del beforeAll de una borra la sesión de
   // agendamiento que otra tiene a mitad de conversación, y las aserciones

@@ -275,7 +275,7 @@ WhatsApp, y autorización y retención de datos personales según la Ley 1581.
 |---|---|---|
 | RNF-COM-1 | Node.js 20+ | ✅ |
 | RNF-COM-2 | PostgreSQL 14+ | ✅ Probado contra 16 |
-| RNF-COM-3 | El panel funciona en navegadores actuales y en móvil | ✅ **125 pruebas en los tres motores**, en cada PR: Chromium (escritorio 1280px y Pixel 5), Firefox, y WebKit —el motor de Safari— en escritorio y en iPhone 13. Las nueve pantallas caben a lo ancho, la navegación de abajo se puede tocar, y la sesión en cookie `httpOnly` sobrevive a una recarga en los tres. Ver [`e2e/`](https://github.com/devdiegomt/lavadero-front/tree/main/e2e) y abajo |
+| RNF-COM-3 | El panel funciona en navegadores actuales y en móvil | ✅ **125 pruebas en los tres motores**, en cada PR: Chromium (escritorio 1280px y Pixel 5), Firefox, y WebKit —el motor de Safari— en escritorio y en iPhone 13. Las nueve pantallas caben a lo ancho, la navegación de abajo se puede tocar, y la sesión en cookie `httpOnly` sobrevive a una recarga en los tres. Ver [`frontend/e2e/`](../frontend/e2e) y abajo |
 
 #### Qué cubren esas 125 pruebas, y qué no
 

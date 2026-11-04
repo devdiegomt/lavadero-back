@@ -93,7 +93,7 @@ es desplegar backend y panel juntos.
 Las once pruebas de este flujo usan `supertest`, que copia cabeceras: **no aplica
 `HttpOnly`, ni `SameSite`, ni `Path`, ni decide si una petición cross-origin
 lleva la cookie.** Todo eso lo decide el navegador. El panel tiene ahora una
-suite de Playwright ([`e2e/`](https://github.com/devdiegomt/lavadero-front/tree/main/e2e))
+suite de Playwright ([`frontend/e2e/`](../frontend/e2e))
 que lo comprueba, y en su primera corrida encontró dos fallas que acá no se
 podían ver:
 

@@ -242,7 +242,7 @@ cuando algo hace varias a la vez.
 
 Así que: un cambio que toca cookies, sesión, CORS o layout no está probado
 mientras no lo haya abierto un navegador. Las pruebas están en
-[`e2e/` del frontend](https://github.com/devdiegomt/lavadero-front/tree/main/e2e).
+[`frontend/e2e/`](../frontend/e2e).
 
 ### Borrar algo es buscar quién lo nombraba
 
@@ -282,7 +282,7 @@ cd bot-wa && npm run build # bot
 Y si el cambio se ve en el panel, además, con el backend arriba:
 
 ```bash
-cd ../lavadero-front && npm run e2e   # 40 pruebas en Chromium, escritorio y móvil
+cd frontend && npm run e2e   # en Chromium, escritorio y móvil
 ```
 
 Todos tienen que pasar.

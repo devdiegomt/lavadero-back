@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/api/:ruta*", "destination": "https://carwash-api-lnst.onrender.com/api/:ruta*" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
