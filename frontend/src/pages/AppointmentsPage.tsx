@@ -277,7 +277,7 @@ function AppointmentCard({
           {a.status !== "cancelled" && a.status !== "delivered" && (
             <button
               onClick={() => setConfirmCancel(true)}
-              className="text-xs text-red-500 hover:text-red-700 transition"
+              className="text-xs text-red-700 hover:text-red-800 transition"
             >
               Cancelar
             </button>

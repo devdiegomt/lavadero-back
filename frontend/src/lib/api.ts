@@ -312,10 +312,27 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
     }
   }
 
-  const data = (await res.json()) as T;
+  // No toda respuesta es del backend. Si `/api` no llega a él —el reenvío de
+  // Vercel mal configurado, el servidor dormido, un proxy— lo que vuelve es una
+  // página de error en texto o HTML, y `res.json()` reventaba con «Unexpected
+  // token 'T', "The page c"... is not valid JSON»: el mensaje que vio el primer
+  // usuario al intentar entrar, que no le dice nada a nadie.
+  const texto = await res.text();
+  let data: T;
+  try {
+    data = (texto ? JSON.parse(texto) : null) as T;
+  } catch {
+    throw new ApiError(
+      res.ok
+        ? 'El servidor respondió algo que no se entiende. Intenta de nuevo en un momento.'
+        : `No se pudo conectar con el servidor (error ${res.status}). Si acaba de pasar un rato sin uso, ` +
+            'espera unos segundos y vuelve a intentar.',
+      res.status,
+    );
+  }
 
   if (!res.ok) {
-    const errData = data as { error?: string };
+    const errData = (data ?? {}) as { error?: string };
     throw new ApiError(errData.error ?? 'Error del servidor', res.status, data);
   }
 
