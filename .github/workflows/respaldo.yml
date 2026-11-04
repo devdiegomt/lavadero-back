@@ -1,0 +1,88 @@
+# Respaldo diario de la base de producción, cifrado y verificado.
+#
+# Cada noche saca un respaldo de Supabase, lo cifra, lo **restaura en una base
+# de prueba para comprobar que sirve**, y lo guarda 30 días como artefacto de
+# esta ejecución. Un respaldo que nunca se restauró es una suposición: si este
+# job está en verde, el respaldo de esa noche se pudo restaurar entero.
+#
+# Necesita dos secretos del repositorio (Settings → Secrets and variables →
+# Actions):
+#
+#   RESPALDO_DATABASE_URL  la URL del «Session pooler» de Supabase, con el
+#                          usuario postgres.<referencia> (no carwash_app: ése
+#                          sólo ve lo de un lavadero a la vez)
+#   RESPALDO_CLAVE         la clave con la que se cifra. Guardarla también
+#                          fuera de GitHub: sin ella, los respaldos no se abren
+#
+# Para restaurar: README, sección «Respaldos».
+name: Respaldo
+
+on:
+  schedule:
+    # 08:00 UTC = 3:00 a. m. en Colombia, cuando nadie está usando el panel.
+    - cron: '0 8 * * *'
+  # Y a mano, desde la pestaña Actions, para probarlo o antes de un cambio grande.
+  workflow_dispatch:
+
+jobs:
+  respaldo:
+    name: Respaldar y verificar
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      # La base desechable donde se comprueba que el respaldo se restaura.
+      verificacion:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: verificacion
+        ports: ['5433:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Que estén los secretos
+        env:
+          URL: ${{ secrets.RESPALDO_DATABASE_URL }}
+          CLAVE: ${{ secrets.RESPALDO_CLAVE }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$CLAVE" ]; then
+            echo "❌ Faltan RESPALDO_DATABASE_URL o RESPALDO_CLAVE en los secretos del repositorio."
+            echo "   Sin ellos no hay respaldo. Ver el comentario al principio de este archivo."
+            exit 1
+          fi
+
+      # El cliente de PostgreSQL del runner puede ser más viejo que el servidor
+      # de Supabase, y pg_dump se niega a respaldar una versión mayor que la
+      # suya. Se instala el 17 del repositorio oficial.
+      - name: Cliente de PostgreSQL 17
+        run: |
+          sudo apt-get install -y -qq postgresql-common > /dev/null
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y > /dev/null
+          sudo apt-get install -y -qq postgresql-client-17 > /dev/null
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Respaldar
+        env:
+          DATABASE_URL: ${{ secrets.RESPALDO_DATABASE_URL }}
+          RESPALDO_CLAVE: ${{ secrets.RESPALDO_CLAVE }}
+        run: scripts/respaldo.sh respaldo
+
+      - name: Restaurar en una base vacía y comparar
+        env:
+          DESTINO_URL: postgresql://postgres:verificacion@localhost:5433/postgres
+          RESPALDO_CLAVE: ${{ secrets.RESPALDO_CLAVE }}
+        run: scripts/verificar-respaldo.sh respaldo/*.dump.gpg
+
+      - name: Guardar
+        uses: actions/upload-artifact@v4
+        with:
+          name: respaldo-${{ github.run_id }}
+          path: respaldo/
+          retention-days: 30
+          if-no-files-found: error

@@ -189,6 +189,7 @@ Dos advertencias sobre estos números:
 | RNF-DIS-7 | Una conversación que se repite sin avanzar se corta, avisando antes | ✅ `bucle.ts`; un texto distinto la reanuda |
 | RNF-DIS-8 | Un proveedor externo que no responde no deja una petición colgada | ✅ Alegra con corte a los 15 s (`ALEGRA_TIMEOUT_MS`) |
 | RNF-DIS-9 | Un fallo de base responde un error, no tumba el proceso | ✅ `asyncHandler` en las rutas y `correrTarea` en las tareas de fondo. Decía "en una ruta del bot" y esa redacción escondía el agujero: en producción lo que mató al proceso fue un **cron** sin `catch`. Ver abajo |
+| RNF-DIS-10 | Un desastre en la base no pierde más de un día de datos | ⚠️ Respaldo diario, cifrado y **restaurado de prueba cada noche** (`.github/workflows/respaldo.yml`). Queda activo cuando se cargan sus dos secretos; ver el README, «Respaldos» |
 | RNF-DIS-5 | Objetivo de disponibilidad: **99% en horario de atención** | ⚠️ Definido, **no alcanzable con la infraestructura actual**. Ver abajo |
 
 ### El objetivo de disponibilidad, y por qué hoy no se cumple
