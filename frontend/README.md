@@ -49,6 +49,7 @@ Credenciales demo (necesitas que el backend esté seedeado):
 | Variable | Default | Descripción |
 |---|---|---|
 | `VITE_API_URL` | `/api` | URL del backend. En producción se deja en `/api`: Vercel la reenvía al backend (ver «Despliegue») |
+| `VITE_CONTACTO_VENTAS` | *(vacía)* | Enlace para «elegir plan» en Configuración → Plan: un `https://wa.me/57…` o un `mailto:`. Sin ella, el texto aparece sin enlace |
 | `VITE_SENTRY_DSN` | — | Si está, activa Sentry. Opcional |
 | `VITE_SENTRY_RELEASE` | — | Tag de release para Sentry. Opcional |
 | `VITE_SENTRY_TRACES_RATE` | `0.1` | Sample rate de tracing (0.0–1.0) |

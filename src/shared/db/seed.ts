@@ -49,8 +49,11 @@ async function seed() {
     // Tenant de prueba
     const tenantId = 'a0000000-0000-0000-0000-000000000001';
     await cliente.query(`
-      INSERT INTO tenants (id, name, slug, nit, owner_name, phone, email, address, city, bays_count, whatsapp_phone, whatsapp_enabled)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      INSERT INTO tenants (id, name, slug, nit, owner_name, phone, email, address, city, bays_count, whatsapp_phone, whatsapp_enabled,
+                           subscription_status)
+      -- Activo, no en prueba: es un lavadero que ya usa el sistema, como quedan
+      -- los existentes al migrar (migrate-planes-estudio.ts).
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'active')
     `, [
       tenantId,
       'Lavadero El Brillante',

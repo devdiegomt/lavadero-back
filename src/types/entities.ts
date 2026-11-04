@@ -12,7 +12,9 @@
 // ─── Enums compartidos ────────────────────────────────────────────────────────
 
 export type UserRole        = 'admin' | 'operator' | 'super_admin';
-export type PlanId          = 'free' | 'basic' | 'pro';
+/** `free`, `basic` y `pro` ya no se ofrecen, pero hay lavaderos que los tienen. */
+export type PlanId          = 'estudio' | 'estudio_pro' | 'free' | 'basic' | 'pro';
+export type SubscriptionStatus = 'trial' | 'active' | 'suspended';
 export type AppointmentStatus = 'pending' | 'in_progress' | 'done' | 'delivered' | 'cancelled';
 export type AppointmentSource = 'walk_in' | 'whatsapp' | 'phone' | 'web';
 export type VehicleType     = 'sedan' | 'suv' | 'camioneta' | 'moto' | 'pickup';
@@ -53,6 +55,9 @@ export interface TenantRow {
   plan: PlanId;
   is_active: boolean;
   trial_ends_at: Date | null;
+  subscription_status: SubscriptionStatus;
+  discount_pct: number;
+  discount_until: Date | null;
   whatsapp_enabled: boolean;
   whatsapp_phone: string | null;
   whatsapp_provider: WhatsAppProvider | null;
@@ -164,10 +169,11 @@ export interface PlanRow {
   name: string;
   description: string | null;
   price_monthly: number;      // en centavos
-  max_operators: number;
-  max_appointments_month: number;
-  max_services: number;
-  max_bays: number;
+  // NULL = sin límite
+  max_operators: number | null;
+  max_appointments_month: number | null;
+  max_services: number | null;
+  max_bays: number | null;
   whatsapp_enabled: boolean;
   billing_enabled: boolean;
   reports_enabled: boolean;

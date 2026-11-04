@@ -11,7 +11,7 @@
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 export type UserRole          = 'admin' | 'operator' | 'super_admin';
-export type PlanId            = 'free' | 'basic' | 'pro';
+export type PlanId            = 'estudio' | 'estudio_pro' | 'free' | 'basic' | 'pro';
 export type AppointmentStatus = 'pending' | 'in_progress' | 'done' | 'delivered' | 'cancelled';
 export type AppointmentSource = 'walk_in' | 'whatsapp' | 'phone' | 'web';
 export type VehicleType       = 'sedan' | 'suv' | 'camioneta' | 'moto' | 'pickup';

@@ -51,8 +51,10 @@ export async function register(req: Request, res: Response): Promise<void> {
 
     const { rows: tenantRows } = await client.query<TenantRow>(
       `INSERT INTO tenants (name, slug, nit, owner_name, phone, email, address, city,
-         opening_time, closing_time, bays_count, plan, trial_ends_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'free', NOW() + INTERVAL '14 days')
+         opening_time, closing_time, bays_count, plan, subscription_status, trial_ends_at)
+       -- 14 días de prueba con todo lo de Estudio Pro. Antes decía 'free': el
+       -- registro prometía la prueba y el lavadero arrancaba en el plan Gratis.
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'estudio_pro', 'trial', NOW() + INTERVAL '14 days')
        RETURNING id, name, slug, plan, trial_ends_at`,
       [
         businessName.trim(), slug,

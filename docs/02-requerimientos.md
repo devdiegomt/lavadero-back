@@ -95,6 +95,8 @@ Nomenclatura: `RF-<módulo>-<n>`.
 | RF-MT-3 | El super admin administra tenants y planes | `/api/superadmin/*` |
 | RF-MT-6 | Desactivar un lavadero le corta el acceso: ni entra ni renueva la sesión que tuviera abierta | `toggleTenant`, y la comprobación en `login` y `refresh` |
 | RF-MT-4 | Un lavadero se registra por sí mismo | `/api/onboarding/*` |
+| RF-MT-5 | Un lavadero nuevo prueba 14 días con todo; al vencer, ve todo pero no registra cambios hasta elegir plan | `suscripcion.ts`, `planes-y-prueba.test.ts`. El registro lo prometía desde antes y nada lo aplicaba: arrancaba en el plan Gratis |
+| RF-MT-6 | El lavadero ve su plan, su consumo y los planes que se ofrecen | Configuración → Plan. El cambio de plan y el precio fundador los carga el superadmin hasta que haya cobro con tarjeta |
 | RF-MT-5 | Toda acción del personal que cambia algo queda registrada con quién, qué y cuándo | `action_log`, `GET /api/audit` |
 
 ### Datos personales

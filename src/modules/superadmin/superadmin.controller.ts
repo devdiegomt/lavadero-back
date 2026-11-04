@@ -102,6 +102,9 @@ const UPDATABLE_FIELDS: ReadonlyArray<keyof TenantRow> = [
   'name', 'nit', 'owner_name', 'phone', 'email', 'address', 'city',
   'opening_time', 'closing_time', 'bays_count', 'plan', 'is_active',
   'trial_ends_at', 'whatsapp_enabled', 'billing_provider',
+  // La suscripción: mientras no haya cobro con tarjeta, el superadmin marca
+  // `active` cuando el lavadero paga, y carga el precio fundador.
+  'subscription_status', 'discount_pct', 'discount_until',
 ];
 
 export async function updateTenant(req: Request, res: Response): Promise<void> {
@@ -164,20 +167,16 @@ export async function toggleTenant(req: Request, res: Response): Promise<void> {
 export async function dashboard(req: Request, res: Response): Promise<void> {
   type GlobalRow = {
     active_tenants: string; inactive_tenants: string; in_trial: string;
-    plan_free: string; plan_basic: string; plan_pro: string;
     total_users: string; today_appointments: string; month_appointments: string;
     month_revenue: string; new_tenants_week: string; new_tenants_month: string;
   };
   type TopRow = { id: string; name: string; slug: string; plan: PlanId; appointments: string; revenue: string };
 
-  const [{ rows }, { rows: topTenants }] = await Promise.all([
+  const [{ rows }, { rows: topTenants }, { rows: porPlan }] = await Promise.all([
     db.query<GlobalRow>(`SELECT
       (SELECT COUNT(*) FROM tenants WHERE is_active = true) AS active_tenants,
       (SELECT COUNT(*) FROM tenants WHERE is_active = false) AS inactive_tenants,
       (SELECT COUNT(*) FROM tenants WHERE trial_ends_at > NOW()) AS in_trial,
-      (SELECT COUNT(*) FROM tenants WHERE plan = 'free') AS plan_free,
-      (SELECT COUNT(*) FROM tenants WHERE plan = 'basic') AS plan_basic,
-      (SELECT COUNT(*) FROM tenants WHERE plan = 'pro') AS plan_pro,
       (SELECT COUNT(*) FROM users WHERE is_active = true) AS total_users,
       (SELECT COUNT(*) FROM appointments WHERE scheduled_date = CURRENT_DATE) AS today_appointments,
       (SELECT COUNT(*) FROM appointments WHERE scheduled_date >= DATE_TRUNC('month', NOW())) AS month_appointments,
@@ -193,6 +192,9 @@ export async function dashboard(req: Request, res: Response): Promise<void> {
       WHERE t.is_active = true
       GROUP BY t.id, t.name, t.slug, t.plan
       ORDER BY revenue DESC LIMIT 5`),
+    // Por plan, sin nombres fijos: antes contaba free, basic y pro a mano, y
+    // un plan nuevo no aparecía en el tablero.
+    db.query<{ plan: PlanId; count: string }>('SELECT plan, COUNT(*) AS count FROM tenants GROUP BY plan'),
   ]);
 
   const r = rows[0];
@@ -208,11 +210,7 @@ export async function dashboard(req: Request, res: Response): Promise<void> {
       newTenantsWeek:    parseInt(r.new_tenants_week, 10),
       newTenantsMonth:   parseInt(r.new_tenants_month, 10),
     },
-    planDistribution: {
-      free:  parseInt(r.plan_free, 10),
-      basic: parseInt(r.plan_basic, 10),
-      pro:   parseInt(r.plan_pro, 10),
-    },
+    planDistribution: Object.fromEntries(porPlan.map((p) => [p.plan, parseInt(p.count, 10)])),
     topTenants: topTenants.map((t) => ({
       id: t.id, name: t.name, slug: t.slug, plan: t.plan,
       appointments: parseInt(t.appointments, 10),
