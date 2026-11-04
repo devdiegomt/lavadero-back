@@ -1,4 +1,9 @@
-# Carwash SaaS — Frontend
+# Qlarity — Frontend
+
+**Qlarity** es el nombre del producto: *Q* de *quality* con *clarity*. El código
+interno conserva el nombre provisional `carwash` donde cambiarlo rompería algo
+—el candado entre pestañas `carwash:refresh`, el paquete npm—; lo que ve una
+persona dice Qlarity.
 
 PWA para gestión operativa de lavaderos de autos en Colombia. Diseñado mobile-first para que los operadores la usen desde un celular sin instalación.
 

@@ -56,7 +56,7 @@ function Marca({ nombre, compacta = false }: { nombre?: string; compacta?: boole
         className={`font-semibold uppercase text-gray-900 leading-snug ${compacta ? 'text-xs truncate' : 'text-sm line-clamp-2'}`}
         style={{ fontStretch: '118%', letterSpacing: '0.12em' }}
       >
-        {nombre ?? 'Carwash'}
+        {nombre ?? 'Qlarity'}
       </p>
       {!compacta && <p className="etiqueta text-gray-500 mt-0.5">Panel del lavadero</p>}
     </div>

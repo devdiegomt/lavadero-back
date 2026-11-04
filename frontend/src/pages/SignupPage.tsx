@@ -190,7 +190,7 @@ export default function SignupPage() {
             className="text-xl font-semibold uppercase text-gray-900 leading-none"
             style={{ fontStretch: '125%', letterSpacing: '0.18em' }}
           >
-            Carwash
+            Qlarity
           </p>
           <div aria-hidden="true" className="w-10 h-px bg-brand-600 my-4" />
           <h1 className="text-xl font-semibold text-gray-900">Crea tu cuenta</h1>
