@@ -1,4 +1,5 @@
 import { Check, X } from 'lucide-react';
+import MarcaQ from '../components/MarcaQ';
 import { useState, type Dispatch, type SetStateAction, type HTMLInputTypeAttribute } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
@@ -186,12 +187,15 @@ export default function SignupPage() {
       <div className="max-w-xl mx-auto">
         {/* Brand */}
         <div className="mb-8">
-          <p
-            className="text-xl font-semibold uppercase text-gray-900 leading-none"
-            style={{ fontStretch: '125%', letterSpacing: '0.18em' }}
-          >
-            Qlarity
-          </p>
+          <div className="flex items-center gap-3">
+            <MarcaQ size={24} className="text-brand-600 shrink-0" />
+            <p
+              className="text-xl font-semibold uppercase text-gray-900 leading-none"
+              style={{ fontStretch: '125%', letterSpacing: '0.18em' }}
+            >
+              Qlarity
+            </p>
+          </div>
           <div aria-hidden="true" className="w-10 h-px bg-brand-600 my-4" />
           <h1 className="text-xl font-semibold text-gray-900">Crea tu cuenta</h1>
           <p className="text-gray-500 text-sm mt-1">Pon tu lavadero a operar en 2 minutos</p>

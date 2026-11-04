@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import MarcaQ from '../components/MarcaQ';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate, Link } from 'react-router-dom';
 import { ApiError } from '../lib/api';
@@ -30,14 +31,17 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-10">
       <div className="w-full max-w-sm">
-        {/* Marca: la palabra sola, ancha y espaciada, con una línea de latón. */}
+        {/* Marca: la Q y la palabra, ancha y espaciada, con una línea de latón. */}
         <div className="mb-10">
-          <p
-            className="text-[1.6rem] font-semibold uppercase text-gray-900 leading-none"
-            style={{ fontStretch: '125%', letterSpacing: '0.18em' }}
-          >
-            Qlarity
-          </p>
+          <div className="flex items-center gap-3">
+            <MarcaQ size={30} className="text-brand-600 shrink-0" />
+            <p
+              className="text-[1.6rem] font-semibold uppercase text-gray-900 leading-none"
+              style={{ fontStretch: '125%', letterSpacing: '0.18em' }}
+            >
+              Qlarity
+            </p>
+          </div>
           <div aria-hidden="true" className="w-10 h-px bg-brand-600 my-4" />
           <h1 className="text-sm font-normal text-gray-500" style={{ fontStretch: '100%' }}>Panel del lavadero</h1>
         </div>
