@@ -9,9 +9,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: 'Carwash - Gestión de Lavadero',
-        short_name: 'Carwash',
-        description: 'Gestión inteligente para tu lavadero de autos',
+        name: 'Qlarity — Panel del lavadero',
+        short_name: 'Qlarity',
+        description: 'La operación de tu lavadero, clara: turnos, tablero, pagos y clientes.',
         theme_color: '#121416',
         background_color: '#17191B',
         display: 'standalone',
