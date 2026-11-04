@@ -16,13 +16,13 @@ PWA para gestión operativa de lavaderos de autos en Colombia. Diseñado mobile-
 ### Requisitos
 
 - Node.js 20+
-- Backend corriendo (ver [`lavadero-back`](https://github.com/devdiegomt/lavadero-back))
+- Backend corriendo: está en la raíz de este mismo repositorio (ver el [README](../README.md))
 
 ### Instalación
 
 ```bash
-git clone https://github.com/devdiegomt/lavadero-front.git
-cd lavadero-front
+# Desde la raíz del repositorio
+cd frontend
 npm install
 
 # Variables de entorno
@@ -219,12 +219,12 @@ NAVEGADORES=safari,safari-móvil npm run e2e
 
 ### Cómo correrlas
 
-El dev server de Vite lo levanta Playwright. El backend no —vive en otro
-repositorio y necesita su base— así que va aparte:
+El dev server de Vite lo levanta Playwright. El backend no —necesita su base
+y su propio proceso— así que va aparte, desde la raíz del repositorio:
 
 ```bash
-# Terminal 1: el backend
-cd ../lavadero-back
+# Terminal 1: el backend (desde frontend/, sube a la raíz)
+cd ..
 npm run db:reset
 NODE_ENV=development RATE_LIMIT_MAX=100000 STRICT_RATE_LIMIT_MAX=100 npm run dev
 

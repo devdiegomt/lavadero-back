@@ -8,7 +8,7 @@ funcionalidad.
 
 ### El núcleo es un monolito
 
-El backend (`lavadero-back`) es **un solo proceso, una sola base de datos, un
+El backend (la raíz del repositorio; el panel está en `frontend/`) es **un solo proceso, una sola base de datos, un
 solo despliegue**. Sus 14 módulos —`auth`, `appointments`, `customers`,
 `billing`…— comparten el pool de conexiones, el proceso y el ciclo de vida.
 Cambiar `appointments` obliga a redesplegar `billing`.

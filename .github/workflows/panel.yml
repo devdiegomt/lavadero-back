@@ -8,7 +8,12 @@
 # restrictivo con cookies. Toda la sesión del panel vive en una cookie
 # `httpOnly`, así que si algo se va a romper, se rompe ahí — y el dueño de un
 # lavadero mirando el tablero desde un iPhone es el caso normal, no el raro.
-name: CI
+#
+# El panel vive en frontend/ y el backend en la raíz, del mismo repositorio.
+# Antes eran dos repositorios y este job descargaba el backend de `main` del
+# otro: un PR que tocaba los dos lados no se podía probar entero hasta mergear
+# uno, y al volver privado el backend la descarga habría dejado de funcionar.
+name: Panel
 
 on:
   push:
@@ -17,14 +22,18 @@ on:
 
 jobs:
   tipos:
-    name: Tipos y build
+    name: Tipos y build del panel
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
@@ -83,29 +92,24 @@ jobs:
       CORS_ORIGIN: http://localhost:5173
 
     steps:
-      - name: El panel
-        uses: actions/checkout@v4
-
       # Las pruebas necesitan un backend de verdad: la sesión en cookie no se
       # puede probar contra un mock, que es la razón de que esta suite exista.
-      # Los dos repositorios son públicos, así que esto no necesita token.
-      - name: El backend
-        uses: actions/checkout@v4
-        with:
-          repository: devdiegomt/lavadero-back
-          path: backend
+      # Es el de este mismo commit, así que un cambio que toca los dos lados se
+      # prueba entero.
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
 
       - name: Dependencias del backend
-        working-directory: backend
         run: npm ci
 
       - name: Migraciones y datos
-        working-directory: backend
         env:
           DB_APP_PASSWORD: ci_app_password
         run: npm run db:reset
@@ -117,7 +121,6 @@ jobs:
       # Y los límites arriba: la prueba de la contraseña equivocada gasta un
       # intento por navegador, y son cinco.
       - name: Levantar el backend
-        working-directory: backend
         env:
           NODE_ENV: development
           RATE_LIMIT_MAX: '100000'
@@ -133,6 +136,7 @@ jobs:
           echo "El backend no respondió en 80 s:"; cat /tmp/backend.log; exit 1
 
       - name: Dependencias del panel
+        working-directory: frontend
         run: npm ci
 
       # Sólo el motor de este job: bajar los tres en cada uno de los cinco
@@ -140,6 +144,7 @@ jobs:
       # librerías de sistema que Firefox y WebKit necesitan en Ubuntu; sin eso
       # los binarios están y no arrancan.
       - name: El navegador de este job
+        working-directory: frontend
         run: |
           case "${{ matrix.navegador }}" in
             firefox) motor=firefox ;;
@@ -149,6 +154,7 @@ jobs:
           npx playwright install --with-deps "$motor"
 
       - name: Pruebas
+        working-directory: frontend
         env:
           NAVEGADORES: ${{ matrix.navegador }}
         run: npm run e2e
@@ -160,8 +166,11 @@ jobs:
       #   1. ¿El proceso sigue vivo, o se murió?
       #   2. ¿Qué dijo el log? Un `pool.connect()` agotado, una base caída y un
       #      proceso muerto se ven distinto y se arreglan distinto.
-      #   3. ¿Cómo están las conexiones? Diez `idle` es un pool sano; diez
-      #      `active` o `idle in transaction` es una fuga.
+      #   3. ¿Cómo están las conexiones? Ojo: `idle` en `pg_stat_activity`
+      #      quiere decir que el servidor no está ejecutando nada, **no** que la
+      #      conexión esté libre en el pool. Diez `idle` con el pool agotado es
+      #      una fuga. El dato que decide es la línea `Pool de PostgreSQL con
+      #      cola` del log: `libres=0` y `esperando` que no baja.
       #
       # Sin esto un fallo obliga a adivinar, y adivinar ya costó tres hipótesis
       # falsas en este mismo problema.
@@ -200,5 +209,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ matrix.navegador }}
-          path: playwright-report/
+          path: frontend/playwright-report/
           retention-days: 7

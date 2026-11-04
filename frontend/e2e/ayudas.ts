@@ -12,7 +12,7 @@ export const API = 'http://localhost:3000/api';
 export const ANCHO_ESCRITORIO = 1024;
 
 export const COMO_LEVANTARLO =
-  '  cd ../lavadero-back\n' +
+  '  cd ..   # la raíz del repositorio\n' +
   '  npm run db:reset\n' +
   '  NODE_ENV=development RATE_LIMIT_MAX=100000 STRICT_RATE_LIMIT_MAX=100 npm run dev';
 

@@ -1,6 +1,30 @@
-# Carwash SaaS — Backend
+# Qlarity
 
-API REST multi-tenant para gestión de lavaderos de autos en Colombia. Incluye facturación electrónica DIAN (Alegra), chatbot de WhatsApp con Claude AI, y panel de super-admin.
+Gestión de lavaderos de autos en Colombia: API multi-tenant, panel web
+instalable, facturación electrónica DIAN (Alegra) y chatbot de WhatsApp con
+Claude AI.
+
+## Qué hay en este repositorio
+
+| Carpeta | Qué es | Dónde corre |
+|---|---|---|
+| `/` (raíz) | El backend: API REST, migraciones, crons | Render |
+| [`frontend/`](frontend/README.md) | El panel: React + Vite, PWA | Vercel (*Root Directory* = `frontend`) |
+| `bot-wa/` | El puente con WhatsApp (Baileys) | Docker, aparte |
+| `n8n/` | Los flujos del chatbot | Docker, aparte |
+| [`docs/`](docs/) | Arquitectura, seguridad, requerimientos, decisiones | — |
+
+Hasta noviembre de 2026 el panel vivía en otro repositorio, `lavadero-front`.
+Se juntaron para que un cambio que toca los dos lados sea un solo PR, probado
+entero en CI: antes el CI del panel probaba contra el `main` del backend, así
+que un PR del panel no se podía probar contra un cambio del backend que todavía
+no estaba mergeado. El historial del panel vino con él: `git log -- frontend/…`
+lo muestra completo. El backend se quedó en la raíz para no tocar la
+configuración de Render ni el Dockerfile.
+
+El código interno conserva el nombre provisional `carwash` donde cambiarlo
+rompería algo (la base `carwash_app`, el webhook del bot); lo que ve una
+persona dice Qlarity.
 
 **Stack**: Node.js 20+ · Express · PostgreSQL · Redis · JWT · Pino · Helmet · Zod
 
@@ -72,7 +96,7 @@ entre las piezas y qué decisiones se tomaron— ver
 
 ```bash
 git clone https://github.com/devdiegomt/lavadero-back.git
-cd lavadero-back
+cd lavadero-back   # el backend en la raíz, el panel en frontend/
 
 # Dependencias
 npm install
@@ -266,7 +290,7 @@ Para WhatsApp y n8n, requieren persistent volumes y typicamente se despliegan ap
 **No hay runbook de operación todavía.** Este README prometía un `docs/OPS.md`
 con monitoreo, backups, rotación de claves e incident response; ese archivo no
 existe — el que llevaba ese nombre resultó ser una guía de arranque del
-frontend, y quedó como [`docs/frontend-setup.md`](docs/frontend-setup.md).
+frontend, que ahora es [`frontend/README.md`](frontend/README.md).
 
 Lo que sí está documentado, mientras tanto:
 

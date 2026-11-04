@@ -14,11 +14,11 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * ## Hace falta el backend corriendo
  *
- * Vite lo levanta Playwright; el backend no, porque vive en otro repositorio y
+ * Vite lo levanta Playwright; el backend no, porque está en la raíz del repo y
  * necesita su base. Las pruebas fallan con un mensaje que lo dice en vez de
  * quedarse en un timeout sin explicación.
  *
- *     cd ../lavadero-back && npm run dev
+ *     cd .. && npm run dev        # el backend, en la raíz del repositorio
  *     npx playwright test
  *
  * ## Por qué cross-origin
