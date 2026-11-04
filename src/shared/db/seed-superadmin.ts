@@ -56,7 +56,12 @@ import { hashPassword } from '../utils/password';
 const MINIMO = 8;
 
 async function seedSuperAdmin(): Promise<void> {
-  const email = process.env.SUPER_ADMIN_EMAIL;
+  // En minúsculas, como lo busca el login (validate.ts) y como lo guarda el
+  // registro de lavaderos. Guardado tal cual, una sola mayúscula en la variable
+  // —`Diego@…`— dejaba al superadministrador sin poder entrar nunca: el login
+  // buscaba `diego@…` y respondía «credenciales inválidas» con la contraseña
+  // correcta. Pasó en producción. Ver __tests__/superadmin-email.test.ts.
+  const email = process.env.SUPER_ADMIN_EMAIL?.toLowerCase().trim();
   const password = process.env.SUPER_ADMIN_PASSWORD;
 
   if (!email || !password) {
@@ -77,13 +82,16 @@ async function seedSuperAdmin(): Promise<void> {
     const passwordHash = await hashPassword(password);
 
     const { rows: existentes } = await queryAdmin<{ id: string }>(
-      "SELECT id FROM users WHERE email = $1 AND role = 'super_admin'",
+      // `LOWER`: encuentra también al que la versión anterior guardó con
+      // mayúsculas, y el UPDATE de abajo lo deja en minúsculas.
+      "SELECT id FROM users WHERE LOWER(email) = $1 AND role = 'super_admin'",
       [email],
     );
 
     if (existentes.length > 0) {
-      await queryAdmin('UPDATE users SET password_hash = $1 WHERE id = $2', [
+      await queryAdmin('UPDATE users SET password_hash = $1, email = $2 WHERE id = $3', [
         passwordHash,
+        email,
         existentes[0].id,
       ]);
       console.log(`🔑 Contraseña del super admin rotada: ${email}`);
