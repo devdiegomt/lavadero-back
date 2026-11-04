@@ -82,10 +82,31 @@ export interface Autorizacion {
   consentSource: 'whatsapp' | 'panel' | 'onboarding';
 }
 
-export function autorizacionDe(source: Autorizacion['consentSource']): Autorizacion {
+/**
+ * Versión del aviso de privacidad **de cada lavadero**, la página pública
+ * `/privacidad/:slug` del panel. Es lo que el operario le muestra al cliente
+ * antes de marcar que autorizó, así que es la versión que se guarda en las
+ * autorizaciones que vienen del panel. Si cambia el texto de esa página de
+ * forma sustantiva, se sube acá y en `frontend/src/pages/AvisoLavaderoPage.tsx`.
+ */
+export const VERSION_AVISO_LAVADERO = '2026-11-v1';
+
+/**
+ * Versión de la política de tratamiento de datos **de Qlarity** (`/privacidad`
+ * en el panel), la que acepta quien registra un lavadero. Ahí Qlarity es el
+ * responsable: los datos son los del dueño y su equipo. Se guarda en
+ * `onboarding_log`. Igual que la de arriba, va en sincronía con
+ * `frontend/src/pages/PoliticaPrivacidadPage.tsx`.
+ */
+export const VERSION_POLITICA_QLARITY = '2026-11-v1';
+
+export function autorizacionDe(
+  source: Autorizacion['consentSource'],
+  version: string = VERSION_AVISO,
+): Autorizacion {
   return {
     consentAt: new Date(),
-    consentVersion: VERSION_AVISO,
+    consentVersion: version,
     consentSource: source,
   };
 }

@@ -210,6 +210,9 @@ export const schemas = {
   }),
 
   appointmentQuick: z.object({
+    // Obligatoria si el cliente es nuevo o nunca autorizó; el controlador
+    // decide, porque desde acá no se sabe si ya existe.
+    autorizaDatos: z.boolean().optional(),
     customerPhone: phone,
     customerFirstName: str(80),
     customerLastName: optStr(80),
@@ -235,6 +238,14 @@ export const schemas = {
 
   // ── Customers ─────────────────────────────────────────────────────────────
   customerCreate: z.object({
+    // Ley 1581: la autorización es previa a guardar el dato. El operario la
+    // confirma en el formulario después de mostrarle al cliente el aviso del
+    // lavadero; sin ella no se crea. Ver docs/05-seguridad.md §5.
+    autorizaDatos: z.literal(true, {
+      errorMap: () => ({
+        message: 'Falta la autorización del cliente para guardar sus datos (Ley 1581). Muéstrale el aviso de privacidad y confírmala.',
+      }),
+    }),
     firstName: str(80),
     lastName: optStr(80),
     phone,
@@ -312,6 +323,11 @@ export const schemas = {
 
   // ── Onboarding (self-service) ─────────────────────────────────────────────
   onboardingRegister: z.object({
+    // Quien registra el lavadero acepta la política de tratamiento de Qlarity
+    // (Ley 1581): sin eso no se crea la cuenta.
+    aceptaPolitica: z.literal(true, {
+      errorMap: () => ({ message: 'Para crear la cuenta hay que aceptar la política de tratamiento de datos.' }),
+    }),
     businessName: str(150),
     nit: optStr(20),
     ownerName: optStr(150),

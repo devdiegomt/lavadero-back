@@ -20,6 +20,7 @@ import superadminRoutes  from './modules/superadmin/superadmin.routes';
 import billingRoutes     from './modules/billing/billing.routes';
 import waBridgeRoutes    from './modules/whatsapp/wa-bridge.routes';
 import auditRoutes       from './modules/audit/audit.routes';
+import publicoRoutes from './modules/publico/publico.routes';
 import { initBooking }   from './modules/whatsapp/wa-bridge.booking';
 import Redis             from 'ioredis';
 
@@ -100,6 +101,8 @@ app.use('/api/billing',      billingRoutes);
 app.use('/api/onboarding',   onboardingRoutes);
 app.use('/api/superadmin',   superadminRoutes);
 app.use('/api/audit',        auditRoutes);
+// Sin sesión: sólo el contacto del lavadero para su aviso de privacidad.
+app.use('/api/publico',      publicoRoutes);
 
 // WhatsApp AI Bridge (consumido por n8n)
 app.use('/api/wa-bridge', waBridgeRoutes);

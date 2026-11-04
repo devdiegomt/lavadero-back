@@ -1,4 +1,5 @@
 import { Check, X } from 'lucide-react';
+import CasillaAutorizacion from '../components/CasillaAutorizacion';
 import MarcaQ from '../components/MarcaQ';
 import { useState, type Dispatch, type SetStateAction, type HTMLInputTypeAttribute } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
@@ -28,6 +29,7 @@ interface AdminData {
   adminEmail: string;
   adminPassword: string;
   confirmPassword: string;
+  aceptaPolitica: boolean;
 }
 
 interface ServiceDraft {
@@ -70,7 +72,7 @@ export default function SignupPage() {
   });
   const [admin, setAdmin] = useState<AdminData>({
     adminFirstName: '', adminLastName: '', adminEmail: '',
-    adminPassword: '', confirmPassword: '',
+    adminPassword: '', confirmPassword: '', aceptaPolitica: false,
   });
   const [services, setServices] = useState<ServiceDraft[]>(DEFAULT_SERVICES);
 
@@ -97,6 +99,7 @@ export default function SignupPage() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(admin.adminEmail)) return 'Email inválido';
     if (admin.adminPassword.length < 8) return 'La contraseña debe tener al menos 8 caracteres';
     if (admin.adminPassword !== admin.confirmPassword) return 'Las contraseñas no coinciden';
+    if (!admin.aceptaPolitica) return 'Para crear la cuenta tienes que aceptar la política de tratamiento de datos';
     return null;
   };
 
@@ -122,6 +125,7 @@ export default function SignupPage() {
         adminPassword:  admin.adminPassword,
         adminFirstName: admin.adminFirstName.trim(),
         adminLastName:  admin.adminLastName.trim() || null,
+        aceptaPolitica: admin.aceptaPolitica,
       });
       setStep(3);
     } catch (e) {
@@ -377,6 +381,16 @@ function AdminStep({ value, onChange, onBack, onSubmit, submitting }: AdminStepP
 
       <Field label="Confirma contraseña *" value={value.confirmPassword} onChange={(v) => set('confirmPassword', v)}
         type="password" placeholder="Repite la contraseña" autoComplete="new-password" />
+
+      <CasillaAutorizacion
+        id="acepta-politica"
+        marcada={value.aceptaPolitica}
+        onCambio={(v) => set('aceptaPolitica', v)}
+        enlace="/privacidad"
+        textoEnlace="Ver la política"
+      >
+        Acepto la política de tratamiento de datos personales de Qlarity.
+      </CasillaAutorizacion>
 
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-700">
         Empiezas con <strong>14 días de prueba</strong> con todo lo de Estudio Pro, sin tarjeta de crédito.

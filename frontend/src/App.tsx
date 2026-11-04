@@ -7,6 +7,8 @@ import AppLayout from './layouts/AppLayout';
 import SuperAdminLayout from './layouts/SuperAdminLayout';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
+import PoliticaPrivacidadPage from './pages/PoliticaPrivacidadPage';
+import AvisoLavaderoPage from './pages/AvisoLavaderoPage';
 import DashboardPage from './pages/DashboardPage';
 import AppointmentsPage from './pages/AppointmentsPage';
 import BoardPage from './pages/BoardPage';
@@ -28,6 +30,11 @@ function AppRoutes() {
       {/* Públicas */}
       <Route path="/login"  element={isAuthenticated ? <Navigate to={homeByRole} replace /> : <LoginPage />} />
       <Route path="/signup" element={isAuthenticated ? <Navigate to={homeByRole} replace /> : <SignupPage />} />
+
+      {/* Públicas, con o sin sesión: la política de Qlarity y el aviso de cada
+          lavadero, que se le muestra o se le envía al cliente final. */}
+      <Route path="/privacidad" element={<PoliticaPrivacidadPage />} />
+      <Route path="/privacidad/:slug" element={<AvisoLavaderoPage />} />
 
       {/* App del tenant */}
       <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>

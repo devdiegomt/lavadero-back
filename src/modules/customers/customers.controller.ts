@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { autorizacionDe, VERSION_AVISO_LAVADERO } from '../whatsapp/consentimiento';
 import * as db from '../../shared/db';
 import { AppError } from '../../shared/middleware/errorHandler';
 import { anonimizarCliente } from '../../shared/db/retencion';
@@ -78,13 +79,19 @@ export async function create(req: Request, res: Response): Promise<void> {
   const { firstName, lastName, phone, email, documentType, documentNumber, notes } =
     req.body as CustomerCreateBody;
 
+  // El schema ya exigió `autorizaDatos: true`. Se guarda con fecha, versión del
+  // aviso y canal, igual que la de WhatsApp: poder demostrarla es parte de la
+  // obligación.
+  const aut = autorizacionDe('panel', VERSION_AVISO_LAVADERO);
   const { rows } = await db.query<CustomerRow>(
-    `INSERT INTO customers (tenant_id, first_name, last_name, phone, email, document_type, document_number, notes)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    `INSERT INTO customers (tenant_id, first_name, last_name, phone, email, document_type, document_number, notes,
+                            consent_at, consent_version, consent_source)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
     // `phone` llega ya canónico desde el schema (`normalizarTelefono`), que es
     // lo que lo mantiene enlazable con el WhatsApp del mismo cliente.
     [req.tenantId, firstName.trim(), lastName?.trim() ?? null, phone,
-     email?.trim() ?? null, documentType ?? 'CC', documentNumber?.trim() ?? null, notes?.trim() ?? null],
+     email?.trim() ?? null, documentType ?? 'CC', documentNumber?.trim() ?? null, notes?.trim() ?? null,
+     aut.consentAt, aut.consentVersion, aut.consentSource],
   );
 
   res.status(201).json(rows[0]);

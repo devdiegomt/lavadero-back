@@ -115,7 +115,7 @@ describe('qué queda registrado', () => {
     const res = await request(app)
       .post('/api/customers')
       .set('Authorization', `Bearer ${token}`)
-      .send({ firstName: 'Auditado', phone: '3005554433' });
+      .send({ autorizaDatos: true, firstName: 'Auditado', phone: '3005554433' });
     expect(res.status).toBe(201);
 
     const filas = await esperarRegistro('customers');
@@ -200,7 +200,7 @@ describe('lo que NO se guarda', () => {
     const res = await request(app)
       .post('/api/customers')
       .set('Authorization', `Bearer ${token}`)
-      .send({ firstName: 'Auditado', phone: '3007778899', notes: 'dato sensible del cliente' });
+      .send({ autorizaDatos: true, firstName: 'Auditado', phone: '3007778899', notes: 'dato sensible del cliente' });
     expect(res.status).toBe(201);
 
     const filas = await esperarRegistro('customers');
@@ -295,7 +295,7 @@ describe('no puede romper nada', () => {
       const res = await request(app)
         .post('/api/customers')
         .set('Authorization', `Bearer ${token}`)
-        .send({ firstName: 'Auditado', phone: '3006665544' });
+        .send({ autorizaDatos: true, firstName: 'Auditado', phone: '3006665544' });
 
       // Lo que importa: el lavadero pudo trabajar igual.
       expect(res.status).toBe(201);
@@ -313,7 +313,7 @@ describe('se puede consultar, que es para lo que existe', () => {
     await request(app)
       .post('/api/customers')
       .set('Authorization', `Bearer ${token}`)
-      .send({ firstName: 'Auditado', phone: '3004443322' });
+      .send({ autorizaDatos: true, firstName: 'Auditado', phone: '3004443322' });
     await esperarRegistro('customers');
 
     const res = await request(app).get('/api/audit').set('Authorization', `Bearer ${token}`);
@@ -329,7 +329,7 @@ describe('se puede consultar, que es para lo que existe', () => {
     const creado = await request(app)
       .post('/api/customers')
       .set('Authorization', `Bearer ${token}`)
-      .send({ firstName: 'Auditado', phone: '3002221100' });
+      .send({ autorizaDatos: true, firstName: 'Auditado', phone: '3002221100' });
     await esperarRegistro('customers');
 
     const res = await request(app)
@@ -353,7 +353,7 @@ describe('se puede consultar, que es para lo que existe', () => {
     await request(app)
       .post('/api/customers')
       .set('Authorization', `Bearer ${token}`)
-      .send({ firstName: 'Auditado', phone: '3001110099' });
+      .send({ autorizaDatos: true, firstName: 'Auditado', phone: '3001110099' });
     await esperarRegistro('customers');
 
     const res = await request(app)

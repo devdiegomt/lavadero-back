@@ -68,7 +68,7 @@ describe('mitad 1: lo que entra queda canónico', () => {
     const res = await request(app)
       .post('/api/customers')
       .set('Authorization', `Bearer ${token}`)
-      .send({ firstName: 'Diego', lastName: 'Duplicado', phone: SIN_PREFIJO });
+      .send({ autorizaDatos: true, firstName: 'Diego', lastName: 'Duplicado', phone: SIN_PREFIJO });
 
     expect(res.status).toBe(201);
     expect(res.body.phone).toBe(CANONICO);
@@ -79,7 +79,7 @@ describe('mitad 1: lo que entra queda canónico', () => {
     const creado = await request(app)
       .post('/api/customers')
       .set('Authorization', `Bearer ${token}`)
-      .send({ firstName: 'Diego', lastName: 'Duplicado', phone: '322 377 2019' });
+      .send({ autorizaDatos: true, firstName: 'Diego', lastName: 'Duplicado', phone: '322 377 2019' });
     expect(creado.status).toBe(201);
 
     // Como llega desde bot-wa: E.164 y con LID.
@@ -104,7 +104,7 @@ describe('mitad 1: lo que entra queda canónico', () => {
     const res = await request(app)
       .post('/api/customers')
       .set('Authorization', `Bearer ${token}`)
-      .send({ firstName: 'Nadie', phone: '---------' });
+      .send({ autorizaDatos: true, firstName: 'Nadie', phone: '---------' });
 
     expect(res.status).toBe(400);
   });
@@ -114,7 +114,7 @@ describe('mitad 1: lo que entra queda canónico', () => {
     const creado = await request(app)
       .post('/api/customers')
       .set('Authorization', `Bearer ${token}`)
-      .send({ firstName: 'Diego', phone: '+573001119999' });
+      .send({ autorizaDatos: true, firstName: 'Diego', phone: '+573001119999' });
     expect(creado.status).toBe(201);
 
     const res = await request(app)

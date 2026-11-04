@@ -1,4 +1,6 @@
 import type { Request, Response } from 'express';
+import { autorizacionDe, VERSION_AVISO_LAVADERO } from '../whatsapp/consentimiento';
+import { registrarAutorizacion } from '../whatsapp/wa-identity';
 import * as db from '../../shared/db';
 import { AppError } from '../../shared/middleware/errorHandler';
 import { getServicePrice } from '../../shared/utils/pricing';
@@ -275,7 +277,7 @@ export async function quickCreate(req: Request, res: Response): Promise<void> {
   const {
     customerPhone, customerFirstName, customerLastName,
     plate, vehicleType, brand, model, color,
-    serviceId, scheduledTime, assignedTo, bayNumber, notes,
+    serviceId, scheduledTime, assignedTo, bayNumber, notes, autorizaDatos,
   } = req.body as AppointmentQuickBody;
 
   const client = await db.getClient();
@@ -283,23 +285,41 @@ export async function quickCreate(req: Request, res: Response): Promise<void> {
     await client.query('BEGIN');
 
     // 1. Buscar o crear cliente
-    const { rows: existingCustomers } = await client.query<{ id: string }>(
-      'SELECT id FROM customers WHERE phone = $1 AND tenant_id = $2 AND deleted_at IS NULL LIMIT 1',
+    const { rows: existingCustomers } = await client.query<{ id: string; consent_at: Date | null }>(
+      'SELECT id, consent_at FROM customers WHERE phone = $1 AND tenant_id = $2 AND deleted_at IS NULL LIMIT 1',
       [customerPhone.trim(), req.tenantId],
     );
+
+    // Ley 1581: un cliente nuevo, o uno que nunca autorizó, necesita la
+    // autorización antes de guardar o volver a usar sus datos. Es la misma
+    // regla que aplica el bot de WhatsApp a los clientes que vuelven.
+    const necesitaAutorizacion = existingCustomers.length === 0 || existingCustomers[0].consent_at === null;
+    if (necesitaAutorizacion && autorizaDatos !== true) {
+      throw new AppError(
+        'Falta la autorización del cliente para guardar sus datos (Ley 1581). Muéstrale el aviso de privacidad y confírmala.',
+        400,
+        { codigo: 'FALTA_AUTORIZACION' },
+      );
+    }
+    const aut = autorizacionDe('panel', VERSION_AVISO_LAVADERO);
 
     let customerId: string;
     if (existingCustomers.length > 0) {
       customerId = existingCustomers[0].id;
+      if (existingCustomers[0].consent_at === null) {
+        // No pisa una autorización anterior: ver registrarAutorizacion.
+        await registrarAutorizacion(req.tenantId!, customerId, aut, client.query.bind(client) as typeof db.query);
+      }
       await client.query(
         'UPDATE customers SET first_name = $1, last_name = $2 WHERE id = $3',
         [customerFirstName.trim(), customerLastName?.trim() ?? null, customerId],
       );
     } else {
       const { rows: newCustomer } = await client.query<{ id: string }>(
-        `INSERT INTO customers (tenant_id, first_name, last_name, phone)
-         VALUES ($1, $2, $3, $4) RETURNING id`,
-        [req.tenantId, customerFirstName.trim(), customerLastName?.trim() ?? null, customerPhone.trim()],
+        `INSERT INTO customers (tenant_id, first_name, last_name, phone, consent_at, consent_version, consent_source)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+        [req.tenantId, customerFirstName.trim(), customerLastName?.trim() ?? null, customerPhone.trim(),
+         aut.consentAt, aut.consentVersion, aut.consentSource],
       );
       customerId = newCustomer[0].id;
     }

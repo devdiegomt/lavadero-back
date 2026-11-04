@@ -91,6 +91,7 @@ describe('TC-001: Flujo completo de turno', () => {
       .post('/api/appointments/quick')
       .set(auth())
       .send({
+        autorizaDatos: true,
         customerPhone: '+573991234567',
         customerFirstName: 'Test',
         plate: 'TST001',
@@ -175,6 +176,7 @@ describe('TC-003: Transiciones inválidas', () => {
       .post('/api/appointments/quick')
       .set(auth())
       .send({
+        autorizaDatos: true,
         customerPhone: '+573991234568',
         customerFirstName: 'State',
         plate: 'TST002',
