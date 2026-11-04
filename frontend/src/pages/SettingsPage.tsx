@@ -307,7 +307,7 @@ function ServicesTab() {
                 </button>
                 <button
                   onClick={() => handleToggle(s.id)}
-                  className={`text-xs px-2 py-1 ${s.is_active ? 'text-orange-500' : 'text-green-600'}`}
+                  className={`text-xs px-2 py-1 ${s.is_active ? 'text-orange-700' : 'text-green-600'}`}
                 >
                   {s.is_active ? 'Desactivar' : 'Activar'}
                 </button>
@@ -485,7 +485,7 @@ function TeamTab() {
                 </button>
                 <button
                   onClick={() => handleToggle(u.id)}
-                  className={`text-xs px-2 py-1 ${u.is_active ? 'text-orange-500' : 'text-green-600'}`}
+                  className={`text-xs px-2 py-1 ${u.is_active ? 'text-orange-700' : 'text-green-600'}`}
                 >
                   {u.is_active ? 'Desactivar' : 'Activar'}
                 </button>

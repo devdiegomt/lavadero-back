@@ -198,3 +198,22 @@ test.describe('cerrar sesión', () => {
     expect(cookies.find((c) => c.name === 'refresh_token' && c.value !== '')).toBeUndefined();
   });
 });
+
+test.describe('cuando /api no llega al backend', () => {
+  test('el login dice que no pudo conectar, no «Unexpected token»', async ({ page }) => {
+    // Lo que respondió Vercel en producción con el reenvío de /api mal
+    // configurado: una página de error en texto plano, no JSON.
+    await page.route('**/api/auth/login', (ruta) =>
+      ruta.fulfill({ status: 404, contentType: 'text/plain', body: 'The page could not be found\n\nNOT_FOUND\n' }),
+    );
+    await page.goto('/');
+    await page.fill('#email', 'alguien@ejemplo.co');
+    await page.fill('#password', 'cualquiera1');
+    await page.click('button[type="submit"]');
+
+    const alerta = page.getByRole('alert');
+    await expect(alerta).toContainText('No se pudo conectar con el servidor');
+    await expect(alerta).toContainText('404');
+    await expect(alerta).not.toContainText(/Unexpected token|JSON/);
+  });
+});

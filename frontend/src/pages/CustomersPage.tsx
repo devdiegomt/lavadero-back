@@ -179,7 +179,7 @@ export default function CustomersPage() {
                 </button>
                 <button
                   onClick={() => setDeleteId(c.id)}
-                  className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded transition"
+                  className="text-xs text-red-700 hover:text-red-800 px-2 py-1 rounded transition"
                 >
                   Eliminar
                 </button>

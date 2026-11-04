@@ -241,9 +241,9 @@ export default function SignupPage() {
 
         {/* Footer link */}
         {step === 1 && (
-          <p className="text-center text-brand-300 text-xs mt-6">
+          <p className="text-center text-gray-500 text-sm mt-6">
             ¿Ya tienes cuenta?{' '}
-            <Link to="/login" className="text-white hover:underline font-medium">
+            <Link to="/login" className="text-brand-700 hover:text-brand-800 hover:underline font-semibold">
               Inicia sesión
             </Link>
           </p>
