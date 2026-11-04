@@ -11,11 +11,16 @@
  * que ser uno que alguien lea, porque la ley pone plazos para responder.
  */
 export const RESPONSABLE = {
-  nombre: '',          // Nombre completo
-  documento: '',       // p. ej. «C.C. 1.234.567.890»
-  ciudad: '',          // Ciudad de domicilio
+  nombre: 'Diego Alejandro Mayorga Torres',
+  // Sin número de documento, a propósito: el Decreto 1377 (art. 13) pide
+  // nombre, domicilio, dirección, correo y teléfono, no la cédula, y publicarla
+  // en internet sólo suma riesgo de suplantación.
+  ciudad: 'Zipaquirá, Cundinamarca',
+  // Pendiente a propósito: el Decreto 1377 pide una dirección, y para una
+  // persona natural sin oficina sería la de su casa, publicada en internet.
+  // Se decide aparte (oficina virtual, apartado, o la de la casa).
   direccion: '',       // Dirección de notificaciones
-  correo: '',          // Correo para datos personales
+  correo: 'devdiegomt@gmail.com',
   telefono: '',        // Opcional
 };
 
