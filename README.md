@@ -299,7 +299,46 @@ Lo que sí está documentado, mientras tanto:
 - **Retención de datos personales** — [Seguridad §5](docs/05-seguridad.md#5-datos-personales-ley-1581).
 - **Índice de la documentación** — [`docs/README.md`](docs/README.md).
 
-Backups, monitoreo y respuesta a incidentes siguen sin definir.
+Monitoreo y respuesta a incidentes siguen sin definir. Los respaldos, sí:
+
+### Respaldos
+
+Cada noche, a las 3 a. m. de Colombia, `.github/workflows/respaldo.yml` saca un
+respaldo de la base, lo cifra con AES-256, **lo restaura en una base vacía y
+compara tabla por tabla** que no falte ninguna fila, y lo guarda 30 días como
+artefacto de esa ejecución. Si el job está en verde, el respaldo de esa noche se
+pudo restaurar entero.
+
+**Para activarlo**, dos secretos en *Settings → Secrets and variables →
+Actions*:
+
+| Secreto | Valor |
+|---|---|
+| `RESPALDO_DATABASE_URL` | La URL del *Session pooler* de Supabase con el usuario `postgres.<referencia>`. No `carwash_app`: ése sólo ve un lavadero a la vez |
+| `RESPALDO_CLAVE` | Una clave larga. **Guardarla también fuera de GitHub**: sin ella los respaldos no se abren, y GitHub no deja volver a leer un secreto |
+
+Después, *Actions → Respaldo → Run workflow* para probarlo sin esperar a la
+noche.
+
+**Por qué no es un `pg_dump` a secas:** las tablas tienen `FORCE ROW LEVEL
+SECURITY`, que alcanza también al dueño. Un `pg_dump` común con un usuario que
+no se salta RLS falla con *query would be affected by row-level security
+policy*. `scripts/respaldo.sh` lo detecta y respalda con `app.bypass_rls = on`,
+la misma puerta que usan las migraciones. Comprobado con un usuario así: el
+`pg_dump` común falla, el script respalda las 17 tablas.
+
+**Para restaurar** (en una base nueva, no encima de producción):
+
+```bash
+# 1. Bajar el artefacto «respaldo-…» de la ejecución que se quiera, en Actions
+# 2. Restaurar
+gpg --decrypt qlarity-AAAA-MM-DD.dump.gpg | pg_restore --no-owner --no-acl -d "<URL de la base nueva>"
+# 3. Recrear el rol de la aplicación y sus permisos, que el respaldo no lleva
+DATABASE_URL="<URL de la base nueva>" DB_APP_PASSWORD="<la de producción>" npm run db:migrate-rls
+```
+
+`scripts/verificar-respaldo.sh` hace los pasos 2 y la comparación de filas, y es
+lo que corre el CI cada noche.
 
 Resumen rápido:
 
@@ -307,7 +346,7 @@ Resumen rápido:
 - **Logs**: Pino JSON estructurado. En Railway/Fly se ven directo. Local: `npm run dev` los formatea con `pino-pretty`.
 - **Errores**: Sentry (si `SENTRY_DSN` configurado). Solo captura 5xx, ignora 4xx (errores de validación esperados).
 - **Rate limit**: 100 req/15min por usuario (por IP sin sesión), 5 req/15min en login y signup. Ajustable vía env.
-- **Backups**: configurar en el proveedor de Postgres (Railway hace daily automático).
+- **Backups**: diarios, cifrados y verificados. Ver «Respaldos» arriba.
 - **Rotación de `ENCRYPTION_KEY`**: usar `src/shared/db/rotate-encryption-key.js`. Hacer backup ANTES.
 
 ---
