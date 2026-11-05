@@ -16,12 +16,11 @@ export const RESPONSABLE = {
   // nombre, domicilio, dirección, correo y teléfono, no la cédula, y publicarla
   // en internet sólo suma riesgo de suplantación.
   ciudad: 'Zipaquirá, Cundinamarca',
-  // Pendiente a propósito: el Decreto 1377 pide una dirección, y para una
-  // persona natural sin oficina sería la de su casa, publicada en internet.
-  // Se decide aparte (oficina virtual, apartado, o la de la casa).
-  direccion: '',       // Dirección de notificaciones
+  // Provisional: si después hay oficina virtual o una dirección comercial, se
+  // cambia acá y en ningún otro lado.
+  direccion: 'Carrera 10A # 24-34',
   correo: 'devdiegomt@gmail.com',
-  telefono: '',        // Opcional
+  telefono: '+57 300 018 0855',
 };
 
 /** Versión de la política. Sube junto con VERSION_POLITICA_QLARITY del backend. */

@@ -12,6 +12,9 @@ test('la política de Qlarity se lee sin iniciar sesión', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Política de tratamiento de datos personales/);
   await expect(page.getByRole('heading', { name: /Con quién se comparten/ })).toBeVisible();
   await expect(page.locator('#password')).toHaveCount(0); // no manda al login
+  // Todos los datos del responsable completos: la página marca en rojo los que
+  // faltan, y una política publicada sin responsable no cumple la ley.
+  await expect(page.locator('article')).not.toContainText('por completar');
 });
 
 test.describe('con el backend', () => {
