@@ -79,7 +79,7 @@ for (const esquema of ['dark', 'light'] as const) {
     test.use({ colorScheme: esquema });
 
     test('el login y el registro se leen', async ({ page }) => {
-      for (const ruta of ['/login', '/signup']) {
+      for (const ruta of ['/login', '/signup', '/privacidad', '/privacidad/el-brillante']) {
         await page.goto(ruta);
         await page.waitForLoadState('networkidle');
         expect(await fallasDeContraste(page), ruta).toEqual([]);

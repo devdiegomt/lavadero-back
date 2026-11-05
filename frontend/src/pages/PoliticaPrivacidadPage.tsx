@@ -15,8 +15,8 @@ import PaginaLegal, { Dato, Seccion } from '../components/PaginaLegal';
 import { RESPONSABLE, VERSION_POLITICA, VIGENTE_DESDE } from '../lib/responsable';
 
 const ENCARGADOS: Array<{ quien: string; para: string; donde: string }> = [
-  { quien: 'Supabase', para: 'Base de datos donde se guarda todo lo que registra el panel', donde: 'Estados Unidos' },
-  { quien: 'Render', para: 'Servidor que atiende al panel y procesa los datos', donde: 'Estados Unidos' },
+  { quien: 'Supabase', para: 'Base de datos donde se guarda todo lo que registra el panel', donde: 'Estados Unidos (Oregón)' },
+  { quien: 'Render', para: 'Servidor que atiende al panel y procesa los datos', donde: 'Estados Unidos (Oregón)' },
   { quien: 'Vercel', para: 'Publicación del panel web', donde: 'Estados Unidos y red global' },
   { quien: 'GitHub', para: 'Respaldos diarios de la base, cifrados', donde: 'Estados Unidos' },
   { quien: 'Anthropic', para: 'Entender los mensajes que llegan por WhatsApp (sólo si el lavadero usa el bot)', donde: 'Estados Unidos' },
@@ -40,7 +40,7 @@ export default function PoliticaPrivacidadPage() {
       <Seccion titulo="1. Quién es el responsable">
         <p>
           Qlarity es un software para administrar lavaderos de autos. Lo opera <Dato valor={r.nombre} falta="nombre completo" />,
-          persona natural identificada con <Dato valor={r.documento} falta="documento" />, con domicilio en{' '}
+          persona natural, con domicilio en{' '}
           <Dato valor={r.ciudad} falta="ciudad" /> y dirección de notificaciones <Dato valor={r.direccion} falta="dirección" />.
         </p>
         <p>
