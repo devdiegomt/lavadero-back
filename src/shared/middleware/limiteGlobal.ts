@@ -63,3 +63,44 @@ export function crearLimiteGlobal(opciones: { windowMs: number; max: number }): 
     },
   });
 }
+
+/**
+ * El slug del lavadero de una ruta pública (`/lavaderos/:slug/...`), relativo a
+ * donde se monta el limitador (`/api/publico`).
+ */
+function slugDe(path: string): string {
+  return /^\/lavaderos\/([a-z0-9-]{1,80})(?:\/|$)/i.exec(path)?.[1]?.toLowerCase() ?? '-';
+}
+
+/** La clave de una petición pública: por lavadero, y dentro de él por IP. */
+export function claveDelLimitePublico(req: Request): string {
+  return `publico:${slugDe(req.path)}|${claveDelLimite(req)}`;
+}
+
+/**
+ * Límite de las rutas públicas (aviso de privacidad y página de reservas),
+ * **aparte del global**.
+ *
+ * Mientras `req.ip` sea la del balanceador (brecha #7), la cuota anónima la
+ * comparte todo internet. Con las páginas públicas en el mismo balde, cien
+ * peticiones a una página de reservas —un bot, o alguien recargando a
+ * propósito— dejaban **sin poder iniciar sesión a todos los lavaderos**. Se
+ * comprobó contra el servidor: 100 GET a la página y el login siguiente dio 429.
+ *
+ * Separadas, lo peor que logra quien martille la página de un lavadero es
+ * frenar **esa** página por 15 minutos: el panel y las páginas de los demás
+ * lavaderos siguen. Cuando se cierre la brecha #7 la clave pasa a ser por
+ * persona de verdad, sin tocar esto.
+ */
+export function crearLimitePublico(opciones: { windowMs: number; max: number }): RateLimitRequestHandler {
+  return rateLimit({
+    windowMs: opciones.windowMs,
+    max: opciones.max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: claveDelLimitePublico,
+    message: {
+      error: 'Hay demasiadas solicitudes a esta página. Intenta de nuevo en unos minutos.',
+    },
+  });
+}

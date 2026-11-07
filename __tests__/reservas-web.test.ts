@@ -13,8 +13,8 @@ import { VERSION_AVISO_LAVADERO } from '../src/modules/whatsapp/consentimiento';
 import { horasLibres, MAX_PENDIENTES_POR_TELEFONO } from '../src/modules/publico/reservas';
 
 const BASE = '/api/publico/lavaderos/el-brillante/reservas';
-const TEL = ['+573118880001', '+573118880002', '+573118880003', '+573118880004', '+573118880005'];
-const PLACAS = ['WEB001', 'WEB002', 'WEB003', 'WEB004', 'WEB005', 'WEB006'];
+const TEL: string[] = ['+573118880001', '+573118880002', '+573118880003', '+573118880004', '+573118880005'];
+const PLACAS: string[] = ['WEB001', 'WEB002', 'WEB003', 'WEB004', 'WEB005', 'WEB006'];
 
 interface Servicio { id: string; nombre: string; minutos: number; precios: Record<string, number | null> }
 interface Dia { fecha: string; etiqueta: string; horas: string[] }
@@ -194,6 +194,52 @@ describe('reservar', () => {
     const res = await request(app).post(BASE).send(reserva({ telefono: TEL[4], placa: PLACAS[5], fecha: dia.fecha, hora }));
     expect(res.status).toBe(409);
     expect(JSON.stringify(res.body)).toMatch(/ocupar/);
+  });
+
+  it('diez personas a la vez por el mismo horario: entran tantas como bahías', async () => {
+    const [dia] = await diasPara(completo.id);
+    const hora = dia.horas[0];
+    const { rows } = await db.queryAdmin<{ bays_count: number }>(`SELECT bays_count FROM tenants WHERE slug = 'el-brillante'`);
+    const tels = Array.from({ length: 8 }, (_, i) => `+5731188801${String(i).padStart(2, '0')}`);
+    TEL.push(...tels);
+    PLACAS.push(...tels.map((_, i) => `WEC${String(i).padStart(3, '0')}`));
+    try {
+      const respuestas = await Promise.all(
+        tels.map((t, i) =>
+          request(app).post(BASE).send(reserva({ telefono: t, placa: `WEC${String(i).padStart(3, '0')}`, fecha: dia.fecha, hora })),
+        ),
+      );
+      const estados = respuestas.map((r) => r.status).sort();
+      expect(estados.filter((e) => e === 201)).toHaveLength(rows[0].bays_count);
+      expect(estados.filter((e) => e === 409)).toHaveLength(tels.length - rows[0].bays_count);
+    } finally {
+      await limpiar();
+    }
+  });
+
+  it('una hora que no está en la grilla se rechaza como tal, no como «ocupada»', async () => {
+    const [dia] = await diasPara(completo.id);
+    for (const hora of ['03:00', '09:15']) {
+      const res = await request(app).post(BASE).send(reserva({ fecha: dia.fecha, hora }));
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/no se puede reservar/);
+    }
+  });
+
+  it('el celular tiene que ser un celular: un fijo o un número inventado no pasan', async () => {
+    const [dia] = await diasPara(completo.id);
+    for (const telefono of ['6012345678', '1234567890', '123']) {
+      const res = await request(app).post(BASE).send(reserva({ telefono, fecha: dia.fecha, hora: dia.horas[0] }));
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/celular/);
+    }
+  });
+
+  it('JSON roto es 400 y un cuerpo gigante 413, no un 500', async () => {
+    const roto = await request(app).post(BASE).set('Content-Type', 'application/json').send('{"nombre": ');
+    expect(roto.status).toBe(400);
+    const gigante = await request(app).post(BASE).send({ notas: 'x'.repeat(2_000_000) });
+    expect(gigante.status).toBe(413);
   });
 
   it('un día fuera de la ventana no se puede reservar', async () => {

@@ -265,8 +265,10 @@ export const esquemaReserva = z.object({
   autorizaDatos: z.literal(true, {
     errorMap: () => ({ message: 'Para reservar tienes que autorizar el tratamiento de tus datos' }),
   }),
-  servicioId: uuid,
-  tipoVehiculo: z.enum(['sedan', 'suv', 'camioneta', 'pickup', 'moto']),
+  servicioId: z.string().uuid('Elige un servicio de la lista'),
+  tipoVehiculo: z.enum(['sedan', 'suv', 'camioneta', 'pickup', 'moto'], {
+    errorMap: () => ({ message: 'Elige un tipo de vehículo de la lista' }),
+  }),
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida'),
   hora: z.string().regex(/^\d{2}:\d{2}$/, 'Hora inválida'),
   nombre: z.string().trim().min(2, 'Escribe tu nombre').max(80),
@@ -275,10 +277,15 @@ export const esquemaReserva = z.object({
     .string()
     .max(20, 'Teléfono muy largo')
     .transform((v) => normalizarTelefono(v) ?? '')
-    .refine((v) => /^\+?\d{10,15}$/.test(v), 'Escribe un número de celular válido'),
+    // Un celular colombiano son 10 dígitos que empiezan por 3. Un número de
+    // otro país se acepta si viene con su indicativo (+…).
+    .refine(
+      (v) => (v.startsWith('+57') ? /^\+573\d{9}$/.test(v) : /^\+\d{10,15}$/.test(v)),
+      'Escribe un celular válido: 10 dígitos que empiezan por 3',
+    ),
   placa: z
     .string()
-    .max(10)
+    .max(10, 'Escribe la placa como ABC123 (o ABC12D si es moto)')
     .transform((v) => v.toUpperCase().replace(/[\s-]/g, ''))
     .refine((v) => /^[A-Z]{3}\d{2,3}[A-Z]?$/.test(v), 'Escribe la placa como ABC123 (o ABC12D si es moto)'),
   notas: z.string().trim().max(300).optional().nullable(),
@@ -311,6 +318,18 @@ export async function reservar(req: Request, res: Response): Promise<void> {
 
   const { hoy, dias } = diasDeLaVentana(cfg);
   if (!dias.includes(b.fecha)) throw new AppError('Ese día no se puede reservar', 400);
+
+  // Una hora que no existe en la grilla de ese día (03:00, 09:15) no es «se
+  // acaba de ocupar»: nunca estuvo disponible, y decirlo así confunde.
+  const posibles = horasLibres({
+    apertura: cfg.opening_time,
+    cierre: cfg.closing_time,
+    bahias: 1,
+    minutosServicio: svc[0].estimated_minutes ?? 60,
+    ocupados: [],
+    ahora: b.fecha === hoy ? getMinutesOfDayInTimezone(cfg.timezone) : null,
+  });
+  if (!posibles.includes(b.hora)) throw new AppError('Esa hora no se puede reservar. Elige una de la lista.', 400);
 
   const client = await db.getClient();
   try {

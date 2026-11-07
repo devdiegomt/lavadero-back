@@ -3,7 +3,7 @@ import './config';
 import express, { type Express, type Request, type Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import { crearLimiteGlobal } from './shared/middleware/limiteGlobal';
+import { crearLimiteGlobal, crearLimitePublico } from './shared/middleware/limiteGlobal';
 
 import authRoutes        from './modules/auth/auth.routes';
 import tenantRoutes      from './modules/tenants/tenant.routes';
@@ -60,8 +60,16 @@ const limiter = crearLimiteGlobal({
     : 15 * 60 * 1_000,
   max: process.env.RATE_LIMIT_MAX ? parseInt(process.env.RATE_LIMIT_MAX, 10) : 100,
 });
+// Las páginas públicas van en un balde propio, por lavadero: ver
+// crearLimitePublico. Si compartieran el global, martillar una página de
+// reservas dejaría a todos sin poder iniciar sesión.
+const limitePublico = crearLimitePublico({
+  windowMs: 15 * 60 * 1_000,
+  max: process.env.PUBLIC_RATE_LIMIT_MAX ? parseInt(process.env.PUBLIC_RATE_LIMIT_MAX, 10) : 300,
+});
+app.use('/api/publico', limitePublico);
 app.use('/api/', (req, res, next) =>
-  req.path.startsWith('/wa-bridge') ? next() : limiter(req, res, next),
+  req.path.startsWith('/wa-bridge') || req.path.startsWith('/publico') ? next() : limiter(req, res, next),
 );
 
 // ---------------------------------------------------------------------------
