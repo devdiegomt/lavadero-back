@@ -86,6 +86,17 @@ for (const esquema of ['dark', 'light'] as const) {
       }
     });
 
+    test('la página de reservas se lee, con todo desplegado', async ({ page, request }) => {
+      await comprobarBackend(request);
+      await page.goto('/reservar/el-brillante');
+      await page.getByRole('radio', { name: 'Moto' }).click(); // deja un servicio deshabilitado a la vista
+      await page.getByRole('radio', { name: /Lavado Completo/ }).click();
+      await page.getByRole('radiogroup', { name: 'Hora' }).getByRole('radio').first().click();
+      await page.getByRole('button', { name: 'Confirmar reserva' }).click(); // el aviso de error
+      await page.waitForLoadState('networkidle');
+      expect(await fallasDeContraste(page), '/reservar').toEqual([]);
+    });
+
     test('las pantallas del panel se leen', async ({ page, request }) => {
       await comprobarBackend(request);
       await entrar(page);

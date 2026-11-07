@@ -222,6 +222,99 @@ export function conBypassRls(motivo: string): RequestHandler {
 }
 
 /**
+ * Abre el contexto del lavadero que nombra `:slug`, para la página pública de
+ * reservas.
+ *
+ * No hay sesión de la que sacar el tenant: se busca por slug, y eso necesita
+ * la puerta de atrás —no se puede filtrar por tenant para averiguar el
+ * tenant—. Pero **sólo para esa búsqueda**: se hace dentro de una transacción
+ * con `set_config(..., true)`, que se deshace sola al terminar (también si
+ * falla), y después la conexión queda con `app.tenant_id` fijado como en
+ * cualquier petición del panel. Todo lo que la reserva lea o escriba pasa por
+ * RLS, acotado a ese lavadero.
+ *
+ * La alternativa —`conBypassRls` en toda la ruta— dejaría las inserciones de
+ * clientes y turnos de una ruta anónima sin la red de RLS. Ver
+ * docs/05-seguridad.md §3.
+ *
+ * Un slug con forma inválida o de un lavadero inactivo responde 404, igual que
+ * uno que no existe.
+ */
+export async function abrirContextoPorSlug(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const slug = String(req.params.slug ?? '').toLowerCase();
+  if (!/^[a-z0-9-]{1,80}$/.test(slug)) {
+    res.status(404).json({ error: 'Lavadero no encontrado' });
+    return;
+  }
+
+  const seCorto = vigilarCierre(res);
+
+  let cliente: PoolClient;
+  try {
+    cliente = await pool.connect();
+  } catch (err) {
+    seCorto();
+    logger.error({ err }, 'No se pudo tomar una conexión para la página pública');
+    next(err);
+    return;
+  }
+
+  let tenantId: string | null = null;
+  try {
+    await cliente.query('BEGIN');
+    // `true`: local a la transacción. Al COMMIT o ROLLBACK vuelve a vacío.
+    await cliente.query(`SELECT set_config('app.bypass_rls', 'on', true)`);
+    const { rows } = await cliente.query<{ id: string }>(
+      'SELECT id FROM tenants WHERE slug = $1 AND is_active = true',
+      [slug],
+    );
+    await cliente.query('COMMIT');
+    tenantId = rows[0]?.id ?? null;
+    if (tenantId) {
+      await cliente.query('SELECT set_config($1, $2, false)', ['app.tenant_id', tenantId]);
+    }
+  } catch (err) {
+    seCorto();
+    await cliente.query('ROLLBACK').catch(() => undefined);
+    devolverAlPool(cliente, 'app.tenant_id', req.originalUrl);
+    next(err);
+    return;
+  }
+
+  if (seCorto()) {
+    devolverAlPool(cliente, 'app.tenant_id', req.originalUrl);
+    return;
+  }
+  if (!tenantId) {
+    devolverAlPool(cliente, 'app.tenant_id', req.originalUrl);
+    res.status(404).json({ error: 'Lavadero no encontrado' });
+    return;
+  }
+
+  req.tenantId = tenantId;
+
+  let liberada = false;
+  const liberar = (): void => {
+    if (liberada) return;
+    liberada = true;
+    devolverAlPool(cliente, 'app.tenant_id', req.originalUrl);
+  };
+  res.on('finish', liberar);
+  res.on('close', liberar);
+
+  correrEnContexto({ cliente, tenantId, bypass: false }, async () => {
+    next();
+  }).catch((err: unknown) => {
+    liberar();
+    next(err);
+  });
+}
+
+/**
  * Lo mismo, fuera de una petición: para los crons y las tareas de fondo.
  *
  * Los recordatorios y la retención recorren **todos** los tenants a propósito, y

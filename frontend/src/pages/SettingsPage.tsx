@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, type HTMLInputTypeAttribute, type ReactNode } from 'react';
-import { Check, Gem, Minus, Sparkles, Store, Users, X, type LucideIcon } from 'lucide-react';
+import { Check, Copy, ExternalLink, Gem, Minus, Sparkles, Store, Users, X, type LucideIcon } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { CONTACTO_VENTAS, useSuscripcion, type Metrica } from '../lib/suscripcion';
 import { api } from '../lib/api';
@@ -15,6 +15,7 @@ type Tab = 'general' | 'services' | 'team' | 'plan';
 interface Tenant {
   id: string;
   name: string;
+  slug: string;
   nit: string | null;
   owner_name: string | null;
   phone: string | null;
@@ -151,6 +152,8 @@ function GeneralTab() {
     setTenant((t) => (t ? { ...t, [key]: val } : t));
 
   return (
+    <div className="space-y-5">
+    <EnlaceReservas slug={tenant.slug} />
     <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-5">
       <SectionTitle>Datos del lavadero</SectionTitle>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -179,6 +182,47 @@ function GeneralTab() {
           {saving ? 'Guardando...' : 'Guardar cambios'}
         </button>
         {saved && <span className="text-green-600 text-sm font-medium">Guardado correctamente</span>}
+      </div>
+    </div>
+    </div>
+  );
+}
+
+/**
+ * El enlace a la página de reservas, para que el dueño lo copie a su Instagram,
+ * su WhatsApp o un QR. Los horarios que ofrece salen de «Operación», abajo, y de
+ * las bahías: si hay que cambiarlos, es ahí.
+ */
+function EnlaceReservas({ slug }: { slug: string }) {
+  const toast = useToast();
+  const url = `${window.location.origin}/reservar/${slug}`;
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success('Enlace copiado');
+    } catch {
+      toast.error('No se pudo copiar. Selecciónalo y cópialo a mano.');
+    }
+  };
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-3">
+      <SectionTitle>Página de reservas</SectionTitle>
+      <p className="text-sm text-gray-600">
+        Tus clientes reservan aquí sin descargar nada. Comparte el enlace en tu Instagram, tu WhatsApp o un código QR en
+        el mostrador; las reservas aparecen en la agenda.
+      </p>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <code className="flex-1 min-w-0 truncate px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900" data-testid="enlace-reservas">
+          {url}
+        </code>
+        <div className="flex gap-2">
+          <button type="button" onClick={copiar} className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-lg transition">
+            <Copy size={16} aria-hidden="true" /> Copiar
+          </button>
+          <a href={url} target="_blank" rel="noopener" className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-800 text-sm font-semibold rounded-lg hover:bg-gray-100 transition">
+            <ExternalLink size={16} aria-hidden="true" /> Abrir
+          </a>
+        </div>
       </div>
     </div>
   );

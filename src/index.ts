@@ -101,7 +101,7 @@ app.use('/api/billing',      billingRoutes);
 app.use('/api/onboarding',   onboardingRoutes);
 app.use('/api/superadmin',   superadminRoutes);
 app.use('/api/audit',        auditRoutes);
-// Sin sesión: sólo el contacto del lavadero para su aviso de privacidad.
+// Sin sesión: el aviso de privacidad y la página de reservas de cada lavadero.
 app.use('/api/publico',      publicoRoutes);
 
 // WhatsApp AI Bridge (consumido por n8n)

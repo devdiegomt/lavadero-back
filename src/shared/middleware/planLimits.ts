@@ -39,7 +39,7 @@ let plansCache: Record<string, PlanRow> | null = null;
 let plansCacheTime = 0;
 const CACHE_TTL = 5 * 60 * 1_000; // 5 minutos
 
-async function getPlans(): Promise<Record<string, PlanRow>> {
+export async function getPlans(): Promise<Record<string, PlanRow>> {
   if (plansCache && Date.now() - plansCacheTime < CACHE_TTL) {
     return plansCache;
   }
