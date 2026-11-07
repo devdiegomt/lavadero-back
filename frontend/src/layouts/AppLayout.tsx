@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   BarChart3,
   CalendarDays,
@@ -6,6 +7,7 @@ import {
   History,
   Home,
   LogOut,
+  Menu,
   ReceiptText,
   SlidersHorizontal,
   UserRound,
@@ -38,6 +40,15 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/settings',     icon: SlidersHorizontal, label: 'Config',      adminOnly: true },
 ];
 
+/**
+ * Lo que va fijo en la barra de abajo del celular; el resto queda en «Más».
+ *
+ * La barra mostraba los cinco primeros de NAV_ITEMS y nada más: Clientes,
+ * Facturación, Reportes y Configuración no tenían ningún acceso en el celular.
+ * Caben cinco botones de 44px en una pantalla angosta; el quinto es «Más».
+ */
+const EN_LA_BARRA = ['/', '/board', '/appointments', '/customers'];
+
 const ROLES: Record<string, string> = {
   admin: 'Administrador',
   operator: 'Operario',
@@ -68,6 +79,20 @@ export default function AppLayout() {
   const { user, logout } = useAuth();
   const visibleItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin(user?.role));
   const iniciales = `${user?.firstName?.[0] ?? ''}${user?.lastName?.[0] ?? ''}`;
+  const enBarra = visibleItems.filter((i) => EN_LA_BARRA.includes(i.to));
+  const enMas = visibleItems.filter((i) => !EN_LA_BARRA.includes(i.to));
+
+  const { pathname } = useLocation();
+  const [masAbierto, setMasAbierto] = useState(false);
+  // Al navegar se cierra: si no, la hoja tapa la pantalla a la que se fue.
+  useEffect(() => setMasAbierto(false), [pathname]);
+  useEffect(() => {
+    if (!masAbierto) return;
+    const cerrar = (e: KeyboardEvent) => e.key === 'Escape' && setMasAbierto(false);
+    window.addEventListener('keydown', cerrar);
+    return () => window.removeEventListener('keydown', cerrar);
+  }, [masAbierto]);
+  const masActivo = enMas.some((i) => pathname.startsWith(i.to)) || pathname.startsWith('/cuenta');
 
   return (
     <div className="min-h-screen bg-gray-50 lg:flex">
@@ -182,7 +207,7 @@ export default function AppLayout() {
 
       {/* Bottom nav (mobile) */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-lateral border-t border-gray-100 px-1 flex justify-around safe-area-bottom">
-        {visibleItems.slice(0, 5).map(({ to, icon: Icono, label }) => (
+        {enBarra.map(({ to, icon: Icono, label }) => (
           <NavLink
             key={to}
             to={to}
@@ -206,7 +231,65 @@ export default function AppLayout() {
             )}
           </NavLink>
         ))}
+        <button
+          type="button"
+          onClick={() => setMasAbierto((v) => !v)}
+          aria-expanded={masAbierto}
+          aria-controls="menu-mas"
+          className={`flex flex-col items-center gap-1 pt-2.5 pb-2 px-3 text-[0.68rem] font-medium transition border-t-2 ${
+            masActivo || masAbierto ? 'text-gray-900 border-brand-600' : 'text-gray-500 border-transparent'
+          }`}
+        >
+          <Menu aria-hidden="true" size={20} strokeWidth={1.6} className={masActivo ? 'text-brand-600' : ''} />
+          <span>Más</span>
+        </button>
       </nav>
+
+      {/* «Más» (móvil): lo que no cabe en la barra, la cuenta y salir. */}
+      {masAbierto && (
+        <div className="lg:hidden fixed inset-0 z-20" >
+          <button
+            type="button"
+            aria-label="Cerrar menú"
+            onClick={() => setMasAbierto(false)}
+            className="absolute inset-0 bg-black/50"
+          />
+          <div
+            id="menu-mas"
+            role="dialog"
+            aria-label="Más secciones"
+            className="absolute left-0 right-0 bottom-0 bg-lateral border-t border-gray-100 rounded-t-2xl px-3 pt-3 pb-24 safe-area-bottom"
+          >
+            <ul className="grid grid-cols-3 gap-2">
+              {[...enMas, { to: '/cuenta', icon: UserRound, label: 'Mi cuenta' }].map(({ to, icon: Icono, label }) => (
+                <li key={to}>
+                  <NavLink
+                    to={to}
+                    className={({ isActive }) =>
+                      `flex flex-col items-center justify-center gap-1.5 min-h-[72px] rounded-xl text-xs font-medium transition ${
+                        isActive ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-100/60'
+                      }`
+                    }
+                  >
+                    <Icono aria-hidden="true" size={20} strokeWidth={1.6} className="text-brand-600" />
+                    {label}
+                  </NavLink>
+                </li>
+              ))}
+              <li>
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="w-full flex flex-col items-center justify-center gap-1.5 min-h-[72px] rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-100/60 transition"
+                >
+                  <LogOut aria-hidden="true" size={20} strokeWidth={1.6} className="text-gray-400" />
+                  Salir
+                </button>
+              </li>
+            </ul>
+          </div>
+        </div>
+      )}
 
       {/* PWA install prompt */}
       <InstallPrompt />

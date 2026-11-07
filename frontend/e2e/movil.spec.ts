@@ -111,6 +111,31 @@ test.describe('la navegación que toca para cada tamaño', () => {
   });
 });
 
+test.describe('en el celular se llega a todas las secciones', () => {
+  // Pasó en producción: la barra de abajo mostraba las cinco primeras
+  // secciones y nada más, y el dueño no tenía cómo entrar a Configuración desde
+  // el celular. La prueba de arriba sólo iba a Agenda, que sí estaba.
+  for (const { ruta, nombre } of PANTALLAS.filter((p) => p.ruta !== '/')) {
+    test(`se llega a ${nombre} tocando`, async ({ page }) => {
+      const ancho = page.viewportSize()!.width;
+      test.skip(ancho >= ANCHO_ESCRITORIO, 'En escritorio están todas en la barra lateral');
+
+      await entrar(page);
+      const barra = page.locator('nav').last();
+      const directo = barra.getByRole('link', { name: nombre, exact: true });
+      if ((await directo.count()) === 0) {
+        await barra.getByRole('button', { name: 'Más' }).click();
+        await page.getByRole('dialog', { name: 'Más secciones' }).getByRole('link', { name: nombre, exact: true }).click();
+      } else {
+        await directo.click();
+      }
+      await expect(page).toHaveURL(new RegExp(`${ruta}$`));
+      // Y el menú se cierra solo al llegar.
+      await expect(page.getByRole('dialog', { name: 'Más secciones' })).toHaveCount(0);
+    });
+  }
+});
+
 test.describe('lo que se toca con el dedo', () => {
   test('los botones de la barra de abajo son lo bastante grandes', async ({ page }) => {
     const ancho = page.viewportSize()!.width;

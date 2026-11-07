@@ -39,6 +39,36 @@ async function limpiar(): Promise<void> {
 const diasPara = async (servicioId: string): Promise<Dia[]> =>
   (await request(app).get(`${BASE}/horarios`).query({ servicio: servicioId })).body.dias;
 
+/**
+ * Cupos que quedan en una hora, contados en la base en el momento.
+ *
+ * Jest corre los archivos en paralelo y otras suites —las del bot de WhatsApp—
+ * reservan en la misma agenda: suponer que una hora está vacía hizo fallar esta
+ * suite en CI (entraron 2 de 3 porque el bot tenía la tercera bahía). Por eso
+ * las pruebas de cupos usan el último día de la ventana, que nadie más toca, y
+ * además cuentan lo que ya hay en vez de suponerlo.
+ */
+async function cuposLibres(fecha: string, hora: string, minutos: number): Promise<number> {
+  const { rows } = await db.queryAdmin<{ bahias: number; ocupadas: string }>(
+    `SELECT t.bays_count AS bahias,
+            (SELECT COUNT(*) FROM appointments a JOIN services s ON s.id = a.service_id
+              WHERE a.tenant_id = t.id AND a.scheduled_date = $1 AND a.scheduled_time IS NOT NULL
+                AND a.status NOT IN ('cancelled', 'delivered', 'done')
+                AND a.scheduled_time < $2::time + make_interval(mins => $3)
+                AND a.scheduled_time + make_interval(mins => COALESCE(s.estimated_minutes, 60)) > $2::time
+            ) AS ocupadas
+       FROM tenants t WHERE t.slug = 'el-brillante'`,
+    [fecha, hora, minutos],
+  );
+  return rows[0].bahias - parseInt(rows[0].ocupadas, 10);
+}
+
+/** El último día de la ventana con horas libres: ninguna otra suite reserva ahí. */
+const ultimoDia = async (servicioId: string): Promise<Dia> => {
+  const dias = await diasPara(servicioId);
+  return dias[dias.length - 1];
+};
+
 const reserva = (extra: Record<string, unknown>) => ({
   autorizaDatos: true,
   servicioId: completo.id,
@@ -181,10 +211,11 @@ describe('reservar', () => {
   });
 
   it('cuando todas las bahías están ocupadas, el horario deja de ofrecerse y no se puede tomar', async () => {
-    const [dia] = await diasPara(completo.id);
+    const dia = await ultimoDia(completo.id);
     const hora = dia.horas[dia.horas.length - 1];
-    const { rows } = await db.queryAdmin<{ bays_count: number }>(`SELECT bays_count FROM tenants WHERE slug = 'el-brillante'`);
-    for (let i = 0; i < rows[0].bays_count; i++) {
+    const cupos = await cuposLibres(dia.fecha, hora, completo.minutos);
+    expect(cupos).toBeGreaterThan(0);
+    for (let i = 0; i < cupos; i++) {
       const r = await request(app).post(BASE).send(reserva({ telefono: TEL[i], placa: PLACAS[i], fecha: dia.fecha, hora }));
       expect(r.status).toBe(201);
     }
@@ -196,10 +227,12 @@ describe('reservar', () => {
     expect(JSON.stringify(res.body)).toMatch(/ocupar/);
   });
 
-  it('diez personas a la vez por el mismo horario: entran tantas como bahías', async () => {
-    const [dia] = await diasPara(completo.id);
-    const hora = dia.horas[0];
-    const { rows } = await db.queryAdmin<{ bays_count: number }>(`SELECT bays_count FROM tenants WHERE slug = 'el-brillante'`);
+  it('ocho personas a la vez por el mismo horario: entran tantas como cupos libres', async () => {
+    const dia = await ultimoDia(completo.id);
+    // Una del medio: la última la usa la prueba de bahías llenas.
+    const hora = dia.horas[Math.floor(dia.horas.length / 2)];
+    const cupos = await cuposLibres(dia.fecha, hora, completo.minutos);
+    expect(cupos).toBeGreaterThan(0);
     const tels = Array.from({ length: 8 }, (_, i) => `+5731188801${String(i).padStart(2, '0')}`);
     TEL.push(...tels);
     PLACAS.push(...tels.map((_, i) => `WEC${String(i).padStart(3, '0')}`));
@@ -209,9 +242,11 @@ describe('reservar', () => {
           request(app).post(BASE).send(reserva({ telefono: t, placa: `WEC${String(i).padStart(3, '0')}`, fecha: dia.fecha, hora })),
         ),
       );
-      const estados = respuestas.map((r) => r.status).sort();
-      expect(estados.filter((e) => e === 201)).toHaveLength(rows[0].bays_count);
-      expect(estados.filter((e) => e === 409)).toHaveLength(tels.length - rows[0].bays_count);
+      const estados = respuestas.map((r) => r.status);
+      // Nada de 500 ni de otra cosa: cada una entra o le dicen que se ocupó.
+      expect(estados.filter((e) => e !== 201 && e !== 409)).toEqual([]);
+      expect(estados.filter((e) => e === 201)).toHaveLength(cupos);
+      expect(await cuposLibres(dia.fecha, hora, completo.minutos)).toBe(0);
     } finally {
       await limpiar();
     }
