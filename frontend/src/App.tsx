@@ -9,6 +9,7 @@ import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import PoliticaPrivacidadPage from './pages/PoliticaPrivacidadPage';
 import AvisoLavaderoPage from './pages/AvisoLavaderoPage';
+import ReservarPage from './pages/ReservarPage';
 import DashboardPage from './pages/DashboardPage';
 import AppointmentsPage from './pages/AppointmentsPage';
 import BoardPage from './pages/BoardPage';
@@ -35,6 +36,8 @@ function AppRoutes() {
           lavadero, que se le muestra o se le envía al cliente final. */}
       <Route path="/privacidad" element={<PoliticaPrivacidadPage />} />
       <Route path="/privacidad/:slug" element={<AvisoLavaderoPage />} />
+      {/* La página de reservas de cada lavadero, para sus clientes. */}
+      <Route path="/reservar/:slug" element={<ReservarPage />} />
 
       {/* App del tenant */}
       <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>

@@ -1,6 +1,10 @@
 /**
- * Lo único de la API que se lee sin sesión: los datos de contacto de un
- * lavadero para su aviso de privacidad (`/privacidad/:slug` en el panel).
+ * Lo que la API atiende sin sesión, siempre acotado a un lavadero por su slug:
+ *
+ * - Los datos de contacto para su aviso de privacidad (`/privacidad/:slug`).
+ * - Su página de reservas (`/reservar/:slug`): ver `reservas.ts`.
+ *
+ * ## El aviso de privacidad
  *
  * El Decreto 1377 de 2013 (art. 15) exige que el aviso diga quién es el
  * responsable del tratamiento y cómo contactarlo. El responsable de los datos
@@ -18,7 +22,9 @@ import type { Request, Response } from 'express';
 import * as db from '../../shared/db';
 import { AppError } from '../../shared/middleware/errorHandler';
 import { asyncHandler } from '../../shared/utils/asyncHandler';
-import { conBypassRls } from '../../shared/middleware/rls';
+import { conBypassRls, abrirContextoPorSlug } from '../../shared/middleware/rls';
+import { validate } from '../../shared/middleware/validate';
+import { datosParaReservar, horarios, reservar, esquemaReserva } from './reservas';
 
 const router = Router();
 
@@ -57,6 +63,18 @@ router.get(
       correo: t.email,
     });
   }),
+);
+
+// ─── Reservas ────────────────────────────────────────────────────────────────
+// Sin bypass: `abrirContextoPorSlug` usa la puerta de atrás sólo para traducir
+// el slug a un tenant, y después todo pasa por RLS como en el panel.
+router.get('/lavaderos/:slug/reservas', abrirContextoPorSlug, asyncHandler(datosParaReservar));
+router.get('/lavaderos/:slug/reservas/horarios', abrirContextoPorSlug, asyncHandler(horarios));
+router.post(
+  '/lavaderos/:slug/reservas',
+  validate(esquemaReserva),
+  abrirContextoPorSlug,
+  asyncHandler(reservar),
 );
 
 export default router;

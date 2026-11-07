@@ -79,7 +79,7 @@ export function interpretarRespuesta(texto: string): RespuestaConsentimiento {
 export interface Autorizacion {
   consentAt: Date;
   consentVersion: string;
-  consentSource: 'whatsapp' | 'panel' | 'onboarding';
+  consentSource: 'whatsapp' | 'panel' | 'onboarding' | 'web';
 }
 
 /**

@@ -357,6 +357,33 @@ de siete columnas fijas del negocio —ni clientes, ni usuarios, ni plan—. Lo
 prueba `__tests__/privacidad.test.ts`, que verifica exactamente qué campos
 devuelve. Un lavadero desactivado no aparece.
 
+**La página de reservas, desde 2026-11: no es un bypass más.**
+`/api/publico/lavaderos/:slug/reservas` es la primera ruta anónima que
+**escribe** (clientes, vehículos, turnos). Por eso no lleva `conBypassRls`:
+`abrirContextoPorSlug` (en `rls.ts`) usa la puerta de atrás sólo para traducir
+el slug a un tenant, dentro de una transacción con `set_config(..., true)` que
+se deshace sola, y después deja la conexión con `app.tenant_id` fijado como en
+cualquier petición del panel. Todo lo que la reserva lee o escribe pasa por RLS.
+`reservas-web.test.ts` corre también con el rol `carwash_app`.
+
+Lo que esa ruta **no** tiene es la verificación del celular: cualquiera puede
+escribir cualquier número. Lo que lo acota:
+
+- No revela nada: la respuesta sólo repite lo que la persona escribió, nunca
+  dice si el teléfono o la placa ya existían, y no pisa el nombre de un cliente
+  existente.
+- Tope de 2 reservas pendientes por teléfono y de 40 reservas web por día y
+  lavadero; un campo trampa para bots; exige la autorización de datos
+  (`consent_source = 'web'`, versión del aviso del lavadero).
+- Un candado por lavadero (`pg_advisory_xact_lock`) para que dos personas no
+  tomen la última bahía a la vez.
+
+No hay límite por IP propio por la brecha #7: detrás del balanceador todos
+comparten la IP. Por lo mismo, el tráfico de esta página gasta del límite
+global anónimo (100 peticiones cada 15 minutos, compartidas con el login); la
+página pide poco —una petición por servicio elegido trae todos los días— pero
+con varios lavaderos activos **cerrar la brecha #7 pasa a ser lo siguiente**.
+
 **Los bypasses son el punto débil, y hay que tratarlos como tal.** Ahí el
 aislamiento no lo sostiene el motor sino una línea de `authorize` o el orden del
 código. `superadmin` —ocho rutas, el módulo que más poder concentra— **no tenía

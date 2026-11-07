@@ -31,6 +31,9 @@ Nomenclatura: `RF-<módulo>-<n>`.
 | RF-TUR-5 | Cada cambio de estado queda registrado con quién y cuándo | `appointment_status_log` |
 | RF-TUR-6 | El tablero muestra los turnos del día agrupados por estado | `GET /api/appointments/today` |
 | RF-TUR-7 | Un turno rápido se crea sin cliente previo, sólo con la placa | `POST /api/appointments/quick` |
+| RF-TUR-8 | Cada lavadero tiene una página pública de reservas (`/reservar/:slug`): el cliente elige tipo de vehículo, servicio, día y hora libres, deja nombre, celular y placa, autoriza sus datos, y el turno entra a la agenda con `source = 'web'` | `/api/publico/lavaderos/:slug/reservas`, `reservas-web.test.ts`, `e2e/reservas.spec.ts` |
+| RF-TUR-9 | Los horarios ofrecidos respetan la hora de apertura y cierre, los días de cierre, la ventana de días (`booking_days_ahead`) y las bahías: el servicio tiene que terminar antes del cierre y no puede chocar con turnos que empiecen mientras dura | `horasLibres` en `reservas.ts` |
+| RF-TUR-10 | La página no recibe reservas si la suscripción está vencida o el plan llegó a su tope de turnos del mes; topes de 2 reservas pendientes por teléfono y 40 reservas web por día y lavadero | idem |
 
 ### Clientes y vehículos
 
@@ -315,6 +318,8 @@ un olvido:
 
 | Función | Por qué no está |
 |---|---|
+| Cancelar o cambiar una reserva desde la página web | Sin verificar el teléfono (código por SMS/WhatsApp), cualquiera podría cancelar la reserva de otro. Por ahora se hace llamando al lavadero |
+| Verificar el celular en la página de reservas | Cuesta por mensaje y es otra integración. Lo compensan los topes por teléfono y por día. Ver docs/05-seguridad.md §3 |
 | Cancelar un turno desde WhatsApp | El flujo existe para agendar, no para cancelar. Requiere confirmar identidad antes de dejar cancelar |
 | Pagos en línea | Hoy se cobra en el local. Habilitarlo trae PCI al alcance |
 | Descuentos y promociones | No hay modelo de datos para reglas de precio |
