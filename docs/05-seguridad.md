@@ -378,11 +378,29 @@ escribir cualquier número. Lo que lo acota:
 - Un candado por lavadero (`pg_advisory_xact_lock`) para que dos personas no
   tomen la última bahía a la vez.
 
-No hay límite por IP propio por la brecha #7: detrás del balanceador todos
-comparten la IP. Por lo mismo, el tráfico de esta página gasta del límite
-global anónimo (100 peticiones cada 15 minutos, compartidas con el login); la
-página pide poco —una petición por servicio elegido trae todos los días— pero
-con varios lavaderos activos **cerrar la brecha #7 pasa a ser lo siguiente**.
+**Límite de peticiones propio, por lavadero.** Al principio las páginas
+públicas gastaban del balde anónimo del límite global, y con la brecha #7 ese
+balde es uno solo para todo internet. Atacándolo en local se comprobó lo peor:
+100 GET a la página de reservas y **el login siguiente de cualquier lavadero
+daba 429**. Ahora `/api/publico` tiene su propio limitador (300 cada 15 minutos,
+`PUBLIC_RATE_LIMIT_MAX`) con clave por slug: quien martille la página de un
+lavadero frena esa página —y su aviso de privacidad— por 15 minutos, pero el
+panel y las páginas de los demás siguen. Lo prueba `limite-publico.test.ts`.
+Cerrar la brecha #7 sigue pendiente: hasta entonces, el bloqueo de una página
+lo sufren todos sus visitantes a la vez.
+
+**Lo que se atacó, 2026-11-07** (contra el servidor local, con el límite de
+producción):
+
+| Ataque | Resultado |
+|---|---|
+| 10 reservas simultáneas al mismo horario, 3 bahías | Entran 3, las otras 7 reciben 409; la hora deja de ofrecerse |
+| Inyección SQL en nombre, teléfono, placa, fecha, servicio, slug y query | Validación la rechaza (400/404) o se guarda como texto literal; todas las consultas son parametrizadas. Tablas intactas |
+| `<img onerror>` y `<script>` en nombre y notas | Se guardan como texto; el panel los muestra como texto (React escapa), ningún script se ejecuta |
+| Precio, estado, `source` o `tenant_id` inyectados en el cuerpo | Se ignoran: el precio sale del servicio y el tenant del slug |
+| Teléfono `123`, fijo, letras; placa inventada; tipo inexistente; fecha pasada o imposible; hora fuera de la grilla | 400 con un mensaje que dice qué corregir |
+| JSON roto, cuerpo de 2 MB | 400 y 413 (antes **500**, en toda la API) |
+| `__proto__` en el cuerpo | Sin efecto (Zod descarta las claves que no conoce) |
 
 **Los bypasses son el punto débil, y hay que tratarlos como tal.** Ahí el
 aislamiento no lo sostiene el motor sino una línea de `authorize` o el orden del

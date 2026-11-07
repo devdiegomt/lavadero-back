@@ -124,6 +124,19 @@ export function errorHandler(
     }
   }
 
+  // Errores de `express.json()`: JSON roto o cuerpo demasiado grande. Son culpa
+  // de quien manda, no del servidor, y respondían 500. Los dispara cualquiera
+  // con un `curl`, también contra las rutas públicas.
+  const tipo = (err as { type?: string }).type;
+  if (tipo === 'entity.parse.failed') {
+    res.status(400).json({ error: 'El cuerpo de la petición no es JSON válido.' });
+    return;
+  }
+  if (tipo === 'entity.too.large') {
+    res.status(413).json({ error: 'La petición es demasiado grande.' });
+    return;
+  }
+
   // Errores operacionales (los que lanzamos nosotros)
   if ('isOperational' in err && err.isOperational) {
     res.status(err.statusCode).json({
